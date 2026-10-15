@@ -37,6 +37,31 @@ php artisan migrate --seed
 - 共通：通知（ベル）とメール、パスワードの変更・再設定。
 - 同じ案件に、グループの中で同じ人が二重に応募することはできない。
 
+## 公開サーバー（https://www.jona.jp/park/）
+
+2026-10-16 から公開。Xserver（jona.jp）に、muzzo と同じ形で置いている。
+
+- アプリ本体：`~/park`（GitHub から clone）。`~/jona.jp/public_html/park` は `~/park/public` へのシンボリックリンク（設定ファイルなどは外から見えない）。
+- PHP：サイトは 8.3。コマンドは `/opt/php-8.3/bin/php` を使う（`php` だけだと 8.0 になる）。
+- DB：`jonassan_park`（サーバーパネルで作成。ユーザーは muzzo と同じ）。見本データは入れていない。
+- `.env`：本番用（`APP_DEBUG=false`、`APP_URL=https://www.jona.jp/park`、メールは `log`）。Git には上げない。
+- **ルートのキャッシュ（`route:cache`）は使わない**（使うとトップの `/park/` が 405 になる）。
+- 最初の運営アカウントは、画面の「はじめの設定」ではなく、サーバーで `park:invite-admin` で作る（公開中に他人に先に使われないように）。
+
+更新するとき（この PC で commit・push したあと、サーバーで）：
+
+```
+ssh -p 10022 jonassan@jonassan.xsrv.jp
+cd ~/park
+git pull --ff-only
+/opt/php-8.3/bin/php /usr/bin/composer install --no-dev --optimize-autoloader
+/opt/php-8.3/bin/php artisan migrate --force
+/opt/php-8.3/bin/php artisan config:cache
+/opt/php-8.3/bin/php artisan view:cache
+```
+
+運営を増やすとき：`/opt/php-8.3/bin/php artisan park:invite-admin メールアドレス 名前`（招待のリンクが出る）。
+
 ## マニュアル
 
 運営・SES 企業さま・エンジニアの3種類。正本は `resources/manuals/`（`admin.md`・`ses.md`・`engineer.md`）で、アプリの「使い方」（`/manual`）から読める。SES・エンジニア向けはログイン前でも読める。運営向けは運営だけ。画面や流れを変えたら、マニュアルも直す。
