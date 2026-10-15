@@ -1,3 +1,6 @@
+# フォルダ（/park/）を開いたときも、アプリの入口を使う（公開サーバーで 405 になるのを防ぐ）
+DirectoryIndex index.php
+
 <IfModule mod_rewrite.c>
     <IfModule mod_negotiation.c>
         Options -MultiViews -Indexes
