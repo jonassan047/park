@@ -165,3 +165,8 @@ table.edit td { padding: 4px; }
   .sheet { border: 0; padding: 0; max-width: none; } main.wrap { padding: 0; max-width: none; }
   @page { size: A4; margin: 14mm; }
 }
+
+/* 2要素認証 */
+.qr svg { width: 200px; height: 200px; background: #fff; padding: 8px; border: 1px solid var(--line); border-radius: 8px; }
+code.secret { font-size: 15px; letter-spacing: .08em; }
+.codes { columns: 2; list-style: none; padding: 0; } .codes li { margin: 4px 0; } .codes code { font-size: 15px; }

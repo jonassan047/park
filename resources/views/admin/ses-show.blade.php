@@ -12,8 +12,9 @@
 </x-card>
 <x-card title="会社情報の編集">@include('admin.ses-form', ['action' => '/admin/ses/'.$s->id])</x-card>
 </div><div>
-<x-card title="担当者のアカウント"><x-table :head="['名前', 'メール', '状態', '最終ログイン']" :count="$users->count()">
-@foreach($users as $u)<tr><td>{{ $u->name }}</td><td>{{ $u->email }}</td><td>{{ $u->password ? '利用中' : '招待中' }}</td><td>{{ fmt_dt($u->last_login) }}</td></tr>@endforeach
+<x-card title="担当者のアカウント"><x-table :head="['名前', 'メール', '状態', '2要素認証', '最終ログイン']" :count="$users->count()">
+@foreach($users as $u)<tr><td>{{ $u->name }}</td><td>{{ $u->email }}</td><td>{{ $u->password ? '利用中' : '招待中' }}</td>
+<td>@include('admin.two-factor-cell', ['u' => $u])</td><td>{{ fmt_dt($u->last_login) }}</td></tr>@endforeach
 </x-table>
 <form method="post" action="{{ url('/admin/ses/'.$s->id.'/users') }}">@csrf<div class="grid2"><x-field label="名前" name="name" required /><x-field label="メール" name="email" type="email" required /></div><button class="btn ghost small">担当者を追加して招待</button></form>
 </x-card>

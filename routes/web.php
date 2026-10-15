@@ -8,6 +8,7 @@ use App\Http\Controllers\EngineerController as Eng;
 use App\Http\Controllers\PipelineController as Pip;
 use App\Http\Controllers\PublicController as Pub;
 use App\Http\Controllers\SesController as Ses;
+use App\Http\Controllers\TwoFactorController as TF;
 use Illuminate\Support\Facades\Route;
 
 Route::pattern('id', '[0-9]+');
@@ -27,6 +28,14 @@ Route::post('/invite/{token}', [Pub::class, 'invite']);
 Route::get('/forgot', [Pub::class, 'forgotForm']);
 Route::post('/forgot', [Pub::class, 'forgot'])->middleware('throttle:5,1');
 
+// ---------- 2要素認証（パスワードは通ったが、まだコードを入れていない人も開ける） ----------
+Route::middleware('auth')->group(function () {
+    Route::get('/two-factor/setup', [TF::class, 'setupForm']);
+    Route::post('/two-factor/setup', [TF::class, 'setup'])->middleware('throttle:10,1');
+    Route::get('/two-factor/challenge', [TF::class, 'challengeForm']);
+    Route::post('/two-factor/challenge', [TF::class, 'challenge'])->middleware('throttle:10,1');
+});
+
 // ---------- ログインした人（役割ごとに見え方が変わる共通の画面） ----------
 Route::middleware('role')->group(function () {
     Route::get('/notifications', [Acc::class, 'notifications']);
@@ -35,6 +44,8 @@ Route::middleware('role')->group(function () {
     Route::get('/account', [Acc::class, 'show']);
     Route::post('/account', [Acc::class, 'update']);
     Route::post('/account/password', [Acc::class, 'password']);
+    Route::get('/two-factor/recovery-codes', [TF::class, 'recoveryCodes']);
+    Route::post('/two-factor/recovery-codes', [TF::class, 'regenerate']);
 
     Route::get('/cases/{id}', [Cas::class, 'show']);
     Route::post('/cases/{id}/apply', [Cas::class, 'apply']);
@@ -121,6 +132,7 @@ Route::middleware('role:admin')->group(function () {
         Route::post('/settings/testmail', [Adm::class, 'testMail']);
         Route::post('/settings/admins', [Adm::class, 'admins']);
         Route::get('/audit', [Adm::class, 'audit']);
+        Route::post('/users/{id}/reset-2fa', [TF::class, 'adminReset']);
     });
 });
 

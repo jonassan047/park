@@ -37,8 +37,8 @@ class PublicController extends Controller
             return back()->withInput(['email' => $email])->with('flash', ['msg' => '会社の参加がまだ承認されていないか、停止されています。', 'type' => 'bad']);
         }
         $r->session()->regenerate();
-        DB::table('users')->where('id', $u->id)->update(['last_login' => now_str()]);
-        return redirect()->intended(url($u->home()));
+        // パスワードの次は2要素認証（まだなら設定）。済むまでほかの画面は開けない
+        return redirect($u->two_factor_confirmed_at ? '/two-factor/challenge' : '/two-factor/setup');
     }
 
     public function logout(Request $r)
@@ -62,7 +62,7 @@ class PublicController extends Controller
         $id = W::createUser($r->input('email'), $r->input('name'), 'admin', $r->input('password'));
         Auth::loginUsingId($id);
         $r->session()->regenerate();
-        return $this->go('/admin/settings', '運営のアカウントを作りました。まず設定を確認してください。');
+        return $this->go('/two-factor/setup', '運営のアカウントを作りました。続けて、2要素認証を設定してください。');
     }
 
     public function applyForm() { return view('public.apply'); }
@@ -99,7 +99,9 @@ class PublicController extends Controller
         N::audit($u->id, 'password-set', $u->email);
         Auth::loginUsingId($u->id);
         $r->session()->regenerate();
-        return $this->go(User::find($u->id)->home(), $u->role === 'eg' ? 'ようこそ。まずプロフィールと経験票を入れて、スキルシートを作りましょう。' : 'ようこそ。');
+        if (!$u->two_factor_confirmed_at) return $this->go('/two-factor/setup', 'パスワードを設定しました。続けて、2要素認証を設定してください。');
+        // パスワードの再設定のとき：2要素認証は設定済みなので、コードを入れてもらう
+        return $this->go('/two-factor/challenge', 'パスワードを設定しました。認証アプリのコードを入れてください。');
     }
 
     public function forgotForm() { return view('public.forgot'); }

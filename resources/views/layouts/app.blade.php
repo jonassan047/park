@@ -6,6 +6,8 @@
         'ses' => [['/ses', 'ダッシュボード'], ['/ses/engineers', 'エンジニア'], ['/ses/cases', '案件'], ['/ses/applications', '応募・選考'], ['/ses/contracts', '契約'], ['/ses/invoices', '請求'], ['/ses/company', '会社情報']],
         'eg' => [['/eg', 'ホーム'], ['/eg/offers', '届いた案件'], ['/eg/applications', '応募・面談'], ['/eg/profile', 'プロフィール'], ['/eg/sheet', 'スキルシート'], ['/eg/messages', 'やり取り']],
     ][$u->role ?? ''] ?? [];
+    // 2要素認証が済むまでは、メニューを出さない
+    if ($u && (int) session(\App\Support\TwoFactor::SESSION_KEY) !== (int) $u->id) $nav = [];
     $path = '/'.trim(request()->path(), '/');
     $unread = $u ? DB::table('app_notifications')->where('user_id', $u->id)->whereNull('read_at')->count() : 0;
     $flash = session('flash');
