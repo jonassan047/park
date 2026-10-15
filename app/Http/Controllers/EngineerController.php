@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\EngineerDocs;
 use App\Services\Matcher;
 use App\Services\Notifier as N;
 use App\Services\Qa;
@@ -9,6 +10,7 @@ use App\Services\Workflow as W;
 use App\Support\Perms;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 // エンジニア：登録・プロフィール・スキル・経験票・スキルシート・運営とのやり取り
 class EngineerController extends Controller
@@ -47,6 +49,9 @@ class EngineerController extends Controller
             'check' => Qa::sheetCheck($id),
             'apps' => DB::table('applications as a')->join('cases as c', 'c.id', '=', 'a.case_id')->where('a.engineer_id', $id)->select('a.*', 'c.title')->orderByDesc('a.id')->get(),
             'eu' => DB::table('users')->where('engineer_id', $id)->where('role', 'eg')->first(),
+            'hist' => DB::table('engineer_histories')->where('engineer_id', $id)->orderBy('sort')->get(),
+            'certs' => DB::table('engineer_certs')->where('engineer_id', $id)->orderBy('sort')->get(),
+            'files' => DB::table('engineer_files')->where('engineer_id', $id)->orderByDesc('id')->get(),
         ]);
     }
 
@@ -81,7 +86,8 @@ class EngineerController extends Controller
     public function skills(Request $r, int $id)
     {
         $e = $this->load($r, $id);
-        return view('engineers.skills', ['e' => $e, 'skills' => DB::table('engineer_skills')->where('engineer_id', $id)->orderBy('category')->orderByDesc('years')->get()]);
+        return view('engineers.skills', ['e' => $e, 'skills' => DB::table('engineer_skills')->where('engineer_id', $id)->orderBy('category')->orderByDesc('years')->get(),
+            'terms' => DB::table('skill_terms')->orderBy('category')->orderBy('name')->get(['name', 'category'])]);
     }
 
     public function saveSkills(Request $r, int $id)
@@ -130,7 +136,7 @@ class EngineerController extends Controller
         if ($c) {
             // 案件に関係する技術を多く使った案件を上に（同じなら新しい順）
             usort($projects, function ($a, $b) use ($isHit) {
-                $ha = count(array_filter(parse_list($a->tech), $isHit)); $hb = count(array_filter(parse_list($b->tech), $isHit));
+                $ha = count(array_filter(project_techs($a), $isHit)); $hb = count(array_filter(project_techs($b), $isHit));
                 return $hb <=> $ha ?: strcmp((string) $b->period_from, (string) $a->period_from);
             });
         }
@@ -158,5 +164,64 @@ class EngineerController extends Controller
         if ($isEg) N::toAdmins("{$e->name} さんからメッセージ", mb_substr($body, 0, 200), "/engineers/$id/messages", true, 'message');
         else N::toEg($id, '運営からメッセージが届きました', mb_substr($body, 0, 400), "/engineers/$id/messages", true, 'message');
         return redirect("/engineers/$id/messages");
+    }
+
+    // ---------- 詳しいプロフィール（履歴書・業務経歴書の項目、学歴・職歴、資格） ----------
+    public function profileForm(Request $r, int $id)
+    {
+        $e = $this->load($r, $id);
+        return view('engineers.profile', ['e' => $e,
+            'hist' => DB::table('engineer_histories')->where('engineer_id', $id)->orderBy('sort')->get(),
+            'certs' => DB::table('engineer_certs')->where('engineer_id', $id)->orderBy('sort')->get()]);
+    }
+
+    public function saveProfile(Request $r, int $id)
+    {
+        $this->load($r, $id);
+        W::updateEngineer($id, $r->only(array_slice(W::ENG_FIELDS, 15)), $r->user());
+        W::saveHistories($id, $r->all());
+        return $this->go("/engineers/$id", '詳しいプロフィールを保存しました。');
+    }
+
+    // ---------- データ領域（書類） ----------
+    public function generateDoc(Request $r, int $id)
+    {
+        $this->load($r, $id);
+        $kind = $r->input('kind') === 'resume' ? 'resume' : 'careersheet';
+        $fid = EngineerDocs::generate($id, $kind, $r->user(), $kind === 'careersheet' && $r->boolean('anon'));
+        return $this->go("/engineers/$id#docs", EngineerDocs::KINDS[$kind].'を書き出して保存しました。下の一覧からダウンロードできます。');
+    }
+
+    public function uploadDoc(Request $r, int $id)
+    {
+        $this->load($r, $id);
+        $r->validate(['file' => 'required|file|max:10240|mimes:pdf,xlsx,xls,docx,doc,jpg,jpeg,png,txt,csv'], [], ['file' => 'ファイル']);
+        EngineerDocs::store($id, $r->file('file'), (string) $r->input('kind'), (string) str_in($r->input('title')), $r->user());
+        return $this->go("/engineers/$id#docs", 'アップロードしました。');
+    }
+
+    private function doc(Request $r, int $id, int $fid)
+    {
+        $this->load($r, $id);
+        $f = DB::table('engineer_files')->where('id', $fid)->where('engineer_id', $id)->first();
+        abort_unless($f, 404);
+        return $f;
+    }
+
+    public function downloadDoc(Request $r, int $id, int $fid)
+    {
+        $f = $this->doc($r, $id, $fid);
+        abort_unless(Storage::disk(EngineerDocs::DISK)->exists($f->path), 404);
+        N::audit($r->user()->id, 'doc-download', $f->filename);
+        return Storage::disk(EngineerDocs::DISK)->download($f->path, $f->filename);
+    }
+
+    public function deleteDoc(Request $r, int $id, int $fid)
+    {
+        $f = $this->doc($r, $id, $fid);
+        Storage::disk(EngineerDocs::DISK)->delete($f->path);
+        DB::table('engineer_files')->where('id', $fid)->delete();
+        N::audit($r->user()->id, 'doc-delete', $f->filename);
+        return $this->go("/engineers/$id#docs", '削除しました。');
     }
 }

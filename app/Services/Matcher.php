@@ -16,8 +16,8 @@ class Matcher
         foreach (DB::table('engineer_skills')->where('engineer_id', $engineerId)->get() as $s) {
             $idx[norm_skill($s->name)] = ['name' => $s->name, 'years' => $s->years !== null ? (float) $s->years : null, 'fromProject' => false];
         }
-        foreach (DB::table('engineer_projects')->where('engineer_id', $engineerId)->pluck('tech') as $tech) {
-            foreach (parse_list($tech) as $t) {
+        foreach (DB::table('engineer_projects')->where('engineer_id', $engineerId)->get(['tech', 'os_tools', 'langs', 'dbs']) as $p) {
+            foreach (project_techs($p) as $t) {
                 $k = norm_skill($t);
                 if (!isset($idx[$k])) $idx[$k] = ['name' => $t, 'years' => null, 'fromProject' => true];
             }

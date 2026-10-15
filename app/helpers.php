@@ -16,7 +16,8 @@ const PARK_LABELS = [
     'contractStatus' => ['active' => '稼働中', 'ended' => '終了'],
     'invoiceStatus' => ['draft' => '下書き', 'issued' => '発行済み', 'paid' => '入金済み'],
     'mailStatus' => ['queued' => '送信待ち', 'sent' => '送信済み', 'failed' => '失敗', 'saved' => '保存のみ'],
-    'skillCat' => ['lang' => '言語', 'fw' => 'フレームワーク', 'db' => 'DB', 'infra' => 'インフラ・クラウド', 'tool' => 'ツール', 'other' => 'その他'],
+    'skillCat' => ['lang' => '言語', 'fw' => 'フレームワーク', 'db' => 'DB', 'os' => 'OS', 'cloud' => 'クラウド', 'infra' => 'インフラ・ミドルウェア', 'tool' => 'ツール',
+        'method' => '工程・開発手法', 'domain' => '業種・業務', 'role' => '役割', 'other' => 'その他'],
 ];
 const PARK_REJECT_REASONS = ['スキル・経験の不足', '経験年数', '単価が合わない', '開始日・稼働が合わない', '勤務地・働き方', '面談の受け答え', '他の候補者で決定', '案件の中止・延期', 'その他'];
 const PARK_FUNNEL = ['applied', 'submitted', 'doc_passed', 'interview', 'interviewed', 'won'];
@@ -114,13 +115,36 @@ const PARK_SKILL_ALIASES = [
     'nextjs' => 'next', 'nuxtjs' => 'nuxt', 'html5' => 'html', 'css3' => 'css', 'python3' => 'python', 'php8' => 'php', 'php7' => 'php',
     'java8' => 'java', 'java11' => 'java', 'java17' => 'java', 'mysql8' => 'mysql',
 ];
+// 技術マスタにある言葉は、正式な名前にそろえてから比べる（Postgres と PostgreSQL を同じにする）
 function norm_skill($s): string
+{
+    $t = \App\Support\SkillCatalog::find((string) $s);
+    return $t ? norm_skill_raw($t[1]) : norm_skill_raw($s);
+}
+
+// 文字だけの正規化（小文字・全角→半角・空白や記号を外す）
+function norm_skill_raw($s): string
 {
     $k = mb_strtolower(mb_convert_kana((string) $s, 'as')); // 全角の英数字・空白を半角に
     $k = preg_replace('/[（(].*?[)）]/u', '', $k);
     $k = preg_replace('/[\s.\-_]/u', '', $k);
     return PARK_SKILL_ALIASES[$k] ?? $k;
 }
+// 業務経歴の1件で使った技術（技術・OS／ツール・言語・DB の欄をまとめ、「PHP(Laravel)」は PHP と Laravel に分ける）
+function project_techs($p): array
+{
+    $all = [];
+    foreach (['tech', 'os_tools', 'langs', 'dbs'] as $f) {
+        foreach (parse_list($p->$f ?? '') as $w) {
+            if (preg_match('/^(.+?)[（(](.+)[)）]$/u', $w, $m)) {
+                $all[] = trim($m[1]);
+                foreach (preg_split('/[,、他]+/u', $m[2]) as $x) if (trim($x) !== '') $all[] = trim($x);
+            } else $all[] = $w;
+        }
+    }
+    return array_values(array_unique($all));
+}
+
 // 名前が似ていても別の技術（Java と JavaScript など）は一致にしない
 function loose_match(string $a, string $b): bool
 {

@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use App\Services\Notifier as N;
+use App\Support\SkillCatalog;
 
 // 業務の手続き（招待・登録・配信・応募・選考・成約・延長）。画面（コントローラー）からはここを呼ぶ。
 class Workflow
@@ -74,18 +75,21 @@ class Workflow
     }
 
     // ---------- エンジニア ----------
-    const ENG_FIELDS = ['name', 'kana', 'initials', 'email', 'birth_year', 'nearest_station', 'years_exp', 'summary', 'strengths', 'desired_price', 'min_price', 'available_from', 'work_style', 'days_per_week', 'status'];
+    const ENG_FIELDS = ['name', 'kana', 'initials', 'email', 'birth_year', 'nearest_station', 'years_exp', 'summary', 'strengths', 'desired_price', 'min_price', 'available_from', 'work_style', 'days_per_week', 'status',
+        // 履歴書・業務経歴書の項目（2026-10-16）
+        'gender', 'phone', 'postal_code', 'address', 'address_kana', 'nearest_line', 'walk_minutes', 'education', 'graduated_ym', 'career_summary', 'desired_roles', 'english_level', 'appeal', 'wishes', 'birth_date'];
 
     private static function engValues(array $d, ?object $old = null): array
     {
         $v = [];
         foreach (self::ENG_FIELDS as $f) {
             if (!array_key_exists($f, $d)) { $v[$f] = $old->$f ?? null; continue; }
-            if (in_array($f, ['birth_year', 'days_per_week'])) $v[$f] = int_or_null($d[$f]);
+            if (in_array($f, ['birth_year', 'days_per_week', 'walk_minutes'])) $v[$f] = int_or_null($d[$f]);
             elseif (in_array($f, ['years_exp', 'desired_price', 'min_price'])) $v[$f] = num_or_null($d[$f]);
             else $v[$f] = str_in($d[$f]);
         }
         if (!$v['initials'] && $v['kana']) $v['initials'] = self::initialsFromKana($v['kana']);
+        if ($v['birth_date']) $v['birth_year'] = (int) substr($v['birth_date'], 0, 4); // 生年月日があれば、年もそろえる
         $v['email'] = $v['email'] ? strtolower($v['email']) : null;
         $v['work_style'] = $v['work_style'] ?: 'any';
         $v['status'] = $v['status'] ?: 'available';
@@ -132,25 +136,49 @@ class Workflow
             DB::table('engineer_skills')->where('engineer_id', $engineerId)->delete();
             foreach ($names as $i => $n) {
                 if (trim((string) $n) === '') continue;
-                DB::table('engineer_skills')->insert(['engineer_id' => $engineerId, 'name' => trim($n), 'category' => $cats[$i] ?? 'other',
+                // 技術マスタにある言葉は正式な名前・分類にそろえる。無い言葉はマスタに足す（運営が分類を確かめる）
+                $t = SkillCatalog::find(trim($n));
+                if (!$t && SkillCatalog::ensure(trim($n), $cats[$i] ?? 'other')) $t = SkillCatalog::find(trim($n));
+                DB::table('engineer_skills')->insert(['engineer_id' => $engineerId, 'name' => $t[1] ?? trim($n), 'category' => $t[2] ?? ($cats[$i] ?? 'other'), 'term_id' => $t[0] ?? null,
                     'years' => num_or_null($years[$i] ?? null), 'level' => int_or_null($levels[$i] ?? null) ?: 3]);
             }
         });
         DB::table('engineers')->where('id', $engineerId)->update(['updated_at' => now_str()]);
     }
 
-    const PROJ_FIELDS = ['title', 'industry', 'period_from', 'period_to', 'role', 'team_size', 'tech', 'phases', 'description', 'achievements'];
+    const PROJ_FIELDS = ['title', 'industry', 'period_from', 'period_to', 'role', 'team_size', 'tech', 'phases', 'description', 'achievements', 'os_tools', 'langs', 'dbs', 'sort'];
 
     public static function saveProject(int $engineerId, array $d, ?int $projectId = null): void
     {
         $v = [];
         foreach (self::PROJ_FIELDS as $f) {
-            if ($f === 'team_size') $v[$f] = int_or_null($d[$f] ?? null);
+            if (in_array($f, ['team_size', 'sort'])) $v[$f] = int_or_null($d[$f] ?? null);
             elseif ($f === 'phases') $v[$f] = implode('、', parse_list(implode('、', (array) ($d[$f] ?? [])))) ?: null;
             else $v[$f] = str_in($d[$f] ?? '');
         }
+        if ($v['sort'] === null) unset($v['sort']);
         if ($projectId) DB::table('engineer_projects')->where('id', $projectId)->where('engineer_id', $engineerId)->update($v);
         else DB::table('engineer_projects')->insert($v + ['engineer_id' => $engineerId]);
+        DB::table('engineers')->where('id', $engineerId)->update(['updated_at' => now_str()]);
+    }
+
+    // 学歴・職歴・資格（行ごとに送られてくる。空の行は捨てる）
+    public static function saveHistories(int $engineerId, array $d): void
+    {
+        DB::transaction(function () use ($engineerId, $d) {
+            DB::table('engineer_histories')->where('engineer_id', $engineerId)->delete();
+            $kinds = (array) ($d['h_kind'] ?? []); $yms = (array) ($d['h_ym'] ?? []); $texts = (array) ($d['h_text'] ?? []);
+            foreach ($texts as $i => $text) {
+                if (trim((string) $text) === '') continue;
+                DB::table('engineer_histories')->insert(['engineer_id' => $engineerId, 'kind' => ($kinds[$i] ?? 'work') === 'edu' ? 'edu' : 'work', 'ym' => str_in($yms[$i] ?? ''), 'text' => trim($text), 'sort' => $i]);
+            }
+            DB::table('engineer_certs')->where('engineer_id', $engineerId)->delete();
+            $names = (array) ($d['c_name'] ?? []); $cyms = (array) ($d['c_ym'] ?? []);
+            foreach ($names as $i => $name) {
+                if (trim((string) $name) === '') continue;
+                DB::table('engineer_certs')->insert(['engineer_id' => $engineerId, 'name' => trim($name), 'ym' => str_in($cyms[$i] ?? ''), 'sort' => $i]);
+            }
+        });
         DB::table('engineers')->where('id', $engineerId)->update(['updated_at' => now_str()]);
     }
 
@@ -168,6 +196,18 @@ class Workflow
         }
         $v['work_style'] = $v['work_style'] ?: 'any';
         $v['status'] = $v['status'] ?: 'open';
+        // 必須・尚可の技術を正式な名前にそろえ、マスタに無いものは足して運営に知らせる
+        $added = [];
+        foreach (['required_skills', 'preferred_skills'] as $f) {
+            $list = [];
+            foreach (parse_list($v[$f]) as $w) {
+                if ($name = SkillCatalog::ensure($w)) $added[] = $name;
+                $t = SkillCatalog::find($w);
+                $list[] = $t[1] ?? $w;
+            }
+            $v[$f] = $list ? implode('、', array_unique($list)) : null;
+        }
+        if ($added) N::toAdmins('案件から新しい技術を技術マスタに追加しました', '「'.$v['title'].'」に、マスタに無い技術がありました：'.implode('、', $added)."\n分類（言語・フレームワーク・DB など）と別名を確かめてください。", '/admin/skills', false);
         if ($id) {
             DB::table('cases')->where('id', $id)->update($v + ['updated_at' => now_str()]);
             N::audit($user->id, 'case-update', $v['title']);

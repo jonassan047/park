@@ -74,6 +74,17 @@ class CaseParser
             else { $out['conditions'] = trim(($out['conditions'] ?? '')."\n開始：".$out['start_date']); unset($out['start_date']); }
         }
         if (preg_match('/(\d+)\s*年以上/u', $all, $m)) $out['min_years'] = (int) $m[1];
+        // 本文全体から、技術マスタにある技術を探す。必須に無いものは「尚可」の候補にする（運営が登録の前に確かめる）
+        $out['detected'] = \App\Support\SkillCatalog::detect($text);
+        $req = array_map('norm_skill', parse_list($out['required_skills'] ?? ''));
+        $extra = array_values(array_filter($out['detected'], fn ($t) => !in_array(norm_skill($t), $req, true)));
+        if (empty($out['required_skills']) && $out['detected']) $out['required_skills'] = implode('、', $out['detected']);
+        elseif ($extra) {
+            $pref = parse_list($out['preferred_skills'] ?? '');
+            $prefN = array_map('norm_skill', $pref);
+            foreach ($extra as $t) if (!in_array(norm_skill($t), $prefN, true)) $pref[] = $t;
+            $out['preferred_skills'] = implode('、', $pref);
+        }
         return $out;
     }
 }

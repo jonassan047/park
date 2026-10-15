@@ -3,6 +3,7 @@
 @php $next = ['applied' => 'スキルシートを提出', 'doc_passed' => '面談を設定', 'interviewed' => '成約 or 次の面談']; @endphp
 <x-stats :items="[['参加中の SES', $counts['ses'], $pendingSes->count() ? '申込 '.$pendingSes->count().'件' : ''], ['エンジニア', $counts['eng'], '待機 '.$counts['engAvail'].'名'],
     ['募集中の案件', $counts['cases']], ['選考中', $counts['apps']], ['稼働中の契約', $counts['contracts']], ['今月の成功報酬（税別）', yen($revenue), this_month()]]" />
+@if($unreviewedSkills)<div class="flash warn">案件などから自動で追加された、確認待ちの技術が {{ $unreviewedSkills }} 件あります。<a href="{{ url('/admin/skills') }}">技術マスタで分類を確かめる</a></div>@endif
 <div class="cols"><div>
 @if($pendingSes->count())
 <x-card title="参加の申し込み（承認待ち）"><x-table :head="['会社', '担当', '申込日', '']">

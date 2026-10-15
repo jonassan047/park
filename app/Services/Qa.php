@@ -12,7 +12,7 @@ class Qa
     {
         $k = norm_skill($skill);
         return array_values(array_filter($projects, function ($p) use ($k) {
-            foreach (parse_list($p->tech) as $t) {
+            foreach (project_techs($p) as $t) {
                 $n = norm_skill($t);
                 if ($n === $k || (mb_strlen($k) >= 3 && mb_strlen($n) >= 3 && loose_match($n, $k))) return true;
             }

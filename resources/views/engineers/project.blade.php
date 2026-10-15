@@ -7,7 +7,11 @@
 <x-field label="開始（年月）" name="period_from" type="month" :value="$p->period_from ?? null" />
 <x-field label="終了（年月、空なら現在）" name="period_to" type="month" :value="$p->period_to ?? null" />
 <x-field label="チームの人数" name="team_size" type="number" min="1" :value="$p->team_size ?? null" />
-<x-field label="使った技術" name="tech" :value="$p->tech ?? null" placeholder="Java、Spring Boot、Oracle、AWS（「、」区切り）" />
+<x-field label="使った技術（フレームワークなど）" name="tech" :value="$p->tech ?? null" placeholder="Laravel、Spring Boot、AWS（「、」区切り）" />
+<x-field label="機種・OS・ツール" name="os_tools" :value="$p->os_tools ?? null" placeholder="Linux、Windows、GitLab" />
+<x-field label="言語" name="langs" :value="$p->langs ?? null" placeholder="PHP、JavaScript" />
+<x-field label="DB" name="dbs" :value="$p->dbs ?? null" placeholder="MySQL、Oracle" />
+<x-field label="並び順（業務経歴書の No.。空なら新しい順）" name="sort" type="number" :value="$p->sort ?? null" />
 </div>
 @php $phases = parse_list($p->phases ?? ''); @endphp
 <div class="field"><span>担当した工程</span><div class="checks">@foreach(PARK_PHASES as $ph)<label><input type="checkbox" name="phases[]" value="{{ $ph }}" @checked(in_array($ph, $phases))> {{ $ph }}</label>@endforeach</div></div>

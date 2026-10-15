@@ -272,3 +272,9 @@ input:focus, select:focus, textarea:focus { outline-color: var(--blue2); }
   .logo .mark { width: 34px; height: 34px; }
 }
 @media print { .foot { display: none; } }
+
+/* 技術マスタ・データ領域 */
+.skillrow { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.skillrow input { width: auto; flex: 1 1 140px; } .skillrow select { width: auto; }
+.upload { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--blue3); }
+input[type=file] { padding: 6px; }

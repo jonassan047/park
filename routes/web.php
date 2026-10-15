@@ -64,6 +64,12 @@ Route::middleware('role')->group(function () {
     Route::post('/engineers/{id}/projects/{pid}', [Eng::class, 'saveProject']);
     Route::post('/engineers/{id}/projects/{pid}/delete', [Eng::class, 'deleteProject']);
     Route::get('/engineers/{id}/sheet', [Eng::class, 'sheet']);
+    Route::get('/engineers/{id}/profile', [Eng::class, 'profileForm']);
+    Route::post('/engineers/{id}/profile', [Eng::class, 'saveProfile']);
+    Route::post('/engineers/{id}/docs/generate', [Eng::class, 'generateDoc']);
+    Route::post('/engineers/{id}/docs/upload', [Eng::class, 'uploadDoc']);
+    Route::get('/engineers/{id}/docs/{fid}', [Eng::class, 'downloadDoc'])->whereNumber('fid');
+    Route::post('/engineers/{id}/docs/{fid}/delete', [Eng::class, 'deleteDoc'])->whereNumber('fid');
 
     Route::get('/applications/{id}', [Pip::class, 'show']);
     Route::get('/interviews/{id}', [Pip::class, 'interviewShow']);
@@ -135,6 +141,10 @@ Route::middleware('role:admin')->group(function () {
         Route::post('/settings/testmail', [Adm::class, 'testMail']);
         Route::post('/settings/admins', [Adm::class, 'admins']);
         Route::get('/audit', [Adm::class, 'audit']);
+        Route::get('/skills', [Adm::class, 'skills']);
+        Route::post('/skills', [Adm::class, 'addSkill']);
+        Route::post('/skills/{id}', [Adm::class, 'updateSkill']);
+        Route::post('/skills/{id}/merge', [Adm::class, 'mergeSkill']);
         Route::post('/users/{id}/reset-2fa', [TF::class, 'adminReset']);
     });
 });

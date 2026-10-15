@@ -15,7 +15,7 @@
 <h2>経歴</h2>
 @foreach($projects as $i => $p)<section class="sp"><div class="sph"><b>{{ $i + 1 }}. {{ $p->title }}</b><span>{{ $p->period_from ?: '?' }}〜{{ $p->period_to ?: '現在' }}</span></div>
 <div class="spm">{{ implode('／', array_filter([$p->industry, $p->role, $p->team_size ? $p->team_size.'名体制' : ''])) }}　@if($p->phases)<span class="muted">工程：{{ $p->phases }}</span>@endif</div>
-<div>@foreach(parse_list($p->tech) as $t)<span class="chip {{ $isHit($t) ? 'hit' : '' }}">{{ $t }}</span>@endforeach</div>
+<div>@foreach(project_techs($p) as $t)<span class="chip {{ $isHit($t) ? 'hit' : '' }}">{{ $t }}</span>@endforeach</div>
 <p>{!! nl2br(e($p->description)) !!}</p>@if($p->achievements)<p class="ach">成果：{{ $p->achievements }}</p>@endif</section>@endforeach
 <footer class="muted">{{ setting('app_name') }}　本シートの内容は本人が事実であることを確認しています。</footer>
 </article>

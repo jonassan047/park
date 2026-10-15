@@ -26,7 +26,8 @@ class CaseController extends Controller
     public function import(Request $r)
     {
         $c = (object) (CaseParser::parse($r->input('raw_text')) + ['raw_text' => $r->input('raw_text')]);
-        session()->now('flash', ['msg' => '取り込みました。内容を確かめて、足りないところを直してから登録してください。', 'type' => 'ok']);
+        $found = $c->detected ?? [];
+        session()->now('flash', ['msg' => '取り込みました。内容を確かめて、足りないところを直してから登録してください。'.($found ? '本文から見つかった技術：'.implode('、', $found).'（必須に無いものは尚可に入れました）' : ''), 'type' => 'ok']);
         return view('cases.form', ['c' => $c, 'action' => '/cases', 'submit' => '登録する', 'sesList' => $this->sesList($r), 'import' => false]);
     }
 

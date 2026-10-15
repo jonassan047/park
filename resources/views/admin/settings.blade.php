@@ -16,6 +16,7 @@
 <x-card title="運営メンバー"><x-table :head="['名前', 'メール', '2要素認証', '最終ログイン']" :count="$admins->count()">
 @foreach($admins as $u)<tr><td>{{ $u->name }}</td><td>{{ $u->email }}</td><td>@include('admin.two-factor-cell', ['u' => $u])</td><td>{{ fmt_dt($u->last_login) }}</td></tr>@endforeach</x-table>
 <form method="post" action="{{ url('/admin/settings/admins') }}">@csrf<div class="grid2"><x-field label="名前" name="name" required /><x-field label="メール" name="email" type="email" required /></div><button class="btn ghost small">運営メンバーを招待</button></form></x-card>
+<x-card title="技術マスタ"><p>案件メールとエンジニアのスキルを突き合わせる辞書（分類・別名）。</p><a class="btn ghost small" href="{{ url('/admin/skills') }}">技術マスタを開く</a></x-card>
 <x-card title="操作の記録"><p>配信・選考・請求などの操作は、すべて記録しています（公平性のため）。</p><a class="btn ghost small" href="{{ url('/admin/audit') }}">記録を見る</a></x-card>
 </div></div>
 @endsection

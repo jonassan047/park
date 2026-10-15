@@ -56,11 +56,19 @@ cd ~/park
 git pull --ff-only
 /opt/php-8.3/bin/php /usr/bin/composer install --no-dev --optimize-autoloader
 /opt/php-8.3/bin/php artisan migrate --force
+/opt/php-8.3/bin/php artisan park:skills-sync
 /opt/php-8.3/bin/php artisan config:cache
 /opt/php-8.3/bin/php artisan view:cache
 ```
 
 運営を増やすとき：`/opt/php-8.3/bin/php artisan park:invite-admin メールアドレス 名前`（招待のリンクが出る）。
+
+## エンジニアの細かい登録・技術マスタ・データ領域（2026-10-16）
+
+- エンジニアには、履歴書・業務経歴書の項目（生年月日・住所・電話・最寄りの路線と徒歩・最終学歴・職務概要・希望業務・語学・学歴/職歴・資格・アピール・本人希望）と、経歴の案件ごとの「機種・OS・ツール」「言語」「DB」を持たせる。
+- **技術マスタ**（`skill_terms`）：案件とスキルを同じ「正式な名前」にそろえる辞書（分類・別名）。最初の辞書は `app/Support/SkillCatalog.php`、DB へは `php artisan park:skills-sync`。案件・スキルにマスタに無い言葉が出たら自動で足し「確認待ち」にする（運営の「技術マスタ」画面で確かめる）。
+- **データ領域**：エンジニアごとに、最新の履歴書・業務経歴書（名前を伏せた版も）を Excel で書き出して保存・ダウンロードできる。アップロードもできる。置き場所は `storage/app/private/engineers/{id}/`（公開されない・Git に上げない）。見られるのは本人・所属 SES・運営だけ。
+- Excel の書き出しに PhpSpreadsheet を使う。PHP の `gd`・`zip` が要る（XAMPP は php.ini で有効にした）。
 
 ## デザイン
 

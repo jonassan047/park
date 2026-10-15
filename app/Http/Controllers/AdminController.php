@@ -62,6 +62,7 @@ class AdminController extends Controller
             'unread' => DB::table('messages as m')->join('engineers as e', 'e.id', '=', 'm.engineer_id')->where('read_by_admin', false)
                 ->groupBy('m.engineer_id', 'e.name')->select('m.engineer_id', 'e.name', DB::raw('count(*) as n'))->get(),
             'funnel' => self::funnel(),
+            'unreviewedSkills' => DB::table('skill_terms')->where('reviewed', false)->count(),
         ]);
     }
 
@@ -308,5 +309,58 @@ class AdminController extends Controller
     {
         $list = DB::table('audit_log as l')->leftJoin('users as u', 'u.id', '=', 'l.user_id')->select('l.*', 'u.name')->orderByDesc('l.id')->limit(500)->get();
         return view('admin.audit', compact('list'));
+    }
+
+    // ---------- 技術マスタ（案件メールとエンジニアのスキルを突き合わせる辞書） ----------
+    public function skills(Request $r)
+    {
+        $q = trim((string) $r->query('q')); $cat = (string) $r->query('cat');
+        $query = DB::table('skill_terms as t')->select('t.*')
+            ->selectSub(DB::table('engineer_skills')->whereColumn('term_id', 't.id')->selectRaw('count(*)'), 'used')
+            ->orderBy('reviewed')->orderBy('category')->orderBy('name');
+        if ($cat) $query->where('category', $cat);
+        if ($q !== '') $query->where(fn ($w) => $w->where('name', 'like', "%$q%")->orWhere('aliases', 'like', "%$q%"));
+        return view('admin.skills', ['list' => $query->get(), 'q' => $q, 'cat' => $cat,
+            'unreviewed' => DB::table('skill_terms')->where('reviewed', false)->count(), 'all' => DB::table('skill_terms')->orderBy('name')->pluck('name', 'id')->all()]);
+    }
+
+    public function addSkill(Request $r)
+    {
+        $name = trim((string) $r->input('name'));
+        if ($name === '' || \App\Support\SkillCatalog::find($name)) return $this->go('/admin/skills', 'その言葉は空か、すでにマスタにあります（別名を含む）。', 'bad');
+        DB::table('skill_terms')->insert(['name' => $name, 'category' => (string) $r->input('category', 'other'), 'aliases' => str_in($r->input('aliases')),
+            'source' => 'user', 'reviewed' => true, 'created_at' => now(), 'updated_at' => now()]);
+        \App\Support\SkillCatalog::forget();
+        N::audit($r->user()->id, 'skill-add', $name);
+        return $this->go('/admin/skills', "「{$name}」を追加しました。");
+    }
+
+    public function updateSkill(Request $r, int $id)
+    {
+        $t = DB::table('skill_terms')->find($id);
+        abort_unless($t, 404);
+        $name = trim((string) $r->input('name')) ?: $t->name;
+        if ($name !== $t->name && DB::table('skill_terms')->where('name', $name)->exists()) return $this->go('/admin/skills', '同じ名前がすでにあります。統合を使ってください。', 'bad');
+        DB::table('skill_terms')->where('id', $id)->update(['name' => $name, 'category' => (string) $r->input('category', $t->category),
+            'aliases' => str_in($r->input('aliases')), 'reviewed' => true, 'updated_at' => now()]);
+        DB::table('engineer_skills')->where('term_id', $id)->update(['name' => $name, 'category' => (string) $r->input('category', $t->category)]);
+        \App\Support\SkillCatalog::forget();
+        N::audit($r->user()->id, 'skill-update', $name);
+        return back()->with('flash', ['msg' => "「{$name}」を確認済みにしました。", 'type' => 'ok']);
+    }
+
+    // 同じ技術の言い換え（例：自動で足した「Postgre」）を、正式な技術の別名にまとめる
+    public function mergeSkill(Request $r, int $id)
+    {
+        $t = DB::table('skill_terms')->find($id);
+        $to = DB::table('skill_terms')->find((int) $r->input('to'));
+        abort_unless($t && $to && $t->id !== $to->id, 404);
+        $aliases = array_unique(array_merge(parse_list($to->aliases), [$t->name], parse_list($t->aliases)));
+        DB::table('skill_terms')->where('id', $to->id)->update(['aliases' => implode('、', $aliases), 'updated_at' => now()]);
+        DB::table('engineer_skills')->where('term_id', $t->id)->update(['term_id' => $to->id, 'name' => $to->name, 'category' => $to->category]);
+        DB::table('skill_terms')->where('id', $t->id)->delete();
+        \App\Support\SkillCatalog::forget();
+        N::audit($r->user()->id, 'skill-merge', "{$t->name} → {$to->name}");
+        return $this->go('/admin/skills', "「{$t->name}」を「{$to->name}」の別名にまとめました。");
     }
 }

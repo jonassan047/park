@@ -11,7 +11,7 @@
 <dl class="dl">
 <dt>氏名</dt><dd>{{ $e->name }} <span class="muted">{{ $e->kana }}（{{ $e->initials ?: '—' }}）</span></dd>
 <dt>所属 SES</dt><dd>{{ $e->ses_name }}</dd><dt>状態</dt><dd>{{ badge('engStatus', $e->status) }}</dd>
-<dt>年齢</dt><dd>{{ age_text($e->birth_year) ?: '—' }}</dd><dt>最寄り駅</dt><dd>{{ $e->nearest_station ?: '—' }}</dd>
+<dt>年齢</dt><dd>{{ age_text($e->birth_year) ?: '—' }}</dd><dt>最寄り駅</dt><dd>{{ trim($e->nearest_line.' '.$e->nearest_station) ?: '—' }}{{ $e->walk_minutes ? '（徒歩'.$e->walk_minutes.'分）' : '' }}</dd>
 <dt>経験年数</dt><dd>{{ $e->years_exp ? num_disp($e->years_exp).'年' : '—' }}</dd>
 <dt>希望単価</dt><dd>{{ man($e->desired_price) }}</dd><dt>下限</dt><dd>{{ man($e->min_price) }}</dd>
 <dt>稼働できる日</dt><dd>{{ fmt_date($e->available_from) }}</dd>
@@ -20,6 +20,18 @@
 @unless($mine)<dt>アカウント</dt><dd>{{ $eu ? ($eu->password ? '利用中（最終ログイン '.fmt_dt($eu->last_login).'）' : '招待中（未設定）') : 'なし' }}</dd>@endunless
 @if($u->role === 'admin' && $eu)<dt>2要素認証</dt><dd>@include('admin.two-factor-cell', ['u' => $eu])</dd>@endif
 <dt>個人情報の同意</dt><dd>@if($e->consent_at){{ fmt_date($e->consent_at) }}@else<span class="bad-text">未</span>@endif</dd>
+</dl></x-card>
+
+<x-card title="詳しいプロフィール（履歴書・業務経歴書の項目）"><x-slot:actions><a class="btn ghost small" href="{{ url('/engineers/'.$e->id.'/profile') }}">編集</a></x-slot:actions>
+<dl class="dl">
+<dt>生年月日</dt><dd>{{ $e->birth_date ? fmt_date($e->birth_date) : '—' }}</dd><dt>性別</dt><dd>{{ $e->gender ?: '—' }}</dd>
+<dt>電話</dt><dd>{{ $e->phone ?: '—' }}</dd><dt>現住所</dt><dd>{{ trim(($e->postal_code ? '〒'.$e->postal_code.' ' : '').$e->address) ?: '—' }}</dd>
+<dt>最終学歴</dt><dd>{{ $e->education ?: '—' }}{{ $e->graduated_ym ? '（'.$e->graduated_ym.' 卒業）' : '' }}</dd>
+<dt>希望業務</dt><dd>{{ $e->desired_roles ?: '—' }}</dd><dt>語学</dt><dd>{{ $e->english_level ?: '—' }}</dd>
+<dt>職務概要</dt><dd>{!! nl2br(e($e->career_summary)) ?: '—' !!}</dd>
+<dt>学歴・職歴</dt><dd>@forelse($hist as $h)<div><span class="muted">{{ $h->ym ?: '' }}</span> {{ $h->kind === 'edu' ? '［学歴］' : '' }}{{ $h->text }}</div>@empty — @endforelse</dd>
+<dt>資格・免許</dt><dd>@forelse($certs as $c)<div>{{ $c->name }} <span class="muted">{{ $c->ym }}</span></div>@empty — @endforelse</dd>
+<dt>アピール</dt><dd>{!! nl2br(e($e->appeal)) ?: '—' !!}</dd><dt>本人希望</dt><dd>{!! nl2br(e($e->wishes)) ?: '—' !!}</dd>
 </dl></x-card>
 
 <x-card title="スキル"><x-slot:actions><a class="btn ghost small" href="{{ url('/engineers/'.$e->id.'/skills') }}">スキルを編集</a></x-slot:actions>
@@ -31,11 +43,26 @@
 @forelse($projects as $p)<div class="proj">
 <div class="projhead"><b>{{ $p->title }}</b><span class="muted">{{ $p->period_from ?: '?' }}〜{{ $p->period_to ?: '現在' }}・{{ $p->industry }}・{{ $p->role }}{{ $p->team_size ? '・'.$p->team_size.'名' : '' }}</span>
 <a class="small" href="{{ url('/engineers/'.$e->id.'/projects/'.$p->id.'/edit') }}">編集</a></div>
-<x-chips :list="parse_list($p->tech)" /> <span class="muted small">{{ $p->phases }}</span><p>{!! nl2br(e($p->description)) !!}</p>
+<x-chips :list="project_techs($p)" /> <span class="muted small">{{ $p->phases }}</span><p>{!! nl2br(e($p->description)) !!}</p>
 @if($p->achievements)<p class="ach">成果：{{ $p->achievements }}</p>@endif</div>
 @empty<p class="empty">まだ登録がありません。直近の案件から入れていきましょう。</p>@endforelse
 </x-card>
 </div><div>
+<section id="docs"></section>
+<x-card title="📁 データ領域（履歴書・業務経歴書）">
+<p class="muted">登録した内容から、最新の履歴書・業務経歴書を Excel で書き出して保存します。書き出すたびに版が残り、いつでもダウンロードできます。手持ちの書類（PDF など）も置けます。見られるのは、本人・所属の SES・運営だけです。</p>
+<p><x-post :action="'/engineers/'.$e->id.'/docs/generate'" label="履歴書を書き出す" :fields="['kind' => 'resume']" cls="small" />
+<x-post :action="'/engineers/'.$e->id.'/docs/generate'" label="業務経歴書を書き出す" :fields="['kind' => 'careersheet']" cls="small" />
+<x-post :action="'/engineers/'.$e->id.'/docs/generate'" label="業務経歴書（名前を伏せた版）" :fields="['kind' => 'careersheet', 'anon' => 1]" cls="ghost small" /></p>
+<x-table :head="['書類', '日時', '']" :count="$files->count()" empty="まだ書類はありません。">
+@foreach($files as $f)<tr><td><a href="{{ url('/engineers/'.$e->id.'/docs/'.$f->id) }}">{{ $f->title }}</a><div class="muted small">{{ $f->filename }}（{{ max(1, round($f->size / 1024)) }}KB）</div></td>
+<td>{{ fmt_dt($f->created_at) }}</td><td><x-post :action="'/engineers/'.$e->id.'/docs/'.$f->id.'/delete'" label="削除" cls="ghost small" confirm="この書類を削除しますか？" /></td></tr>@endforeach
+</x-table>
+<form method="post" action="{{ url('/engineers/'.$e->id.'/docs/upload') }}" enctype="multipart/form-data" class="upload">@csrf
+<div class="grid2"><x-field label="書類をアップロード（10MB まで）" name="file" type="file" required />
+<x-field label="種類" name="kind" type="select" :options="\App\Services\EngineerDocs::KINDS" value="other" /></div>
+<x-field label="題名（任意）" name="title" placeholder="例：2026-10 版の履歴書（PDF）" /><button class="btn ghost small">アップロード</button></form>
+</x-card>
 <x-card title="スキルシートの完成度"><div class="meter"><i style="width:{{ $check['score'] }}%"></i><b>{{ $check['score'] }}%</b></div>
 <ul class="tips">@foreach($check['tips'] as $t)<li>{{ $t }}</li>@endforeach</ul>
 <p><a class="btn" href="{{ url('/engineers/'.$e->id.'/sheet') }}">スキルシートを見る</a> <a class="btn ghost" href="{{ url('/engineers/'.$e->id.'/sheet?anon=1') }}">名前を伏せた版</a></p>
