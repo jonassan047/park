@@ -182,3 +182,15 @@ code.secret { font-size: 15px; letter-spacing: .08em; }
 .manual td, .manual th { border: 1px solid var(--line); }
 @media (max-width: 860px) { .manualwrap { grid-template-columns: 1fr; } .toc { position: static; } }
 @media print { .manualwrap { display: block; } .manual { border: 0; padding: 0; } }
+
+/* 携帯：メニューは横にスクロールする1行にし、上に固定しない */
+@media (max-width: 860px) {
+  header.top { position: static; }
+  header.top .wrap { gap: 6px 12px; padding-top: 6px; padding-bottom: 6px; }
+  header nav { order: 3; flex: 1 0 100%; flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+  header nav a { white-space: nowrap; }
+  .me { margin-left: auto; }
+  h1 { font-size: 19px; }
+  .card > .body { padding: 12px; }
+  .sheet { padding: 18px; }
+}
