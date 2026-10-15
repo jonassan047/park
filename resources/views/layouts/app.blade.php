@@ -18,7 +18,7 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{{ $title }} | {{ setting('app_name') }}</title>
-<link rel="stylesheet" href="{{ asset('css/park.css') }}">
+<link rel="stylesheet" href="{{ asset('css/park.css') }}?v={{ filemtime(public_path('css/park.css')) }}">
 </head>
 <body class="{{ $print ? 'print' : '' }}">
 @unless($print)
@@ -43,6 +43,6 @@
 @yield('content')
 </main>
 @unless($print)<footer class="wrap foot">{{ setting('app_name') }} — 成約したときだけ、成功報酬をいただく仕組みです。</footer>@endunless
-<script src="{{ asset('js/park.js') }}"></script>
+<script src="{{ asset('js/park.js') }}?v={{ filemtime(public_path('js/park.js')) }}"></script>
 </body>
 </html>
