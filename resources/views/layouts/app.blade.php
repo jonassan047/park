@@ -2,9 +2,9 @@
     $u = auth()->user();
     $nav = [
         'admin' => [['/admin', 'ダッシュボード'], ['/admin/ses', 'SES'], ['/admin/engineers', 'エンジニア'], ['/admin/cases', '案件'], ['/admin/applications', '応募・選考'],
-            ['/admin/contracts', '契約'], ['/admin/invoices', '請求'], ['/admin/messages', 'やり取り'], ['/admin/mail', 'メール'], ['/admin/reports', '分析'], ['/admin/settings', '設定']],
-        'ses' => [['/ses', 'ダッシュボード'], ['/ses/engineers', 'エンジニア'], ['/ses/cases', '案件'], ['/ses/applications', '応募・選考'], ['/ses/contracts', '契約'], ['/ses/invoices', '請求'], ['/ses/company', '会社情報']],
-        'eg' => [['/eg', 'ホーム'], ['/eg/offers', '届いた案件'], ['/eg/applications', '応募・面談'], ['/eg/profile', 'プロフィール'], ['/eg/sheet', 'スキルシート'], ['/eg/messages', 'やり取り']],
+            ['/admin/contracts', '契約'], ['/admin/invoices', '請求'], ['/admin/messages', 'やり取り'], ['/admin/mail', 'メール'], ['/admin/reports', '分析'], ['/admin/settings', '設定'], ['/manual', '使い方']],
+        'ses' => [['/ses', 'ダッシュボード'], ['/ses/engineers', 'エンジニア'], ['/ses/cases', '案件'], ['/ses/applications', '応募・選考'], ['/ses/contracts', '契約'], ['/ses/invoices', '請求'], ['/ses/company', '会社情報'], ['/manual', '使い方']],
+        'eg' => [['/eg', 'ホーム'], ['/eg/offers', '届いた案件'], ['/eg/applications', '応募・面談'], ['/eg/profile', 'プロフィール'], ['/eg/sheet', 'スキルシート'], ['/eg/messages', 'やり取り'], ['/manual', '使い方']],
     ][$u->role ?? ''] ?? [];
     // 2要素認証が済むまでは、メニューを出さない
     if ($u && (int) session(\App\Support\TwoFactor::SESSION_KEY) !== (int) $u->id) $nav = [];
@@ -32,7 +32,7 @@
       <form method="post" action="{{ url('/logout') }}" class="inline">@csrf<button class="link">ログアウト</button></form>
     </div>
   @else
-    <nav></nav><div class="me"><a href="{{ url('/apply') }}">参加のお申し込み</a><a class="btn small" href="{{ url('/login') }}">ログイン</a></div>
+    <nav></nav><div class="me"><a href="{{ url('/manual') }}">使い方</a><a href="{{ url('/apply') }}">参加のお申し込み</a><a class="btn small" href="{{ url('/login') }}">ログイン</a></div>
   @endif
 </div></header>
 @endunless

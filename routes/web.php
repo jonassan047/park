@@ -5,6 +5,7 @@ use App\Http\Controllers\AdminController as Adm;
 use App\Http\Controllers\CaseController as Cas;
 use App\Http\Controllers\EgController as Eg;
 use App\Http\Controllers\EngineerController as Eng;
+use App\Http\Controllers\ManualController as Man;
 use App\Http\Controllers\PipelineController as Pip;
 use App\Http\Controllers\PublicController as Pub;
 use App\Http\Controllers\SesController as Ses;
@@ -27,6 +28,8 @@ Route::get('/invite/{token}', [Pub::class, 'inviteForm']);
 Route::post('/invite/{token}', [Pub::class, 'invite']);
 Route::get('/forgot', [Pub::class, 'forgotForm']);
 Route::post('/forgot', [Pub::class, 'forgot'])->middleware('throttle:5,1');
+Route::get('/manual', [Man::class, 'index']);
+Route::get('/manual/{kind}', [Man::class, 'show']);
 
 // ---------- 2要素認証（パスワードは通ったが、まだコードを入れていない人も開ける） ----------
 Route::middleware('auth')->group(function () {

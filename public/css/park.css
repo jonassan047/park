@@ -170,3 +170,15 @@ table.edit td { padding: 4px; }
 .qr svg { width: 200px; height: 200px; background: #fff; padding: 8px; border: 1px solid var(--line); border-radius: 8px; }
 code.secret { font-size: 15px; letter-spacing: .08em; }
 .codes { columns: 2; list-style: none; padding: 0; } .codes li { margin: 4px 0; } .codes code { font-size: 15px; }
+
+/* マニュアル */
+.manualwrap { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 20px; align-items: start; }
+.toc { position: sticky; top: 72px; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; font-size: 13px; }
+.toc ol { list-style: none; padding-left: 0; margin: 6px 0; } .toc li { margin: 3px 0; }
+.manual { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 8px 28px 24px; line-height: 1.9; }
+.manual h2 { font-size: 17px; border-bottom: 2px solid var(--blue3); padding: 18px 0 4px; margin: 10px 0 8px; scroll-margin-top: 70px; }
+.manual h3 { font-size: 15px; color: var(--blue); }
+.manual table { margin: 8px 0 14px; border: 1px solid var(--line); } .manual th { background: var(--blue2); color: var(--ink); }
+.manual td, .manual th { border: 1px solid var(--line); }
+@media (max-width: 860px) { .manualwrap { grid-template-columns: 1fr; } .toc { position: static; } }
+@media print { .manualwrap { display: block; } .manual { border: 0; padding: 0; } }

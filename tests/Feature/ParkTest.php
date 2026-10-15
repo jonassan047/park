@@ -201,4 +201,15 @@ class ParkTest extends TestCase
         // RFC 6238 の例（鍵 "12345678901234567890"、59秒）→ 下6桁 287082
         $this->assertSame('287082', TwoFactor::codeAt('GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ', intdiv(59, 30)));
     }
+
+    public function test_manuals(): void
+    {
+        $this->get('/manual')->assertOk()->assertSee('SES 企業さま向けマニュアル')->assertDontSee('運営マニュアル');
+        $this->get('/manual/ses')->assertOk()->assertSee('参加のお申し込み')->assertSee('<table>', false);
+        $this->get('/manual/engineer')->assertOk()->assertSee('経験票');
+        $this->get('/manual/admin')->assertForbidden();
+        $this->get('/manual/xxx')->assertNotFound();
+        $this->as('admin@park.example')->get('/manual/admin')->assertOk()->assertSee('マッチングと配信');
+        $this->as('eg1@park.example')->get('/manual')->assertRedirect(url('/manual/engineer'));
+    }
 }
