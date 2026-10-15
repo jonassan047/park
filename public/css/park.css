@@ -1,8 +1,10 @@
-/* PARK — 企画書に合わせた薄めの青系 */
+/* PARK — 公園風のデザイン（41_Park-Project の 99_Data/index.html の見本に合わせた。緑系・丸いフォント） */
 :root {
-  --ink: #1d2b3a; --sub: #5b6b7c; --line: #dbe5ef; --bg: #f4f8fc; --card: #fff;
-  --blue: #2f6fb0; --blue2: #e3eef9; --blue3: #c9def3; --ok: #2f8a5b; --warn: #b7791f; --bad: #c0392b;
-  font-family: "Noto Sans JP", "Yu Gothic UI", "Meiryo", system-ui, sans-serif;
+  /* --blue は昔の名前のまま、色は公園の緑（park-500）にした */
+  --ink: #214e37; --sub: #5b7a68; --line: #d3e8dc; --bg: #f2f8f5; --card: #fff;
+  --blue: #3d9465; --blue-dark: #2e7750; --blue2: #e1f0e8; --blue3: #c2e2d1; --ok: #2e7750; --warn: #e67e22; --bad: #c0392b;
+  --shadow: 0 1px 2px rgba(33, 78, 55, .06), 0 4px 14px rgba(33, 78, 55, .06);
+  font-family: "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", "Yu Gothic UI", "Meiryo", system-ui, sans-serif;
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--ink); font-size: 14px; line-height: 1.7; }
@@ -194,3 +196,79 @@ code.secret { font-size: 15px; letter-spacing: .08em; }
   .card > .body { padding: 12px; }
   .sheet { padding: 18px; }
 }
+
+
+/* ===== 公園風のデザイン（見本に合わせた上書き） ===== */
+h1 { font-weight: 800; letter-spacing: .02em; }
+h2 { font-weight: 800; }
+header.top { background: rgba(255, 255, 255, .92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--blue3); box-shadow: 0 1px 3px rgba(33, 78, 55, .05); }
+header.top .wrap { min-height: 64px; }
+.logo { flex-direction: row; align-items: center; gap: 10px; color: var(--ink); letter-spacing: .04em; }
+.logo .mark { width: 40px; height: 40px; border-radius: 13px; background: var(--blue); color: #fff; display: inline-flex; align-items: center; justify-content: center; box-shadow: 0 3px 8px rgba(61, 148, 101, .35); transform: rotate(3deg); transition: transform .3s; font-size: 20px; }
+.logo:hover .mark { transform: rotate(0); }
+.logo .name { display: flex; flex-direction: column; line-height: 1.1; font-weight: 800; font-size: 21px; color: var(--blue-dark); }
+.logo small { color: var(--blue); font-weight: 700; font-size: 10px; }
+header nav a { border-radius: 999px; padding: 6px 13px; font-weight: 700; color: var(--sub); }
+header nav a:hover { background: var(--bg); color: var(--ink); }
+header nav a.on { background: var(--blue2); color: var(--blue-dark); }
+.me a { font-weight: 700; }
+
+.btn { border-radius: 999px; font-weight: 700; padding: 8px 20px; box-shadow: 0 2px 6px rgba(61, 148, 101, .25); transition: transform .15s, box-shadow .15s, background .15s; }
+.btn:hover { filter: none; background: var(--blue-dark); border-color: var(--blue-dark); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(61, 148, 101, .3); }
+.btn.ghost { box-shadow: none; border: 2px solid var(--blue3); color: var(--blue-dark); }
+.btn.ghost:hover { background: var(--bg); border-color: var(--blue); color: var(--blue-dark); }
+.btn.small { padding: 4px 13px; }
+.btn.danger:hover { background: #fdecea; color: var(--bad); border-color: var(--bad); }
+
+.card { border-radius: 20px; border-color: var(--blue3); box-shadow: var(--shadow); }
+.card > header { background: linear-gradient(135deg, var(--blue2), var(--bg)); border-bottom-color: var(--blue3); padding: 12px 18px; }
+.card > .body { padding: 16px 18px; }
+.stat { border-radius: 20px; border-color: var(--blue3); box-shadow: var(--shadow); }
+.stat b { color: var(--blue-dark); font-weight: 800; }
+input, select, textarea { border-radius: 12px; border-color: var(--blue3); }
+input:focus, select:focus, textarea:focus { outline-color: var(--blue2); }
+.flash { border-radius: 14px; }
+.badge { font-weight: 700; padding: 2px 10px; }
+.badge.ok { background: #d9f2e4; color: #1f7a4a; }
+.badge.info { background: var(--blue2); color: var(--blue-dark); }
+.badge.warn { background: #fdebd8; color: #b35f12; }
+.badge.strong { background: var(--blue); color: #fff; }
+.chip { border-color: var(--blue3); background: #fff; font-weight: 700; }
+.chip.hit { background: var(--blue); border-color: var(--blue); }
+.lane { background: var(--blue2); border-radius: 18px; }
+.ticket { border-radius: 14px; box-shadow: var(--shadow); }
+.tabs a:not(.btn) { border-radius: 999px; font-weight: 700; }
+.manual, .toc { border-radius: 20px; border-color: var(--blue3); box-shadow: var(--shadow); }
+.manual h2 { border-bottom-color: var(--blue2); color: var(--ink); }
+.manual h3 { color: var(--blue-dark); }
+
+/* トップ（見本のヒーローと「PARK の歩き方」） */
+.hero { display: grid; grid-template-columns: 1.15fr .85fr; gap: 36px; align-items: center; background: linear-gradient(135deg, var(--blue2), var(--bg) 55%, #fff); border: 1px solid var(--blue3); border-radius: 28px; padding: 46px 52px; margin: 26px 0 40px; box-shadow: var(--shadow); }
+.hero .pill { display: inline-flex; align-items: center; gap: 8px; background: rgba(255, 255, 255, .85); border: 1px solid var(--blue3); border-radius: 999px; padding: 5px 14px; font-size: 13px; font-weight: 700; color: var(--blue-dark); }
+.hero .pill i { width: 8px; height: 8px; border-radius: 50%; background: var(--blue); display: inline-block; }
+.hero h1 { font-size: 38px; line-height: 1.35; margin: 16px 0; color: var(--ink); }
+.hero p { color: var(--sub); line-height: 1.9; }
+.hero .photo { position: relative; border-radius: 22px; overflow: hidden; border: 4px solid #fff; box-shadow: 0 10px 30px rgba(33, 78, 55, .2); transform: rotate(2deg); aspect-ratio: 4 / 3; background: var(--blue2) center / cover no-repeat; }
+.hero .photo span { position: absolute; left: 14px; bottom: 14px; background: rgba(27, 64, 46, .78); color: #fff; font-size: 12px; font-weight: 700; padding: 5px 12px; border-radius: 999px; }
+.section-title { text-align: center; margin: 10px 0 18px; } .section-title h2 { font-size: 22px; } .section-title p { color: var(--sub); margin: 4px 0 0; font-size: 13px; }
+.spots { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-bottom: 36px; }
+.spot { position: relative; display: block; border-radius: 22px; overflow: hidden; min-height: 230px; background: var(--blue-dark) center / cover no-repeat; color: #fff; text-decoration: none; box-shadow: var(--shadow); transition: transform .2s; }
+.spot:hover { transform: translateY(-3px); }
+.spot::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to top, rgba(27, 64, 46, .92), rgba(27, 64, 46, .25)); }
+.spot div { position: absolute; left: 24px; right: 24px; bottom: 22px; z-index: 1; }
+.spot em { font-style: normal; display: inline-block; font-size: 11px; font-weight: 800; background: var(--blue); padding: 2px 10px; border-radius: 999px; }
+.spot em.orange { background: var(--warn); }
+.spot b { display: block; font-size: 22px; margin: 6px 0 4px; }
+.spot small { font-size: 13px; opacity: .9; }
+.steps { margin-bottom: 18px; } .steps .card { height: 100%; margin-bottom: 0; }
+.steps .num { display: inline-flex; width: 30px; height: 30px; border-radius: 10px; background: var(--blue); color: #fff; font-weight: 800; align-items: center; justify-content: center; margin-right: 6px; }
+.foot { text-align: center; color: var(--sub); border-top: 1px solid var(--blue3); background: #fff; max-width: none; margin-top: 30px; padding: 30px 18px; }
+.foot .mark { display: inline-flex; width: 28px; height: 28px; border-radius: 9px; background: var(--blue); color: #fff; align-items: center; justify-content: center; font-weight: 800; margin-right: 6px; }
+.foot b { color: var(--blue-dark); font-size: 16px; }
+@media (max-width: 860px) {
+  .hero { grid-template-columns: 1fr; padding: 26px 22px; gap: 22px; }
+  .hero h1 { font-size: 27px; }
+  .spots { grid-template-columns: 1fr; }
+  .logo .mark { width: 34px; height: 34px; }
+}
+@media print { .foot { display: none; } }

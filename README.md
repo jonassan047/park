@@ -62,6 +62,10 @@ git pull --ff-only
 
 運営を増やすとき：`/opt/php-8.3/bin/php artisan park:invite-admin メールアドレス 名前`（招待のリンクが出る）。
 
+## デザイン
+
+緑系・丸いフォント（M PLUS Rounded 1c、Google Fonts）の公園風。見本は 41_Park-Project の `99_Data/index.html`（2026-10-16 に適用）。トップの写真（`public/img/`）は Unsplash のフリー画像を取り込んだもの（外部からは読み込まない）。
+
 ## マニュアル
 
 運営・SES 企業さま・エンジニアの3種類。正本は `resources/manuals/`（`admin.md`・`ses.md`・`engineer.md`）で、アプリの「使い方」（`/manual`）から読める。SES・エンジニア向けはログイン前でも読める。運営向けは運営だけ。画面や流れを変えたら、マニュアルも直す。

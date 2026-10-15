@@ -18,12 +18,14 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{{ $title }} | {{ setting('app_name') }}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{ asset('css/park.css') }}?v={{ filemtime(public_path('css/park.css')) }}">
 </head>
 <body class="{{ $print ? 'print' : '' }}">
 @unless($print)
 <header class="top"><div class="wrap">
-  <a class="logo" href="{{ url('/') }}">{{ setting('app_name') }}<small>SES とエンジニアが集う庭</small></a>
+  <a class="logo" href="{{ url('/') }}"><span class="mark">🌳</span><span class="name">{{ setting('app_name') }}<small>SES とエンジニアが集う庭</small></span></a>
   @if($u)
     <nav>@foreach($nav as [$href, $label])<a href="{{ url($href) }}" class="{{ $path === $href || (strlen($href) > 4 && str_starts_with($path, $href.'/')) ? 'on' : '' }}">{{ $label }}</a>@endforeach</nav>
     <div class="me">
@@ -42,7 +44,7 @@
 @unless($noTitle ?? false)<h1>{{ $title }}</h1>@endunless
 @yield('content')
 </main>
-@unless($print)<footer class="wrap foot">{{ setting('app_name') }} — 成約したときだけ、成功報酬をいただく仕組みです。</footer>@endunless
+@unless($print)<footer class="foot"><p><span class="mark">P</span><b>{{ setting('app_name') }}</b></p><p>SES 企業のみなさまと、エンジニアが同じ木の下で。成約したときだけ、成功報酬をいただく仕組みです。</p></footer>@endunless
 <script src="{{ asset('js/park.js') }}?v={{ filemtime(public_path('js/park.js')) }}"></script>
 </body>
 </html>
