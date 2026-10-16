@@ -102,6 +102,10 @@ SES が受けた案件メールから、エンジニアへの案内メールを�
 
 ホームのいちばん上に、立場ごとの「今やること」を出す（`app/Services/Todo.php`）。
 
+## 状態の点検（2026-10-16）
+
+`php artisan park:status` で、メール・AI の仕事・選考・確認待ちなどを数で出す（個人情報は出さない）。PARK 担当のエージェント（41_Park-Project の `.claude/agents/park-manager.md`）が点検に使う。公開サーバーでは `/opt/php-8.3/bin/php artisan park:status`。
+
 ## AI の仕事の箱（2026-10-16）
 
 AI は手元の PC（FOCUS）で動かす。公開サーバー（Xserver）では AI を動かせないため。案件や個人の情報は、手元の PC の外に出さない。

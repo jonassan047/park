@@ -358,6 +358,12 @@ class ParkTest extends TestCase
         $this->get('/admin/ai')->assertOk()->assertSee('失敗');
     }
 
+    public function test_status_command(): void
+    {
+        $this->artisan('park:status')->expectsOutputToContain('エンジニア：本人の確認がまだ')->assertExitCode(0);
+        $this->artisan('park:status --json')->assertExitCode(0);
+    }
+
     public function test_manuals(): void
     {
         $this->get('/manual')->assertOk()->assertSee('SES 企業さま向けマニュアル')->assertDontSee('運営マニュアル');
