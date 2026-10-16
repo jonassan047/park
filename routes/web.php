@@ -3,6 +3,7 @@
 use App\Http\Controllers\AccountController as Acc;
 use App\Http\Controllers\AdminController as Adm;
 use App\Http\Controllers\CaseController as Cas;
+use App\Http\Controllers\CaseMailController as CMail;
 use App\Http\Controllers\EgController as Eg;
 use App\Http\Controllers\EngineerController as Eng;
 use App\Http\Controllers\ManualController as Man;
@@ -81,6 +82,11 @@ Route::middleware('role:admin,ses')->group(function () {
     Route::get('/cases/{id}/edit', [Cas::class, 'edit']);
     Route::post('/cases/{id}', [Cas::class, 'update']);
     Route::post('/cases/{id}/distribute', [Cas::class, 'distribute']);
+    Route::get('/cases/{id}/mail', [CMail::class, 'form']);
+    Route::post('/cases/{id}/mail/preview', [CMail::class, 'preview']);
+    Route::post('/cases/{id}/mail/send', [CMail::class, 'send']);
+    Route::post('/case-mails/{id}/reply', [CMail::class, 'reply']);
+    Route::get('/case-mails/{id}/doc/{kind}', [CMail::class, 'doc']);
     Route::post('/cases/{id}/status', [Cas::class, 'status']);
     Route::get('/engineers/new', [Eng::class, 'create']);
     Route::post('/engineers', [Eng::class, 'store']);

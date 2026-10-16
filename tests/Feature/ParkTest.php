@@ -234,6 +234,44 @@ class ParkTest extends TestCase
         $this->assertNotNull(DB::table('ses_companies')->where('id', 1)->value('self_confirmed_at'));
     }
 
+    public function test_ses_case_mail_flow(): void
+    {
+        // 1. SES が案件を登録する
+        $this->as('ses1@park.example');
+        $this->post('/cases', ['title' => 'Java の保守案件', 'required_skills' => 'Java、SQL', 'price' => 60, 'status' => 'open'])->assertRedirect();
+        $cid = DB::table('cases')->where('title', 'Java の保守案件')->value('id');
+        DB::table('engineers')->where('id', 1)->update(['nickname' => 'たろちゃん']);
+        // 2. 候補：自社の人は名前つき。グループのほかの人は名前を伏せる
+        $this->get("/cases/$cid/mail")->assertOk()->assertSee('山田 太郎');
+        $this->get("/cases/$cid/mail?scope=group")->assertOk()->assertDontSee('佐藤 美咲')->assertSee('あおぞらテック');
+        // 3・4. 同じ内容で作る → 送る前の確かめ（宛名は愛称）
+        $tpl = ['mode' => 'same', 'subject' => '【案件】{案件名}', 'body' => "{呼び名} さん\n{案件名}／{単価}"];
+        $this->post("/cases/$cid/mail/preview", $tpl + ['engineer_id' => [1, 2]])->assertOk()->assertSee('たろちゃん さん')->assertDontSee('佐藤');
+        $this->post("/cases/$cid/mail/send", ['mode' => 'same', 'to' => [1 => ['send' => 1, 'subject' => '【案件】Java の保守案件', 'body' => 'たろちゃん さん'], 2 => ['send' => 1, 'subject' => 'x', 'body' => 'y']]])->assertRedirect(url("/cases/$cid"));
+        $this->assertSame(1, DB::table('case_mails')->where('case_id', $cid)->count()); // 自社の画面からは、ほかの SES の人に送れない
+        $m = DB::table('case_mails')->where('case_id', $cid)->first();
+        $this->assertSame('own', $m->route);
+        $this->assertSame('ses1@park.example', DB::table('mail_outbox')->where('id', $m->outbox_id)->value('reply_to')); // 返信は SES に届く
+        // 5. 返事を記録 → 6. 書類をダウンロード
+        $this->post("/case-mails/{$m->id}/reply", ['reply' => 'interested', 'note' => '単価は相談したい'])->assertRedirect();
+        $this->assertDatabaseHas('case_mails', ['id' => $m->id, 'reply' => 'interested', 'reply_via' => 'ses']);
+        $this->get("/case-mails/{$m->id}/doc/careersheet")->assertOk();
+        $this->get("/cases/$cid")->assertSee('案内メール')->assertSee('単価は相談したい');
+
+        // グループのほかの人（プラスα）：PARK から送り、名前を伏せた書類は「応募したい」のあとだけ
+        $this->post("/cases/$cid/mail/send", ['scope' => 'group', 'mode' => 'each', 'to' => [2 => ['send' => 1, 'subject' => '件名', 'body' => '本文']]])->assertRedirect();
+        $g = DB::table('case_mails')->where('case_id', $cid)->where('engineer_id', 2)->first();
+        $this->assertSame('group', $g->route);
+        $this->assertNull(DB::table('mail_outbox')->where('id', $g->outbox_id)->value('reply_to'));
+        $this->get("/case-mails/{$g->id}/doc/careersheet-anon")->assertForbidden();
+        $this->get("/case-mails/{$g->id}/doc/resume")->assertForbidden();
+        // 本人が PARK の画面で見送ると、返事が記録される
+        $this->as('eg2@park.example')->post("/cases/$cid/decline", ['reason' => '時期が合わない']);
+        $this->assertDatabaseHas('case_mails', ['id' => $g->id, 'reply' => 'declined', 'reply_via' => 'app']);
+        // 案件を持ち込んでいない SES は、案内できない
+        $this->as('ses2@park.example')->get("/cases/$cid/mail")->assertForbidden();
+    }
+
     public function test_manuals(): void
     {
         $this->get('/manual')->assertOk()->assertSee('SES 企業さま向けマニュアル')->assertDontSee('運営マニュアル');

@@ -21,6 +21,25 @@
 <h3>作業内容</h3><p>{!! nl2br(e($c->description)) !!}</p>
 @if($c->conditions)<h3>その他の条件</h3><p>{!! nl2br(e($c->conditions)) !!}</p>@endif
 </x-card>
+@if($canMail)
+<x-card title="案内メール">
+<x-slot:actions>@if($c->status === 'open')<a class="btn small" href="{{ url('/cases/'.$c->id.'/mail') }}">エンジニアに案内する</a>@endif</x-slot:actions>
+<div id="mails"></div>
+<x-table :head="['エンジニア', '送った日', '返事', '記録する', '案件をくれた先へ返す書類']" :count="$mails->count()" empty="まだ送っていません。「エンジニアに案内する」で、候補を絞ってメールを送れます。">
+@foreach($mails as $m)<tr>
+<td>@if($m->route === 'own'){{ $m->name }}@else{{ $m->initials ?: '—' }} <span class="muted">（{{ $m->ses_name }}・PARK から）</span>@endif<div class="muted">{{ $m->score }}点・{{ $m->mode === 'each' ? '個別' : '同じ内容' }}</div></td>
+<td>{{ fmt_dt($m->sent_at) }}</td>
+<td>{{ \App\Services\CaseMail::REPLIES[$m->reply] ?? $m->reply }}@if($m->reply_note)<div class="muted">{{ $m->reply_note }}</div>@endif @if($m->reply_via === 'app')<div class="muted">（本人が画面で）</div>@endif</td>
+<td>@if($m->route === 'own')<form method="post" action="{{ url('/case-mails/'.$m->id.'/reply') }}" class="inline">@csrf
+<select name="reply">@foreach(\App\Services\CaseMail::REPLIES as $k => $t)<option value="{{ $k }}" @selected($m->reply === $k)>{{ $t }}</option>@endforeach</select>
+<input name="note" value="{{ $m->reply_note }}" placeholder="返信の要点"><button class="btn ghost small">記録</button></form>@else<span class="muted">本人が PARK の画面で返事します</span>@endif</td>
+<td>@if($m->route === 'own')<a href="{{ url('/case-mails/'.$m->id.'/doc/resume') }}">履歴書</a>・<a href="{{ url('/case-mails/'.$m->id.'/doc/careersheet') }}">業務経歴書</a>・<a href="{{ url('/case-mails/'.$m->id.'/doc/careersheet-anon') }}">業務経歴書（名前を伏せる）</a>
+@elseif($m->reply === 'interested')<a href="{{ url('/case-mails/'.$m->id.'/doc/careersheet-anon') }}">業務経歴書（名前を伏せる）</a>@else<span class="muted">応募したいと返事が来たら出せます</span>@endif</td>
+</tr>@endforeach
+</x-table>
+<p class="muted">書類は、押したときの最新の内容で Excel を作ってダウンロードします。メールに添付して、案件をくれた先へ返信してください。</p>
+</x-card>
+@endif
 @if($u->role !== 'eg')
 <x-card title="この案件への応募"><x-table :head="['エンジニア', 'SES', '状態', '応募日', '']" :count="$apps->count()">
 @foreach($apps as $a)<tr><td>{{ $a->eg_name }}</td><td>{{ $a->ses_name }}</td><td>{{ badge('appStatus', $a->status) }}</td><td>{{ fmt_date($a->applied_at) }}</td><td><a href="{{ url('/applications/'.$a->id) }}">詳細</a></td></tr>@endforeach

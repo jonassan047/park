@@ -6,6 +6,7 @@
 @if($sesList)<x-field label="所属 SES" name="ses_id" type="select" :options="$sesList" :value="$e->ses_id ?? null" required />@endif
 <x-field label="氏名" name="name" :value="$e->name ?? null" required />
 <x-field label="ふりがな" name="kana" :value="$e->kana ?? null" placeholder="やまだ たろう" hint="スキルシートのイニシャル（T.Y）に使います" />
+<x-field label="メールで呼ぶ名前（愛称など）" name="nickname" :value="$e->nickname ?? null" placeholder="たろうさん" hint="案件の案内メールの宛名に使います。空なら氏名" />
 @unless($isEg)<x-field label="メールアドレス" name="email" type="email" :value="$e->email ?? null" :hint="$isNew ? '入れると、ご本人に招待メールが届きます' : null" />@endunless
 <x-field label="生まれた年" name="birth_year" type="number" :value="$e->birth_year ?? null" placeholder="1985" />
 <x-field label="最寄り駅" name="nearest_station" :value="$e->nearest_station ?? null" />

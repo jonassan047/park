@@ -278,3 +278,4 @@ input:focus, select:focus, textarea:focus { outline-color: var(--blue2); }
 .skillrow input { width: auto; flex: 1 1 140px; } .skillrow select { width: auto; }
 .upload { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--blue3); }
 input[type=file] { padding: 6px; }
+.mailbody{white-space:pre-wrap;font-family:inherit;background:#f7faf7;border-radius:12px;padding:12px;margin:0}

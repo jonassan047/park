@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\CaseMail as CM;
 use App\Services\CaseParser;
 use App\Services\Matcher;
 use App\Services\Notifier as N;
@@ -35,7 +36,7 @@ class CaseController extends Controller
     {
         if (!str_in($r->input('title'))) return $this->go('/cases/new', '案件名を入れてください。', 'bad');
         $id = W::saveCase($r->all(), $r->user());
-        return $this->go("/cases/$id", $r->user()->role === 'admin' ? '登録しました。マッチングで、合うエンジニアに配信してください。' : '登録しました。運営がマッチングして配信します。');
+        return $this->go("/cases/$id", $r->user()->role === 'admin' ? '登録しました。マッチングで、合うエンジニアに配信してください。' : '登録しました。続けて「エンジニアに案内する」で、合うエンジニアにメールで案内できます。');
     }
 
     private function load(int $id) { $c = DB::table('cases')->find($id); abort_unless($c, 404); return $c; }
@@ -66,7 +67,12 @@ class CaseController extends Controller
             ->where('a.case_id', $id)->select('a.*', 'e.name as eg_name', 's.name as ses_name')->orderBy('a.id');
         if ($u->role === 'ses') $apps->where('a.ses_id', $u->ses_id);
         if ($u->role === 'eg') $apps->where('a.engineer_id', $u->engineer_id);
-        $data = ['c' => $c, 'apps' => $apps->get()];
+        $data = ['c' => $c, 'apps' => $apps->get(), 'canMail' => CM::canSend($u, $c)];
+        if ($data['canMail']) {
+            $q = DB::table('case_mails as m')->join('engineers as e', 'e.id', '=', 'm.engineer_id')->join('ses_companies as s', 's.id', '=', 'e.ses_id')
+                ->where('m.case_id', $id)->select('m.*', 'e.name', 'e.initials', 's.name as ses_name')->orderByDesc('m.id');
+            $data['mails'] = $q->get();
+        }
 
         if ($u->role === 'admin') {
             $list = Matcher::forCase($id, $r->query('busy') === '1');
@@ -113,6 +119,7 @@ class CaseController extends Controller
         }
         try {
             $appId = W::apply($id, $eid, $r->all(), $u);
+            CM::reply($id, $eid, 'interested', str_in($r->input('condition_note')), $u->role === 'eg' ? 'app' : 'ses');
             return $this->go("/applications/$appId", '応募しました。運営がスキルシートを案件に合わせて整え、提出します。');
         } catch (\RuntimeException $e) {
             return $this->go("/cases/$id", $e->getMessage(), 'bad');
@@ -123,6 +130,7 @@ class CaseController extends Controller
     {
         DB::table('case_offers')->where('case_id', $id)->where('engineer_id', $r->user()->engineer_id)->update(['status' => 'declined', 'decline_reason' => str_in($r->input('reason'))]);
         N::audit($r->user()->id, 'offer-decline', "案件 {$id}：".$r->input('reason'));
+        CM::reply($id, (int) $r->user()->engineer_id, 'declined', str_in($r->input('reason')), 'app');
         return $this->go('/eg/offers', '見送りました。');
     }
 
