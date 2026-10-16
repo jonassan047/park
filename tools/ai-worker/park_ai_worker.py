@@ -10,6 +10,10 @@ PC がついていて、これが動いている間だけ、AI の仕事が進�
     python park_ai_worker.py           （ずっと動く。止めるときは Ctrl+C）
     python park_ai_worker.py --once    （仕事を1つだけやって終わる）
 
+環境変数のかわりに、~/.park-ai/config.json（{"PARK_URL": ..., "PARK_AI_TOKEN": ...}）にも書ける。
+合言葉はこのリポジトリ（公開）には書かず、この PC にだけ置く。
+PC の起動で自動で動かすときは pythonw.exe で動かす（窓は出ない）。そのときの記録は ~/.park-ai/worker.log。
+
 Python の標準ライブラリだけで動く（追加のインストールは要らない）。
 """
 
@@ -20,11 +24,27 @@ import time
 import urllib.error
 import urllib.request
 
-PARK_URL = os.environ.get("PARK_URL", "http://localhost/park").rstrip("/")
-TOKEN = os.environ.get("PARK_AI_TOKEN", "")
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434").rstrip("/")
-MODEL = os.environ.get("PARK_AI_MODEL", "qwen2.5:7b")
-IDLE_SECONDS = int(os.environ.get("PARK_AI_IDLE", "30"))
+HOME = os.path.join(os.path.expanduser("~"), ".park-ai")
+CONF = {}
+if os.path.exists(os.path.join(HOME, "config.json")):
+    with open(os.path.join(HOME, "config.json"), encoding="utf-8") as f:
+        CONF = json.load(f)
+
+
+def setting(name, default=""):
+    return os.environ.get(name) or CONF.get(name) or default
+
+
+PARK_URL = setting("PARK_URL", "http://localhost/park").rstrip("/")
+TOKEN = setting("PARK_AI_TOKEN")
+OLLAMA_URL = setting("OLLAMA_URL", "http://localhost:11434").rstrip("/")
+MODEL = setting("PARK_AI_MODEL", "qwen2.5:7b")
+IDLE_SECONDS = int(setting("PARK_AI_IDLE", "30"))
+
+# pythonw で動かすと画面に出せないので、記録をファイルに書く
+if sys.stdout is None or not sys.stdout.isatty() and "--log" in sys.argv:
+    os.makedirs(HOME, exist_ok=True)
+    sys.stdout = sys.stderr = open(os.path.join(HOME, "worker.log"), "a", encoding="utf-8", buffering=1)
 
 
 def post(url, data, headers=None, timeout=60):
