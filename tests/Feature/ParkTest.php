@@ -284,6 +284,10 @@ class ParkTest extends TestCase
         $this->post("/r/$tok", ['answer' => 'question', 'note' => '在宅は何日？'])->assertOk()->assertSee('受け付けました');
         $this->assertDatabaseHas('case_mails', ['id' => $m->id, 'reply' => 'question', 'reply_via' => 'link', 'reply_note' => '在宅は何日？']);
         $this->get('/r/'.str_repeat('0', 32).'/question')->assertNotFound();
+        // 「今やること」に出る
+        $this->as('ses1@park.example')->get('/ses')->assertSee('今やること')->assertSee('山田 太郎 さんから質問');
+        $this->as('eg1@park.example')->get('/eg')->assertSee('今やること');
+        $this->as('admin@park.example')->get('/admin')->assertSee('今やること');
 
         // 書類を返した（応募した）→ 面談依頼が来た → 面談スクリプト → 結果 → 成約（SES だけで進められる）
         $this->as('ses1@park.example')->post("/case-mails/{$m->id}/submitted")->assertRedirect();

@@ -279,3 +279,4 @@ input:focus, select:focus, textarea:focus { outline-color: var(--blue2); }
 .upload { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--blue3); }
 input[type=file] { padding: 6px; }
 .mailbody{white-space:pre-wrap;font-family:inherit;background:#f7faf7;border-radius:12px;padding:12px;margin:0}
+.todo{margin:0;padding-left:1.4em}.todo li{margin:.35em 0}.todo a{display:block;text-decoration:none;color:inherit;padding:.45em .7em;border-radius:12px;background:#f3f8f1}.todo a:hover{background:#e6f1e2}.todo b{display:block}.todo span{font-size:.9em;color:#4a7a43}
