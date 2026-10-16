@@ -92,6 +92,15 @@ Route::middleware('role:admin,ses')->group(function () {
     Route::post('/engineers', [Eng::class, 'store']);
     Route::post('/engineers/{id}/invite', [Eng::class, 'invite']);
     Route::get('/invoices/{id}', [Pip::class, 'invoice']);
+    // 選考（面談依頼の報告・面談スクリプト・結果・成約）。SES は自社の応募だけ
+    Route::post('/applications/{id}/status', [Pip::class, 'status']);
+    Route::post('/applications/{id}/note', [Pip::class, 'note']);
+    Route::post('/applications/{id}/interview', [Pip::class, 'interview']);
+    Route::post('/applications/{id}/contract', [Pip::class, 'contract']);
+    Route::post('/interviews/{id}/qa', [Pip::class, 'qa']);
+    Route::post('/interviews/{id}/regen', [Pip::class, 'regen']);
+    Route::post('/interviews/{id}/result', [Pip::class, 'result']);
+    Route::post('/case-mails/{id}/submitted', [CMail::class, 'submitted']);
 });
 
 Route::middleware('role:admin,eg')->group(function () {
@@ -104,13 +113,6 @@ Route::middleware('role:ses,eg')->post('/applications/{id}/withdraw', [Pip::clas
 
 // ---------- 運営 ----------
 Route::middleware('role:admin')->group(function () {
-    Route::post('/applications/{id}/status', [Pip::class, 'status']);
-    Route::post('/applications/{id}/note', [Pip::class, 'note']);
-    Route::post('/applications/{id}/interview', [Pip::class, 'interview']);
-    Route::post('/applications/{id}/contract', [Pip::class, 'contract']);
-    Route::post('/interviews/{id}/qa', [Pip::class, 'qa']);
-    Route::post('/interviews/{id}/regen', [Pip::class, 'regen']);
-    Route::post('/interviews/{id}/result', [Pip::class, 'result']);
     Route::post('/contracts/{id}/extend', [Pip::class, 'extend']);
     Route::post('/contracts/{id}/end', [Pip::class, 'end']);
 

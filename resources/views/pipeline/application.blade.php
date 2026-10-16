@@ -18,8 +18,9 @@
 @foreach($ivs as $iv)<tr><td>{{ $iv->round }}回目</td><td>{{ fmt_dt($iv->scheduled_at) }}</td><td>{{ $iv->place }}</td><td>{{ badge('ivResult', $iv->result) }}</td><td><a href="{{ url('/interviews/'.$iv->id) }}">Q&A・結果</a></td></tr>@endforeach
 </x-table></x-card>
 
-@if($u->role === 'admin' && $open)
-<x-card title="次の手順（運営）">
+@php $staff = in_array($u->role, ['admin', 'ses']); @endphp
+@if($staff && $open)
+<x-card title="次の手順">
 @if($a->status === 'applied')
   <p>1. 案件に合わせたスキルシート（<a href="{{ $sheetUrl }}" target="_blank">名前を伏せた版</a>）を確かめて、元請けに提出します。</p>
   <x-post :action="'/applications/'.$a->id.'/status'" label="スキルシートを提出した" :fields="['status' => 'submitted']" />
@@ -30,10 +31,11 @@
 @elseif($a->status === 'interviewed')
   <p>面談を通過しました。次の面談を設定するか、成約を記録します。</p>
 @endif
-@if(in_array($a->status, ['doc_passed', 'interview', 'interviewed']))
-  <form method="post" action="{{ url('/applications/'.$a->id.'/interview') }}">@csrf<h3>面談を設定（{{ $ivs->count() + 1 }}回目）</h3>
+@if(in_array($a->status, ['applied', 'submitted', 'doc_passed', 'interview', 'interviewed']))
+  <form method="post" action="{{ url('/applications/'.$a->id.'/interview') }}">@csrf<h3>面談依頼が来た（{{ $ivs->count() + 1 }}回目）</h3>
   <div class="grid2"><x-field label="日時" name="scheduled_at" type="datetime-local" /><x-field label="場所・URL" name="place" placeholder="オンライン（URL は追って）" /></div>
-  <p class="muted">設定すると、この案件に合わせた面談対策の Q&A を作り、本人と SES にメールで知らせます。</p><button class="btn">面談を設定する</button></form>
+  <x-field label="依頼の内容（先方が確かめたいこと。1行に1つ）" name="request_note" type="textarea" rows="3" placeholder="Spring Boot での設計の経験&#10;リーダー経験の有無" />
+  <p class="muted">記録すると、案件と本人のスキルを突き合わせて<b>面談スクリプト</b>（想定質問と答え方）を作り、本人・SES・運営に知らせます。</p><button class="btn">面談依頼を記録する</button></form>
 @endif
 @if(in_array($a->status, ['interview', 'interviewed']))
   <form method="post" action="{{ url('/applications/'.$a->id.'/contract') }}" onsubmit="return confirm('成約として記録し、本人と SES に知らせます。よろしいですか？')">@csrf<h3>成約を記録</h3>
@@ -46,13 +48,13 @@
 <x-field label="見送りの理由" name="reason" type="select" :options="array_combine(PARK_REJECT_REASONS, PARK_REJECT_REASONS)" />
 <x-field label="くわしく（次に活かすため1行で）" name="note" /><button class="btn ghost">見送りにする</button></form>
 </x-card>
-@elseif($u->role !== 'admin' && $open)
+@elseif($u->role === 'eg' && $open)
 <x-card title="応募の取り下げ"><form method="post" action="{{ url('/applications/'.$a->id.'/withdraw') }}" onsubmit="return confirm('応募を取り下げますか？')">@csrf
 <x-field label="理由" name="note" required /><button class="btn ghost">取り下げる</button></form></x-card>
 @endif
 </div><div>
 <x-card title="経過"><ol class="timeline">@foreach($events as $ev)<li><b>{{ lbl('appStatus', $ev->status) }}</b> <small>{{ fmt_dt($ev->at) }}・{{ $ev->name }}</small>@if($ev->note)<div>{{ $ev->note }}</div>@endif</li>@endforeach</ol></x-card>
-@if($u->role === 'admin')
+@if($staff)
 <x-card title="メモ・フィードバックを残す"><form method="post" action="{{ url('/applications/'.$a->id.'/note') }}">@csrf
 <x-field name="note" type="textarea" rows="2" placeholder="元請けからの印象、落ちた理由など（次の応募・面談に活かす）" /><button class="btn ghost small">残す</button></form></x-card>
 @endif

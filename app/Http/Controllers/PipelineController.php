@@ -59,9 +59,10 @@ class PipelineController extends Controller
 
     public function interview(Request $r, int $id)
     {
-        $this->app($r, $id);
+        $a = $this->app($r, $id);
+        if (!in_array($a->status, ['applied', 'submitted', 'doc_passed', 'interview', 'interviewed'])) return $this->go("/applications/$id", 'この応募は終わっています。', 'bad');
         $ivId = W::scheduleInterview($id, $r->all(), $r->user());
-        return $this->go("/interviews/$ivId", '面談を設定し、Q&A を作りました。中身を確かめて、必要なら直してください。');
+        return $this->go("/interviews/$ivId", '面談依頼を記録し、面談スクリプト（想定質問と答え方）を作りました。中身を確かめて、必要なら直してください。本人にも知らせました。');
     }
 
     public function contract(Request $r, int $id)
@@ -102,7 +103,7 @@ class PipelineController extends Controller
     public function regen(Request $r, int $id)
     {
         [$iv, $a] = $this->iv($r, $id);
-        DB::table('interviews')->where('id', $id)->update(['qa_json' => json_encode(Qa::generate($a->case_id, $a->engineer_id), JSON_UNESCAPED_UNICODE)]);
+        DB::table('interviews')->where('id', $id)->update(['qa_json' => json_encode(Qa::generate($a->case_id, $a->engineer_id, $iv->request_note), JSON_UNESCAPED_UNICODE)]);
         return $this->go("/interviews/$id", '作り直しました。');
     }
 

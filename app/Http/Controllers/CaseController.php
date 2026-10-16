@@ -72,6 +72,7 @@ class CaseController extends Controller
             $q = DB::table('case_mails as m')->join('engineers as e', 'e.id', '=', 'm.engineer_id')->join('ses_companies as s', 's.id', '=', 'e.ses_id')
                 ->where('m.case_id', $id)->select('m.*', 'e.name', 'e.initials', 's.name as ses_name')->orderByDesc('m.id');
             $data['mails'] = $q->get();
+            $data['mailApps'] = DB::table('applications')->where('case_id', $id)->pluck('id', 'engineer_id')->all();
         }
 
         if ($u->role === 'admin') {

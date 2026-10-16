@@ -83,6 +83,23 @@ class CaseMailController extends Controller
         return $this->go("/cases/{$c->id}#mails", '返事を記録しました。');
     }
 
+    // 6 のあと：案件をくれた先へ書類を返した（応募した）ことを記録する。ここから面談依頼・成約へ進む
+    public function submitted(Request $r, int $mid)
+    {
+        $m = DB::table('case_mails')->find($mid);
+        abort_unless($m, 404);
+        $c = $this->load($r, $m->case_id);
+        abort_unless($m->route === 'own' || $r->user()->role === 'admin', 403);
+        try {
+            $appId = \App\Services\Workflow::apply($c->id, $m->engineer_id, ['start_ok' => 1, 'price_ok' => 1, 'style_ok' => 1, 'condition_note' => $m->reply_note ?: 'SES が本人に確認のうえ応募'], $r->user());
+            \App\Services\Workflow::setStatus($appId, 'submitted', $r->user(), '', '案件をくれた先へ書類を返した');
+            CM::reply($c->id, $m->engineer_id, 'interested', $m->reply_note, $m->reply_via ?: 'ses');
+            return $this->go("/applications/$appId", '応募したことを記録しました。面談依頼が来たら、この画面の「面談依頼が来た」に入れてください。');
+        } catch (\RuntimeException $e) {
+            return $this->go("/cases/{$c->id}#mails", $e->getMessage(), 'bad');
+        }
+    }
+
     // 6. 案件をくれた先へ返すための書類（最新の履歴書・業務経歴書）。グループのほかの SES の人は、名前を伏せた業務経歴書だけ
     public function doc(Request $r, int $mid, string $kind)
     {

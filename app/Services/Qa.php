@@ -25,7 +25,7 @@ class Qa
         return '「'.$p->title.'」（'.($p->period_from ?: '?').'〜'.($p->period_to ?: '現在').'、'.($p->role ?: '担当').($p->team_size ? "、{$p->team_size}名体制" : '').'）';
     }
 
-    public static function generate(int $caseId, int $engineerId): array
+    public static function generate(int $caseId, int $engineerId, ?string $requestNote = null): array
     {
         $c = DB::table('cases')->find($caseId);
         $e = DB::table('engineers')->find($engineerId);
@@ -34,6 +34,16 @@ class Qa
         $idx = Matcher::skillIndex($engineerId);
         $qa = [];
         $add = function ($category, $q, $hint) use (&$qa) { $qa[] = ['category' => $category, 'q' => $q, 'hint' => $hint]; };
+
+        // まず、案件とスキルの突き合わせ（面談の前に、本人と SES が同じ認識を持つ）
+        $fit = Matcher::score($c, $e);
+        $add('確認：案件とスキル', 'この案件で見られるのは、どこですか。', '合う点：'.(implode('、', $fit['reasons']) ?: '—').'。'
+            .($fit['missing'] ? '足りない点：'.implode('、', $fit['missing']).'。聞かれたら正直に、近い経験と学んでいることを話す。' : '必須の条件はそろっている。経験を具体的に話せるようにしておく。'));
+        // 面談依頼に書かれていた、先方が確かめたいこと
+        foreach (preg_split('/\R/u', (string) $requestNote) as $line) {
+            $line = trim(preg_replace('/^[\s　・\-*]+/u', '', $line));
+            if ($line !== '') $add('先方が確かめたいこと', $line, '依頼に書かれていた点。経験票の事実をもとに、具体例（案件名・期間・役割・成果）を1つ用意する。');
+        }
 
         $latest = $projects[0] ?? null;
         $add('自己紹介', '簡単に自己紹介と、これまでのご経歴をお願いします。',

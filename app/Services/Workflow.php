@@ -344,12 +344,14 @@ class Workflow
         $round = (int) DB::table('interviews')->where('application_id', $appId)->max('round') + 1;
         $when = str_replace('T', ' ', (string) ($d['scheduled_at'] ?? ''));
         $id = DB::table('interviews')->insertGetId(['application_id' => $appId, 'round' => $round, 'scheduled_at' => $when ?: null, 'place' => str_in($d['place'] ?? ''),
-            'qa_json' => json_encode(Qa::generate($a->case_id, $a->engineer_id), JSON_UNESCAPED_UNICODE), 'created_at' => now_str()]);
+            'request_note' => str_in($d['request_note'] ?? ''),
+            'qa_json' => json_encode(Qa::generate($a->case_id, $a->engineer_id, str_in($d['request_note'] ?? '')), JSON_UNESCAPED_UNICODE), 'created_at' => now_str()]);
         DB::table('applications')->where('id', $appId)->update(['status' => 'interview', 'updated_at' => now_str()]);
         self::addEvent($appId, 'interview', "{$round}回目 $when ".($d['place'] ?? ''), $actor);
         $whenText = ($when ?: '日時調整中').'／'.(str_in($d['place'] ?? '') ?? '場所・URL は追ってご連絡');
         N::toEg($a->engineer_id, "面談が決まりました：{$a->title}（{$round}回目）", "面談：{$whenText}\n\nこの案件に合わせた「面談対策の Q&A」を用意しました。面談の前に目を通し、自分の言葉で答えられるようにしておいてください。", "/interviews/$id", true, 'interview');
-        N::toSes($a->ses_id, "面談が決まりました：{$a->title}", "面談：{$whenText}", "/applications/$appId", true, 'interview');
+        N::toSes($a->ses_id, "面談が決まりました：{$a->title}", "面談：{$whenText}\n面談スクリプト（想定質問と答え方）を作りました。", "/interviews/$id", true, 'interview');
+        if (($actor->role ?? '') === 'ses') N::toAdmins("SES から面談依頼の報告：{$a->title}", "{$a->eg_name} さん／面談：{$whenText}", "/interviews/$id", false, 'interview');
         N::audit($actor->id, 'interview', "{$a->title} {$round}回目");
         return $id;
     }

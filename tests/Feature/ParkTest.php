@@ -270,6 +270,24 @@ class ParkTest extends TestCase
         $this->assertDatabaseHas('case_mails', ['id' => $g->id, 'reply' => 'declined', 'reply_via' => 'app']);
         // 案件を持ち込んでいない SES は、案内できない
         $this->as('ses2@park.example')->get("/cases/$cid/mail")->assertForbidden();
+
+        // 書類を返した（応募した）→ 面談依頼が来た → 面談スクリプト → 結果 → 成約（SES だけで進められる）
+        $this->as('ses1@park.example')->post("/case-mails/{$m->id}/submitted")->assertRedirect();
+        $appId = DB::table('applications')->where('case_id', $cid)->where('engineer_id', 1)->value('id');
+        $this->assertDatabaseHas('applications', ['id' => $appId, 'status' => 'submitted']);
+        $this->get("/cases/$cid")->assertSee('応募・面談の画面へ');
+        $this->post("/applications/$appId/interview", ['scheduled_at' => date('Y-m-d').'T10:00', 'place' => 'オンライン', 'request_note' => "設計の経験\nリーダー経験の有無"])->assertRedirect();
+        $iv = DB::table('interviews')->where('application_id', $appId)->first();
+        $qa = json_decode($iv->qa_json, true);
+        $this->assertSame('確認：案件とスキル', $qa[0]['category']);
+        $this->assertContains('リーダー経験の有無', array_column($qa, 'q'));
+        $this->get("/interviews/{$iv->id}")->assertOk()->assertSee('面談スクリプト')->assertSee('リーダー経験の有無');
+        $this->assertDatabaseHas('app_notifications', ['user_id' => DB::table('users')->where('email', 'admin@park.example')->value('id'), 'link' => "/interviews/{$iv->id}"]);
+        $this->post("/interviews/{$iv->id}/result", ['result' => 'pass'])->assertRedirect();
+        $this->post("/applications/$appId/contract", ['price' => 60, 'start_date' => date('Y-m-d')])->assertRedirect();
+        $this->assertDatabaseHas('applications', ['id' => $appId, 'status' => 'won']);
+        // ほかの SES の応募は触れない
+        $this->as('ses2@park.example')->post("/applications/$appId/interview", ['place' => 'x'])->assertForbidden();
     }
 
     public function test_manuals(): void
