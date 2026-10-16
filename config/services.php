@@ -35,4 +35,9 @@ return [
         ],
     ],
 
+    // AI の仕事の箱：手元の PC の AI（tools/ai-worker）が使う合言葉
+    'park_ai' => [
+        'token' => env('PARK_AI_TOKEN', ''),
+    ],
+
 ];

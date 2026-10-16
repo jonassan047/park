@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AccountController as Acc;
 use App\Http\Controllers\AdminController as Adm;
+use App\Http\Controllers\AiController as Ai;
 use App\Http\Controllers\CaseController as Cas;
 use App\Http\Controllers\CaseMailController as CMail;
 use App\Http\Controllers\EgController as Eg;
@@ -30,6 +31,10 @@ Route::get('/invite/{token}', [Pub::class, 'inviteForm']);
 Route::post('/invite/{token}', [Pub::class, 'invite']);
 Route::get('/forgot', [Pub::class, 'forgotForm']);
 Route::post('/forgot', [Pub::class, 'forgot'])->middleware('throttle:5,1');
+// 手元の PC の AI とのやり取り（合言葉で確かめる）
+Route::post('/ai/worker/next', [Ai::class, 'next'])->middleware('throttle:120,1');
+Route::post('/ai/worker/{id}/result', [Ai::class, 'result'])->middleware('throttle:120,1');
+
 // 案内メールの返事のリンク（ログインしなくてよい）
 Route::get('/r/{token}/{answer}', [Rep::class, 'form'])->where('token', '[0-9a-f]{32}');
 Route::post('/r/{token}', [Rep::class, 'save'])->where('token', '[0-9a-f]{32}')->middleware('throttle:20,1');
@@ -74,6 +79,9 @@ Route::middleware('role')->group(function () {
     Route::get('/engineers/{id}/docs/{fid}', [Eng::class, 'downloadDoc'])->whereNumber('fid');
     Route::post('/engineers/{id}/docs/{fid}/delete', [Eng::class, 'deleteDoc'])->whereNumber('fid');
 
+    Route::post('/engineers/{id}/docs/{fid}/ai', [Ai::class, 'queueResume'])->whereNumber('fid');
+    Route::post('/ai-jobs/{id}/project/{n}', [Ai::class, 'addProject'])->whereNumber('n');
+    Route::post('/ai-jobs/{id}/drop', [Ai::class, 'drop']);
     Route::get('/applications/{id}', [Pip::class, 'show']);
     Route::get('/interviews/{id}', [Pip::class, 'interviewShow']);
     Route::get('/contracts/{id}', [Pip::class, 'contractShow']);
@@ -106,6 +114,8 @@ Route::middleware('role:admin,ses')->group(function () {
     Route::post('/interviews/{id}/regen', [Pip::class, 'regen']);
     Route::post('/interviews/{id}/result', [Pip::class, 'result']);
     Route::post('/case-mails/{id}/submitted', [CMail::class, 'submitted']);
+    Route::post('/interviews/{id}/ai', [Ai::class, 'queueScript']);
+    Route::post('/ai-jobs/{id}/apply', [Ai::class, 'apply']);
 });
 
 Route::middleware('role:admin,eg')->group(function () {
@@ -152,6 +162,7 @@ Route::middleware('role:admin')->group(function () {
         Route::post('/settings/testmail', [Adm::class, 'testMail']);
         Route::post('/settings/admins', [Adm::class, 'admins']);
         Route::get('/audit', [Adm::class, 'audit']);
+        Route::get('/ai', [Ai::class, 'index']);
         Route::get('/skills', [Adm::class, 'skills']);
         Route::post('/skills', [Adm::class, 'addSkill']);
         Route::post('/skills/{id}', [Adm::class, 'updateSkill']);

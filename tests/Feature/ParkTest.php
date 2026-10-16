@@ -308,6 +308,53 @@ class ParkTest extends TestCase
         $this->as('ses2@park.example')->post("/applications/$appId/interview", ['place' => 'x'])->assertForbidden();
     }
 
+    public function test_ai_job_box(): void
+    {
+        config(['services.park_ai.token' => 'test-token']);
+        $h = ['X-Park-Ai-Token' => 'test-token'];
+        // 合言葉がないと、AI は仕事を取れない
+        $this->postJson('/ai/worker/next')->assertForbidden();
+        $this->postJson('/ai/worker/next', [], $h)->assertJson(['job' => null]);
+
+        // 面談スクリプト：頼む → AI が取りに来る → 返す → 人が採用する
+        $this->as('admin@park.example');
+        $ivId = DB::table('interviews')->where('application_id', 1)->value('id');
+        $this->post("/interviews/$ivId/ai")->assertRedirect();
+        $this->get("/interviews/$ivId")->assertSee('順番待ち');
+        $job = $this->postJson('/ai/worker/next', [], $h)->json('job');
+        $this->assertSame('script', $job['kind']);
+        $this->assertStringContainsString('盛らない', $job['prompt']);
+        $out = "```json\n".json_encode([['category' => '自己紹介', 'q' => '自己紹介をお願いします。', 'hint' => '1分で。']], JSON_UNESCAPED_UNICODE)."\n```";
+        $this->postJson("/ai/worker/{$job['id']}/result", ['output' => $out, 'engine' => 'test'], $h)->assertOk();
+        $this->get("/interviews/$ivId")->assertSee('この下書きを採用する');
+        $this->get('/admin')->assertSee('AI の下書きができています');
+        $this->post("/ai-jobs/{$job['id']}/apply")->assertRedirect();
+        $this->assertSame('自己紹介をお願いします。', json_decode(DB::table('interviews')->where('id', $ivId)->value('qa_json'), true)[0]['q']);
+
+        // 経歴書（テキスト）から経験票の下書き → 1件ずつ足す
+        \Illuminate\Support\Facades\Storage::fake('local');
+        $this->as('eg2@park.example');
+        $this->post('/engineers/2/docs/upload', ['file' => \Illuminate\Http\UploadedFile::fake()->createWithContent('経歴書.txt', '2020年4月〜2022年3月 物流会社の倉庫システム PHP')]);
+        $fid = DB::table('engineer_files')->where('engineer_id', 2)->where('filename', '経歴書.txt')->value('id');
+        $this->post("/engineers/2/docs/$fid/ai")->assertRedirect();
+        $job = $this->postJson('/ai/worker/next', [], $h)->json('job');
+        $this->assertSame('resume', $job['kind']);
+        $this->assertStringContainsString('倉庫システム', $job['prompt']);
+        $res = ['projects' => [['title' => '倉庫システムの開発', 'period_from' => '2020-04', 'period_to' => '2022-03', 'langs' => 'PHP', 'phases' => ['実装']]]];
+        $this->postJson("/ai/worker/{$job['id']}/result", ['output' => json_encode($res, JSON_UNESCAPED_UNICODE), 'engine' => 'test'], $h);
+        $this->get('/engineers/2')->assertSee('倉庫システムの開発')->assertSee('経験票に足す');
+        $this->post("/ai-jobs/{$job['id']}/project/0")->assertRedirect();
+        $this->assertDatabaseHas('engineer_projects', ['engineer_id' => 2, 'title' => '倉庫システムの開発', 'period_from' => '2020-04', 'phases' => '実装']);
+        // ほかの人の下書きは触れない
+        $this->as('eg1@park.example')->post("/ai-jobs/{$job['id']}/project/0")->assertForbidden();
+        // JSON でない答えは「失敗」
+        $this->as('admin@park.example')->post("/interviews/$ivId/ai");
+        $job = $this->postJson('/ai/worker/next', [], $h)->json('job');
+        $this->postJson("/ai/worker/{$job['id']}/result", ['output' => 'すみません', 'engine' => 'test'], $h);
+        $this->assertDatabaseHas('ai_jobs', ['id' => $job['id'], 'status' => 'failed']);
+        $this->get('/admin/ai')->assertOk()->assertSee('失敗');
+    }
+
     public function test_manuals(): void
     {
         $this->get('/manual')->assertOk()->assertSee('SES 企業さま向けマニュアル')->assertDontSee('運営マニュアル');

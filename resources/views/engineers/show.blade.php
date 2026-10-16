@@ -50,6 +50,21 @@
 </x-card>
 </div><div>
 <section id="docs"></section>
+@php $aiJobs = DB::table('ai_jobs')->where('kind', 'resume')->whereIn('status', ['queued', 'running', 'done', 'failed'])->where('input', 'like', '%"engineer_id":'.$e->id.'}%')->orderByDesc('id')->get(); $added = []; @endphp
+@foreach($aiJobs as $ai)
+<x-card :title="'AI の経験票の下書き（#'.$ai->id.'）'">
+@if(in_array($ai->status, ['queued', 'running']))<p>{{ \App\Services\AiJobs::STATUS[$ai->status] }}です（{{ fmt_dt($ai->created_at) }} に頼みました）。手元の PC の AI が動いていると、数分でできます。</p>
+@elseif($ai->status === 'failed')<p class="bad-text">失敗しました：{{ $ai->error }}</p><x-post :action="'/ai-jobs/'.$ai->id.'/drop'" label="閉じる" cls="ghost small" />
+@else @php $done = json_decode((string) session('ai_added_'.$ai->id, '[]'), true); $ps = \App\Services\AiJobs::json($ai->output)['projects'] ?? []; @endphp
+<p>経歴書から取り出した案件です（{{ $ai->engine }}）。書かれていないことが足されていないか確かめて、合っているものだけ「経験票に足す」を押してください。足したあとも、経験票の画面で直せます。</p>
+<x-table :head="['案件', '期間', '役割・技術', '']" :count="count($ps)" empty="案件を取り出せませんでした。">
+@foreach($ps as $n => $p)<tr><td><b>{{ $p['title'] ?? '' }}</b><div class="muted small">{{ \Illuminate\Support\Str::limit($p['description'] ?? '', 80) }}</div></td><td>{{ $p['period_from'] ?? '' }}〜{{ $p['period_to'] ?? '' }}</td>
+<td><small>{{ $p['role'] ?? '' }}<br>{{ $p['tech'] ?? '' }}</small></td><td>@if(in_array($n, $done))<span class="muted">足しました</span>@else<x-post :action="'/ai-jobs/'.$ai->id.'/project/'.$n" label="経験票に足す" cls="small" />@endif</td></tr>@endforeach
+</x-table>
+<x-post :action="'/ai-jobs/'.$ai->id.'/drop'" label="この下書きを閉じる" :fields="['done' => 1]" cls="ghost small" />
+@endif
+</x-card>
+@endforeach
 <x-card title="📁 データ領域（履歴書・業務経歴書）">
 <p class="muted">登録した内容から、最新の履歴書・業務経歴書を Excel で書き出して保存します。書き出すたびに版が残り、いつでもダウンロードできます。手持ちの書類（PDF など）も置けます。見られるのは、本人・所属の SES・運営だけです。</p>
 <p><x-post :action="'/engineers/'.$e->id.'/docs/generate'" label="履歴書を書き出す" :fields="['kind' => 'resume']" cls="small" />
@@ -57,7 +72,7 @@
 <x-post :action="'/engineers/'.$e->id.'/docs/generate'" label="業務経歴書（名前を伏せた版）" :fields="['kind' => 'careersheet', 'anon' => 1]" cls="ghost small" /></p>
 <x-table :head="['書類', '日時', '']" :count="$files->count()" empty="まだ書類はありません。">
 @foreach($files as $f)<tr><td><a href="{{ url('/engineers/'.$e->id.'/docs/'.$f->id) }}">{{ $f->title }}</a><div class="muted small">{{ $f->filename }}（{{ max(1, round($f->size / 1024)) }}KB）</div></td>
-<td>{{ fmt_dt($f->created_at) }}</td><td><x-post :action="'/engineers/'.$e->id.'/docs/'.$f->id.'/delete'" label="削除" cls="ghost small" confirm="この書類を削除しますか？" /></td></tr>@endforeach
+<td>{{ fmt_dt($f->created_at) }}</td><td>@if(!$f->generated && in_array(strtolower(pathinfo($f->filename, PATHINFO_EXTENSION)), ['xlsx', 'xls', 'docx', 'txt', 'csv']))<x-post :action="'/engineers/'.$e->id.'/docs/'.$f->id.'/ai'" label="AI で経験票の下書き" cls="ghost small" /> @endif<x-post :action="'/engineers/'.$e->id.'/docs/'.$f->id.'/delete'" label="削除" cls="ghost small" confirm="この書類を削除しますか？" /></td></tr>@endforeach
 </x-table>
 <form method="post" action="{{ url('/engineers/'.$e->id.'/docs/upload') }}" enctype="multipart/form-data" class="upload">@csrf
 <div class="grid2"><x-field label="書類をアップロード（10MB まで）" name="file" type="file" required />
