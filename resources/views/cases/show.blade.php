@@ -49,21 +49,10 @@
 </div><div>
 
 @if($u->role === 'admin')
-  <x-card title="マッチング（配信の候補）">
-  @if($c->status !== 'open')<p class="muted">募集中の案件だけ配信できます。</p>
-  @else
-  <form method="post" action="{{ url('/cases/'.$c->id.'/distribute') }}">@csrf
-  <p class="muted">条件に合う順に並べています（{{ $th }}点以上。@if($showAll)<a href="?">候補だけにする</a>@else<a href="?all=1">全員を表示</a>@endif／<a href="?busy=1&all=1">稼働中の人も含める</a>）。最終の判断は人がします。合わない人に送らないことも、成約率を上げます。</p>
-  <x-table :head="['', 'エンジニア', '点数', '合う点', '足りない点', '希望']" :count="count($cands)" empty="条件に合うエンジニアがいません。「全員を表示」で確かめてください。">
-  @foreach($cands as $m)<tr>
-    <td>@if($m['offered']){{ badge('offerStatus', $m['offered']) }}@else<input type="checkbox" name="engineer_id[]" value="{{ $m['engineer']->id }}" @checked($m['score'] >= $th + 20)>@endif</td>
-    <td><a href="{{ url('/engineers/'.$m['engineer']->id) }}">{{ $m['engineer']->name }}</a>@if($m['engineer']->is_operator) <span class="badge warn">運営者</span>@endif<div class="muted">{{ $m['engineer']->ses_name }}・{{ lbl('engStatus', $m['engineer']->status) }}</div></td>
-    <td><x-score :n="$m['score']" /></td><td><small>{{ implode('、', $m['reasons']) }}</small></td><td><small class="bad-text">{{ implode('、', $m['missing']) }}</small></td>
-    <td><small>{{ man($m['engineer']->desired_price) }}<br>{{ fmt_date($m['engineer']->available_from) }}〜</small></td></tr>@endforeach
-  </x-table>
-  <x-field label="エンジニアへのひとこと（任意）" name="message" type="textarea" rows="2" />
-  <button class="btn">選んだ人に配信する（メール）</button></form>
-  @endif
+  <x-card title="エンジニアに案内する">
+  @if($c->status !== 'open')<p class="muted">募集中の案件だけ案内できます。</p>
+  @else<p class="muted">グループ全体のエンジニアから、得意分野で候補を出し、メールで案内します（返事のリンク付き）。送った記録と返事は、左の「案内メール」に出ます。</p>
+  <a class="btn" href="{{ url('/cases/'.$c->id.'/mail') }}">エンジニアに案内する</a>@endif
   </x-card>
   <x-card title="配信済み"><x-table :head="['エンジニア', '点数', '状態', '配信日']" :count="$offers->count()">
   @foreach($offers as $o)<tr><td>{{ $o->name }}</td><td>{{ $o->score }}</td><td>{{ badge('offerStatus', $o->status) }}@if($o->decline_reason)<div class="muted">{{ $o->decline_reason }}</div>@endif</td><td>{{ fmt_dt($o->sent_at) }}</td></tr>@endforeach
@@ -74,14 +63,14 @@
   <x-card title="貴社のエンジニアとの相性">
   @if($c->status !== 'open')<p class="muted">募集を終えた案件です。</p>
   @else
-  <p class="muted">貴社から個別にご案内いただくこともできます。応募を出すときは、ご本人に条件を確かめてからにしてください。</p>
+  @if($canMail)<p class="muted">案内は「エンジニアに案内する」から、メールで送ります（返事のリンク付き。送った記録と返事は、左の「案内メール」に出ます）。</p>
+  <p><a class="btn" href="{{ url('/cases/'.$c->id.'/mail') }}">エンジニアに案内する</a></p>
+  @else<p class="muted">この案件は{{ $c->ses_name ? 'ほかの SES' : '運営' }}が持ち込んだものです。合う方がいれば「推薦する」で、持ち込んだ{{ $c->ses_name ? ' SES' : '運営' }}に知らせます（名前は伏せて伝えます）。</p>@endif
   <x-table :head="['エンジニア', '点数', '足りない点', '']" :count="count($rows)" empty="登録しているエンジニアがいません。">
   @foreach($rows as $row)<tr><td><a href="{{ url('/engineers/'.$row['e']->id) }}">{{ $row['e']->name }}</a><div class="muted">{{ lbl('engStatus', $row['e']->status) }}</div></td>
     <td><x-score :n="$row['score']" /></td><td><small class="bad-text">{{ implode('、', $row['missing']) }}</small></td>
-    <td>@if(in_array($row['e']->id, $applied))<span class="muted">応募済み</span>@else
-      @if(isset($offered[$row['e']->id]))<span class="muted">配信済み</span>@else<x-post :action="'/cases/'.$c->id.'/distribute'" label="本人に案内" :fields="['engineer_id[]' => $row['e']->id]" cls="ghost small" />@endif
-      <x-post :action="'/cases/'.$c->id.'/apply'" label="応募を出す" :fields="['engineer_id' => $row['e']->id, 'start_ok' => 1, 'price_ok' => 1, 'style_ok' => 1, 'condition_note' => '所属 SES が本人に確認のうえ応募']" cls="small" :confirm="$row['e']->name.' さんの応募を出します。ご本人に条件を確かめましたか？'" />
-    @endif</td></tr>@endforeach
+    <td>@if(in_array($row['e']->id, $applied))<span class="muted">応募済み</span>@elseif(isset($offered[$row['e']->id]))<span class="muted">案内済み</span>
+    @elseif(!$canMail)<x-post :action="'/cases/'.$c->id.'/recommend'" label="推薦する" :fields="['engineer_id' => $row['e']->id]" cls="ghost small" />@endif</td></tr>@endforeach
   </x-table>
   @endif
   </x-card>

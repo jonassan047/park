@@ -54,7 +54,8 @@ class ParkTest extends TestCase
             ->assertOk()->assertSee('在庫管理システム開発')->assertSee('65');
         $this->post('/cases', ['title' => '在庫管理システム開発', 'price' => '65', 'required_skills' => 'Java、SQL', 'work_style' => 'any', 'status' => 'open'])->assertRedirect();
         $caseId = DB::table('cases')->where('title', '在庫管理システム開発')->value('id');
-        $this->get("/cases/$caseId?all=1")->assertSee('山田 太郎');
+        $this->get("/cases/$caseId")->assertSee('エンジニアに案内する');
+        $this->get("/cases/$caseId/mail")->assertSee('山田 太郎');
         $this->post("/cases/$caseId/distribute", ['engineer_id' => [4], 'message' => 'どうぞ'])->assertRedirect();
         $this->assertDatabaseHas('case_offers', ['case_id' => $caseId, 'engineer_id' => 4]);
 
@@ -270,6 +271,19 @@ class ParkTest extends TestCase
         $this->assertDatabaseHas('case_mails', ['id' => $g->id, 'reply' => 'declined', 'reply_via' => 'app']);
         // 案件を持ち込んでいない SES は、案内できない
         $this->as('ses2@park.example')->get("/cases/$cid/mail")->assertForbidden();
+        // 持ち込んでいない SES は、自社のエンジニアを推薦できる（持ち込んだ SES に知らせる）
+        $this->post("/cases/$cid/recommend", ['engineer_id' => 2])->assertRedirect();
+        $this->assertDatabaseHas('app_notifications', ['user_id' => DB::table('users')->where('email', 'ses1@park.example')->value('id'), 'title' => 'エンジニアの推薦がありました：Java の保守案件']);
+        $this->post("/cases/$cid/recommend", ['engineer_id' => 1])->assertForbidden(); // 他社のエンジニアは推薦できない
+        // 案内メールの返事のリンク：開くだけでは記録しない。ボタンで記録し、送った SES に知らせる
+        $tok = DB::table('case_mails')->where('id', $m->id)->value('token');
+        $this->assertStringContainsString("/r/$tok/interested", DB::table('mail_outbox')->where('id', $m->outbox_id)->value('body'));
+        auth()->logout();
+        $this->get("/r/$tok/question")->assertOk()->assertSee('Java の保守案件');
+        $this->assertDatabaseHas('case_mails', ['id' => $m->id, 'reply_via' => 'ses']);
+        $this->post("/r/$tok", ['answer' => 'question', 'note' => '在宅は何日？'])->assertOk()->assertSee('受け付けました');
+        $this->assertDatabaseHas('case_mails', ['id' => $m->id, 'reply' => 'question', 'reply_via' => 'link', 'reply_note' => '在宅は何日？']);
+        $this->get('/r/'.str_repeat('0', 32).'/question')->assertNotFound();
 
         // 書類を返した（応募した）→ 面談依頼が来た → 面談スクリプト → 結果 → 成約（SES だけで進められる）
         $this->as('ses1@park.example')->post("/case-mails/{$m->id}/submitted")->assertRedirect();

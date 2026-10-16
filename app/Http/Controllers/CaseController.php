@@ -76,11 +76,7 @@ class CaseController extends Controller
         }
 
         if ($u->role === 'admin') {
-            $list = Matcher::forCase($id, $r->query('busy') === '1');
-            $th = Matcher::threshold();
             $data += [
-                'showAll' => $r->query('all') === '1', 'th' => $th,
-                'cands' => $r->query('all') === '1' ? $list : array_values(array_filter($list, fn ($m) => $m['score'] >= $th || $m['offered'])),
                 'offers' => DB::table('case_offers as o')->join('engineers as e', 'e.id', '=', 'o.engineer_id')->where('o.case_id', $id)->select('o.*', 'e.name')->orderByDesc('o.score')->get(),
             ];
         } elseif ($u->role === 'ses') {
@@ -106,6 +102,27 @@ class CaseController extends Controller
         if (!$ids) return $this->go("/cases/$id", '配信するエンジニアを選んでください。', 'bad');
         $n = W::distribute($id, $ids, $r->user(), (string) $r->input('message'));
         return $this->go("/cases/$id", "{$n}名に配信しました（メールと通知）。");
+    }
+
+    // 持ち込んでいない SES が、自社のエンジニアを推薦する（持ち込んだ SES／運営に、名前を伏せて知らせる）
+    public function recommend(Request $r, int $id)
+    {
+        $u = $r->user();
+        $c = $this->load($id);
+        abort_unless($u->role === 'ses' && Perms::caseView($u, $c) && !CM::canSend($u, $c), 403);
+        $e = DB::table('engineers')->where('id', (int) $r->input('engineer_id'))->where('ses_id', $u->ses_id)->first();
+        abort_unless($e, 403);
+        if ($c->status !== 'open') return $this->go("/cases/$id", '募集を終えた案件です。', 'bad');
+        $key = "case {$id} engineer {$e->id}";
+        if (DB::table('audit_log')->where('action', 'recommend')->where('detail', $key)->exists()) return $this->go("/cases/$id", 'すでに推薦しています。');
+        $ses = DB::table('ses_companies')->where('id', $u->ses_id)->value('name');
+        $s = Matcher::score($c, $e);
+        $text = "{$ses} から、案件「{$c->title}」にエンジニアの推薦がありました。\n".($e->initials ?: '—')."（{$s['score']}点）。合う点：".(implode('、', array_slice($s['reasons'], 0, 4)) ?: '—')
+            ."\n案内するときは、案件の「エンジニアに案内する」の「グループのほかの人」から選んでください。";
+        if ($c->source_ses_id) N::toSes($c->source_ses_id, "エンジニアの推薦がありました：{$c->title}", $text, "/cases/$id/mail?scope=group", true, 'recommend');
+        N::toAdmins("エンジニアの推薦がありました：{$c->title}", $text, "/cases/$id/mail", !$c->source_ses_id, 'recommend');
+        N::audit($u->id, 'recommend', $key);
+        return $this->go("/cases/$id", '推薦しました。持ち込んだ'.($c->source_ses_id ? ' SES' : '運営').'に知らせました。');
     }
 
     public function apply(Request $r, int $id)

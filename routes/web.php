@@ -9,6 +9,7 @@ use App\Http\Controllers\EngineerController as Eng;
 use App\Http\Controllers\ManualController as Man;
 use App\Http\Controllers\PipelineController as Pip;
 use App\Http\Controllers\PublicController as Pub;
+use App\Http\Controllers\ReplyController as Rep;
 use App\Http\Controllers\SesController as Ses;
 use App\Http\Controllers\TwoFactorController as TF;
 use Illuminate\Support\Facades\Route;
@@ -29,6 +30,9 @@ Route::get('/invite/{token}', [Pub::class, 'inviteForm']);
 Route::post('/invite/{token}', [Pub::class, 'invite']);
 Route::get('/forgot', [Pub::class, 'forgotForm']);
 Route::post('/forgot', [Pub::class, 'forgot'])->middleware('throttle:5,1');
+// 案内メールの返事のリンク（ログインしなくてよい）
+Route::get('/r/{token}/{answer}', [Rep::class, 'form'])->where('token', '[0-9a-f]{32}');
+Route::post('/r/{token}', [Rep::class, 'save'])->where('token', '[0-9a-f]{32}')->middleware('throttle:20,1');
 Route::get('/manual', [Man::class, 'index']);
 Route::get('/manual/{kind}', [Man::class, 'show']);
 
@@ -82,6 +86,7 @@ Route::middleware('role:admin,ses')->group(function () {
     Route::get('/cases/{id}/edit', [Cas::class, 'edit']);
     Route::post('/cases/{id}', [Cas::class, 'update']);
     Route::post('/cases/{id}/distribute', [Cas::class, 'distribute']);
+    Route::post('/cases/{id}/recommend', [Cas::class, 'recommend']);
     Route::get('/cases/{id}/mail', [CMail::class, 'form']);
     Route::post('/cases/{id}/mail/preview', [CMail::class, 'preview']);
     Route::post('/cases/{id}/mail/send', [CMail::class, 'send']);
