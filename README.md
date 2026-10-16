@@ -119,6 +119,8 @@ set PARK_AI_TOKEN=（.env と同じ合言葉）
 python tools/ai-worker/park_ai_worker.py
 ```
 
+FOCUS では、Windows の起動で自動で動く（2026-10-16〜）。Ollama は自分のショートカットで、つなぎ役は「スタートアップ」の「PARK AI つなぎ役」（`pythonw.exe -I park_ai_worker.py --log`。窓は出ない）。公開版の URL と合言葉は `~/.park-ai/config.json`（この PC にだけ置く。Git には上げない）。記録は `~/.park-ai/worker.log`。止めるときは、タスクマネージャーで pythonw.exe を終わらせる。
+
 まだやっていないこと：返信を PARK が受け取って AI に渡すこと（受信用のメールボックスと、手元の AI が要る）。
 
 ## 登録と、内容の責任（2026-10-16 tezzo）
