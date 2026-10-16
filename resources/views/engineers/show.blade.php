@@ -18,7 +18,7 @@
 <dt>働き方</dt><dd>{{ lbl('workStyle', $e->work_style) }}・週{{ $e->days_per_week ?: 5 }}日</dd>
 <dt>強み</dt><dd>{{ $e->strengths ?: '—' }}</dd><dt>自己PR</dt><dd>{!! nl2br(e($e->summary)) ?: '—' !!}</dd>
 @unless($mine)<dt>アカウント</dt><dd>{{ $eu ? ($eu->password ? '利用中（最終ログイン '.fmt_dt($eu->last_login).'）' : '招待中（未設定）') : 'なし' }}</dd>@endunless
-@if($u->role === 'admin' && $eu)<dt>2要素認証</dt><dd>@include('admin.two-factor-cell', ['u' => $eu])</dd>@endif
+
 <dt>個人情報の同意</dt><dd>@if($e->consent_at){{ fmt_date($e->consent_at) }}@else<span class="bad-text">未</span>@endif</dd>
 </dl></x-card>
 

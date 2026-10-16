@@ -33,10 +33,10 @@ Route::get('/manual/{kind}', [Man::class, 'show']);
 
 // ---------- 2要素認証（パスワードは通ったが、まだコードを入れていない人も開ける） ----------
 Route::middleware('auth')->group(function () {
-    Route::get('/two-factor/setup', [TF::class, 'setupForm']);
-    Route::post('/two-factor/setup', [TF::class, 'setup'])->middleware('throttle:10,1');
+    Route::redirect('/two-factor/setup', '/two-factor/challenge'); // 認証アプリのころの道（古いリンク用）
     Route::get('/two-factor/challenge', [TF::class, 'challengeForm']);
     Route::post('/two-factor/challenge', [TF::class, 'challenge'])->middleware('throttle:10,1');
+    Route::post('/two-factor/resend', [TF::class, 'resend'])->middleware('throttle:5,10');
 });
 
 // ---------- ログインした人（役割ごとに見え方が変わる共通の画面） ----------
@@ -47,8 +47,6 @@ Route::middleware('role')->group(function () {
     Route::get('/account', [Acc::class, 'show']);
     Route::post('/account', [Acc::class, 'update']);
     Route::post('/account/password', [Acc::class, 'password']);
-    Route::get('/two-factor/recovery-codes', [TF::class, 'recoveryCodes']);
-    Route::post('/two-factor/recovery-codes', [TF::class, 'regenerate']);
 
     Route::get('/cases/{id}', [Cas::class, 'show']);
     Route::post('/cases/{id}/apply', [Cas::class, 'apply']);
@@ -145,7 +143,6 @@ Route::middleware('role:admin')->group(function () {
         Route::post('/skills', [Adm::class, 'addSkill']);
         Route::post('/skills/{id}', [Adm::class, 'updateSkill']);
         Route::post('/skills/{id}/merge', [Adm::class, 'mergeSkill']);
-        Route::post('/users/{id}/reset-2fa', [TF::class, 'adminReset']);
     });
 });
 

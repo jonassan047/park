@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use App\Services\Notifier as N;
 use App\Services\Workflow as W;
+use App\Support\TwoFactor;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -37,8 +38,9 @@ class PublicController extends Controller
             return back()->withInput(['email' => $email])->with('flash', ['msg' => '会社の参加がまだ承認されていないか、停止されています。', 'type' => 'bad']);
         }
         $r->session()->regenerate();
-        // パスワードの次は2要素認証（まだなら設定）。済むまでほかの画面は開けない
-        return redirect($u->two_factor_confirmed_at ? '/two-factor/challenge' : '/two-factor/setup');
+        // パスワードの次は2要素認証（メールで確認コードを送る）。済むまでほかの画面は開けない
+        TwoFactor::send($r);
+        return redirect('/two-factor/challenge');
     }
 
     public function logout(Request $r)
@@ -62,7 +64,8 @@ class PublicController extends Controller
         $id = W::createUser($r->input('email'), $r->input('name'), 'admin', $r->input('password'));
         Auth::loginUsingId($id);
         $r->session()->regenerate();
-        return $this->go('/two-factor/setup', '運営のアカウントを作りました。続けて、2要素認証を設定してください。');
+        TwoFactor::pass($r); // 最初の運営を作るときだけ（まだ誰もいないので）
+        return $this->go('/admin', '運営のアカウントを作りました。次からは、ログインのときにメールで確認コードが届きます。');
     }
 
     public function applyForm() { return view('public.apply'); }
@@ -98,10 +101,9 @@ class PublicController extends Controller
         DB::table('users')->where('id', $u->id)->update(['password' => Hash::make($r->input('password')), 'token' => null, 'token_expires' => null, 'last_login' => now_str()]);
         N::audit($u->id, 'password-set', $u->email);
         Auth::loginUsingId($u->id);
-        $r->session()->regenerate();
-        if (!$u->two_factor_confirmed_at) return $this->go('/two-factor/setup', 'パスワードを設定しました。続けて、2要素認証を設定してください。');
-        // パスワードの再設定のとき：2要素認証は設定済みなので、コードを入れてもらう
-        return $this->go('/two-factor/challenge', 'パスワードを設定しました。認証アプリのコードを入れてください。');
+        // メールで届いたリンクから来ているので、メールの確認は済んでいる。そのまま中に入れる
+        TwoFactor::pass($r);
+        return $this->go(Auth::user()->home(), 'パスワードを設定しました。次からは、ログインのときにメールで確認コードが届きます。');
     }
 
     public function forgotForm() { return view('public.forgot'); }

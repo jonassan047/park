@@ -2,103 +2,71 @@
 
 namespace App\Support;
 
-use BaconQrCode\Renderer\Image\SvgImageBackEnd;
-use BaconQrCode\Renderer\ImageRenderer;
-use BaconQrCode\Renderer\RendererStyle\RendererStyle;
-use BaconQrCode\Writer;
-use Illuminate\Support\Facades\Crypt;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
+use App\Services\Notifier as N;
+use Illuminate\Http\Request;
 
-// 2要素認証（TOTP。RFC 6238：30秒ごとに変わる6桁のコード）。認証アプリ（Google Authenticator など）で使う
+// 2要素認証（メールの確認コード）。パスワードのあと、登録のメールアドレスに6桁のコードを送り、入れてもらう。
+// コードはセッションにだけ（ハッシュで）置く。10分で切れ、5回まちがえたら送り直してもらう
 class TwoFactor
 {
-    const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
     const SESSION_KEY = 'two_factor_passed';
+    const PENDING_KEY = 'two_factor_pending';
+    const DEV_KEY = 'two_factor_dev_code';
+    const TTL = 600;
+    const MAX_TRIES = 5;
+    const RESEND_WAIT = 60;
 
-    public static function newSecret(): string
+    private static function hash(string $code): string
     {
-        $s = '';
-        for ($i = 0; $i < 32; $i++) $s .= self::ALPHABET[random_int(0, 31)];
-        return $s;
+        return hash_hmac('sha256', $code, config('app.key'));
     }
 
-    private static function base32Decode(string $b32): string
+    public static function pending(Request $r): ?array
     {
-        $bits = '';
-        foreach (str_split(strtoupper(preg_replace('/[^A-Za-z2-7]/', '', $b32))) as $c) $bits .= str_pad(decbin(strpos(self::ALPHABET, $c)), 5, '0', STR_PAD_LEFT);
-        $out = '';
-        foreach (str_split($bits, 8) as $byte) if (strlen($byte) === 8) $out .= chr(bindec($byte));
-        return $out;
+        $p = $r->session()->get(self::PENDING_KEY);
+        return $p && (int) $p['user'] === (int) $r->user()->id ? $p : null;
     }
 
-    public static function codeAt(string $secret, int $step): string
+    public static function send(Request $r): void
     {
-        $h = hash_hmac('sha1', pack('N*', 0, $step), self::base32Decode($secret), true);
-        $o = ord($h[19]) & 0xf;
-        $n = ((ord($h[$o]) & 0x7f) << 24) | (ord($h[$o + 1]) << 16) | (ord($h[$o + 2]) << 8) | ord($h[$o + 3]);
-        return str_pad((string) ($n % 1000000), 6, '0', STR_PAD_LEFT);
+        $u = $r->user();
+        $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+        $r->session()->put(self::PENDING_KEY, ['user' => $u->id, 'hash' => self::hash($code), 'expires' => now()->getTimestamp() + self::TTL, 'tries' => 0, 'sent' => now()->getTimestamp()]);
+        N::queueMail($u->email, $u->name, "確認コード {$code}", "{$u->name} 様\n\nPARK にログインするための確認コードです。\n\n　{$code}\n\nログインの画面に入れてください（10分間有効）。\n\n心当たりがない場合は、このメールを無視してください。パスワードを知っている誰かがログインしようとしている可能性があるので、パスワードの変更をおすすめします。", '2fa');
+        // 手元（メールは保存のみ）で試すときだけ、画面にコードを出す
+        if (app()->environment('local') && !N::canSend()) $r->session()->put(self::DEV_KEY, $code);
     }
 
-    // 合っていれば、使った時間の区切り（step）を返す。前後30秒のずれまで許す
-    public static function verify(string $secret, string $code, ?int $after = null): ?int
+    public static function canResend(Request $r): bool
     {
-        $code = preg_replace('/\D/', '', $code);
-        if (strlen($code) !== 6) return null;
-        $now = intdiv(time(), 30);
-        foreach ([0, -1, 1] as $d) {
-            $step = $now + $d;
-            if ($after !== null && $step <= $after) continue;
-            if (hash_equals(self::codeAt($secret, $step), $code)) return $step;
-        }
-        return null;
+        $p = self::pending($r);
+        return !$p || now()->getTimestamp() - $p['sent'] >= self::RESEND_WAIT;
     }
 
-    public static function uri(string $secret, string $email): string
+    // 'ok'・'bad'（違う）・'expired'（期限切れか、まちがえすぎ）
+    public static function check(Request $r, string $code): string
     {
-        $issuer = rawurlencode(setting('app_name'));
-        return "otpauth://totp/{$issuer}:".rawurlencode($email)."?secret={$secret}&issuer={$issuer}&digits=6&period=30";
+        $p = self::pending($r);
+        if (!$p || now()->getTimestamp() > $p['expires'] || $p['tries'] >= self::MAX_TRIES) return 'expired';
+        $code = preg_replace('/\D/', '', mb_convert_kana($code, 'n'));
+        if (strlen($code) === 6 && hash_equals($p['hash'], self::hash($code))) return 'ok';
+        $p['tries']++;
+        $r->session()->put(self::PENDING_KEY, $p);
+        return $p['tries'] >= self::MAX_TRIES ? 'expired' : 'bad';
     }
 
-    public static function qrSvg(string $uri): string
+    // 2要素認証を通ったことにする（確認コードのほか、メールで届いた招待・再設定のリンクから来たとき）
+    public static function pass(Request $r): void
     {
-        return (new Writer(new ImageRenderer(new RendererStyle(200, 1), new SvgImageBackEnd())))->writeString($uri);
+        $r->session()->forget([self::PENDING_KEY, self::DEV_KEY]);
+        $r->session()->put(self::SESSION_KEY, $r->user()->id);
+        $r->session()->regenerate();
     }
 
-    public static function newRecoveryCodes(): array
+    // 画面に出すメールアドレス（ta***@gmail.com）
+    public static function maskedEmail(string $email): string
     {
-        return array_map(fn () => strtolower(Str::random(5).'-'.Str::random(5)), range(1, 8));
-    }
-
-    public static function secretOf($u): ?string
-    {
-        return $u->two_factor_secret ? Crypt::decryptString($u->two_factor_secret) : null;
-    }
-
-    public static function recoveryCodesOf($u): array
-    {
-        return $u->two_factor_recovery_codes ? json_decode(Crypt::decryptString($u->two_factor_recovery_codes), true) : [];
-    }
-
-    // 予備のコードを使ったら、そのコードは消す
-    public static function useRecoveryCode($u, string $code): bool
-    {
-        $code = strtolower(trim($code));
-        $codes = self::recoveryCodesOf($u);
-        $i = array_search($code, $codes, true);
-        if ($i === false) return false;
-        unset($codes[$i]);
-        DB::table('users')->where('id', $u->id)->update(['two_factor_recovery_codes' => Crypt::encryptString(json_encode(array_values($codes)))]);
-        return true;
-    }
-
-    public static function saveRecoveryCodes(int $userId, array $codes): void
-    {
-        DB::table('users')->where('id', $userId)->update(['two_factor_recovery_codes' => Crypt::encryptString(json_encode($codes))]);
-    }
-
-    public static function reset(int $userId): void
-    {
-        DB::table('users')->where('id', $userId)->update(['two_factor_secret' => null, 'two_factor_recovery_codes' => null, 'two_factor_confirmed_at' => null, 'two_factor_last_step' => null]);
+        [$name, $domain] = array_pad(explode('@', $email, 2), 2, '');
+        return mb_substr($name, 0, 2).'***@'.$domain;
     }
 }

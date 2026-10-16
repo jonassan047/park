@@ -9,7 +9,6 @@ use App\Support\SkillCatalog;
 use App\Support\TwoFactor;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -24,7 +23,6 @@ class EngineerDetailTest extends TestCase
     private function as(string $email): static
     {
         $u = User::where('email', $email)->firstOrFail();
-        DB::table('users')->where('id', $u->id)->update(['two_factor_secret' => Crypt::encryptString(TwoFactor::newSecret()), 'two_factor_confirmed_at' => now_str()]);
         return $this->actingAs($u->fresh())->withSession([TwoFactor::SESSION_KEY => $u->id]);
     }
 

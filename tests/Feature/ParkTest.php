@@ -6,7 +6,6 @@ use App\Models\User;
 use App\Services\CaseParser;
 use App\Services\Workflow as W;
 use App\Support\TwoFactor;
-use Illuminate\Support\Facades\Crypt;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -22,7 +21,6 @@ class ParkTest extends TestCase
     private function as(string $email): static
     {
         $u = User::where('email', $email)->firstOrFail();
-        DB::table('users')->where('id', $u->id)->update(['two_factor_secret' => Crypt::encryptString(TwoFactor::newSecret()), 'two_factor_confirmed_at' => now_str()]);
         return $this->actingAs($u->fresh())->withSession([TwoFactor::SESSION_KEY => $u->id]);
     }
 
@@ -37,7 +35,7 @@ class ParkTest extends TestCase
         $this->get('/admin')->assertRedirect(url('/login'));
         $this->post('/apply', ['name' => 'テスト SES', 'contact_name' => '試験 一郎', 'email' => 'new-ses@park.example', 'agree' => '1'])->assertOk();
         $this->assertDatabaseHas('ses_companies', ['name' => 'テスト SES', 'status' => 'pending']);
-        $this->post('/login', ['email' => 'admin@park.example', 'password' => 'park1234'])->assertRedirect(url('/two-factor/setup'));
+        $this->post('/login', ['email' => 'admin@park.example', 'password' => 'park1234'])->assertRedirect(url('/two-factor/challenge'));
     }
 
     public function test_admin_pages_and_actions(): void
@@ -127,7 +125,8 @@ class ParkTest extends TestCase
         $token = DB::table('users')->where('email', 'invite@park.example')->value('token');
         $this->get("/invite/$token")->assertOk()->assertSee('個人情報の取り扱い');
         $this->post("/invite/$token", ['password' => 'abcd1234', 'password_confirmation' => 'abcd1234'])->assertSessionHasErrors('consent');
-        $this->post("/invite/$token", ['password' => 'abcd1234', 'password_confirmation' => 'abcd1234', 'consent' => '1'])->assertRedirect(url('/two-factor/setup'));
+        $this->post("/invite/$token", ['password' => 'abcd1234', 'password_confirmation' => 'abcd1234', 'consent' => '1'])->assertRedirect(url('/eg'));
+        $this->get('/eg')->assertOk(); // メールのリンクから来たので、確認コードは聞かない
         $this->assertNotNull(DB::table('engineers')->where('id', $id)->value('consent_at'));
         $this->assertGreaterThan(10, DB::table('mail_outbox')->count());
     }
@@ -148,58 +147,47 @@ class ParkTest extends TestCase
         $this->assertSame('100', num_disp(100));
     }
 
-    public function test_two_factor_setup_and_login(): void
+    // いちばん新しい確認コード（メールの件名から）
+    private function lastCode(string $email): string
     {
-        // パスワードだけでは中に入れない
-        $this->post('/login', ['email' => 'eg1@park.example', 'password' => 'park1234'])->assertRedirect(url('/two-factor/setup'));
-        $this->get('/eg')->assertRedirect(url('/two-factor/setup'));
-        // 設定：違うコードは通らない → 正しいコードで設定 → 予備のコードが出る
-        $this->get('/two-factor/setup')->assertOk()->assertSee('<svg', false);
-        $secret = session('two_factor_setup_secret');
-        $this->post('/two-factor/setup', ['code' => '000000'])->assertRedirect(url('/two-factor/setup'));
-        $this->post('/two-factor/setup', ['code' => TwoFactor::codeAt($secret, intdiv(time(), 30))])->assertRedirect(url('/two-factor/recovery-codes'));
-        $this->get('/two-factor/recovery-codes')->assertOk()->assertSee('予備のコード');
-        $this->get('/eg')->assertOk();
-        $u = DB::table('users')->where('email', 'eg1@park.example')->first();
-        $this->assertNotNull($u->two_factor_confirmed_at);
-        $codes = TwoFactor::recoveryCodesOf($u);
-        $this->assertCount(8, $codes);
+        $subject = DB::table('mail_outbox')->where('to_email', $email)->where('kind', '2fa')->orderByDesc('id')->value('subject');
+        preg_match('/(\d{6})/', $subject, $m);
+        return $m[1];
+    }
 
-        // ログアウトして、もう一度ログイン：コードを聞かれる
-        $this->post('/logout');
+    public function test_two_factor_by_email_code(): void
+    {
+        // パスワードだけでは中に入れない。メールに確認コードが届く
         $this->post('/login', ['email' => 'eg1@park.example', 'password' => 'park1234'])->assertRedirect(url('/two-factor/challenge'));
         $this->get('/eg')->assertRedirect(url('/two-factor/challenge'));
-        $this->post('/two-factor/challenge', ['code' => '000000'])->assertRedirect(url('/two-factor/challenge'));
-        // 予備のコードで入れる。同じ予備のコードは2回使えない
-        $this->post('/two-factor/challenge', ['code' => $codes[0]])->assertRedirect(url('/eg'));
+        $this->get('/two-factor/challenge')->assertOk()->assertSee('eg***@park.example');
+        $this->get('/two-factor/setup')->assertRedirect(url('/two-factor/challenge'));
+        $code = $this->lastCode('eg1@park.example');
+        $wrong = $code === '000000' ? '111111' : '000000';
+        $this->post('/two-factor/challenge', ['code' => $wrong])->assertRedirect(url('/two-factor/challenge'));
+        $this->get('/eg')->assertRedirect(url('/two-factor/challenge'));
+        // 正しいコードで入れる（全角でもよい）
+        $this->post('/two-factor/challenge', ['code' => mb_convert_kana($code, 'N')])->assertRedirect(url('/eg'));
         $this->get('/eg')->assertOk();
+
+        // 使ったコードは、次のログインでは使えない
         $this->post('/logout');
         $this->post('/login', ['email' => 'eg1@park.example', 'password' => 'park1234']);
-        $this->post('/two-factor/challenge', ['code' => $codes[0]])->assertRedirect(url('/two-factor/challenge'));
-        $this->assertCount(7, TwoFactor::recoveryCodesOf(DB::table('users')->find($u->id)));
-        // 認証アプリのコードで入れる（ただし設定で使ったのと同じ30秒のコードは使えないので、次の区切りのコードで）
-        $step = (int) DB::table('users')->where('id', $u->id)->value('two_factor_last_step');
-        $this->post('/two-factor/challenge', ['code' => TwoFactor::codeAt(TwoFactor::secretOf($u), $step)])->assertRedirect(url('/two-factor/challenge'));
-        DB::table('users')->where('id', $u->id)->update(['two_factor_last_step' => (string) ($step - 2)]);
-        $this->post('/two-factor/challenge', ['code' => TwoFactor::codeAt(TwoFactor::secretOf($u), intdiv(time(), 30))])->assertRedirect(url('/eg'));
-    }
-
-    public function test_admin_can_reset_two_factor(): void
-    {
-        $eg = DB::table('users')->where('email', 'eg2@park.example')->first();
-        DB::table('users')->where('id', $eg->id)->update(['two_factor_secret' => Crypt::encryptString(TwoFactor::newSecret()), 'two_factor_confirmed_at' => now_str()]);
-        $this->as('admin@park.example');
-        $this->get('/engineers/2')->assertSee('解除');
-        $this->post("/admin/users/{$eg->id}/reset-2fa")->assertRedirect();
-        $this->assertNull(DB::table('users')->where('id', $eg->id)->value('two_factor_confirmed_at'));
-        // 運営以外は解除できない
-        $this->as('ses1@park.example')->post("/admin/users/{$eg->id}/reset-2fa")->assertForbidden();
-    }
-
-    public function test_totp_matches_rfc_example(): void
-    {
-        // RFC 6238 の例（鍵 "12345678901234567890"、59秒）→ 下6桁 287082
-        $this->assertSame('287082', TwoFactor::codeAt('GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ', intdiv(59, 30)));
+        $this->assertNotSame($code, $new = $this->lastCode('eg1@park.example'));
+        // すぐの送り直しは断る。5回まちがえると、送り直すまで正しいコードも通らない
+        $this->post('/two-factor/resend')->assertSessionHas('flash.type', 'bad');
+        $wrong = $new === '000000' ? '111111' : '000000';
+        for ($i = 0; $i < 5; $i++) $this->post('/two-factor/challenge', ['code' => $wrong]);
+        $this->post('/two-factor/challenge', ['code' => $new])->assertRedirect(url('/two-factor/challenge'));
+        $this->get('/eg')->assertRedirect(url('/two-factor/challenge'));
+        $this->travel(2)->minutes();
+        $this->post('/two-factor/resend')->assertSessionHas('flash.type', 'ok');
+        $this->post('/two-factor/challenge', ['code' => $this->lastCode('eg1@park.example')])->assertRedirect(url('/eg'));
+        // 10分たったコードは使えない
+        $this->post('/logout');
+        $this->post('/login', ['email' => 'eg1@park.example', 'password' => 'park1234']);
+        $this->travel(11)->minutes();
+        $this->post('/two-factor/challenge', ['code' => $this->lastCode('eg1@park.example')])->assertRedirect(url('/two-factor/challenge'));
     }
 
     public function test_manuals(): void
