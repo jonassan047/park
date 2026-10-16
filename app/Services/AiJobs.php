@@ -33,12 +33,14 @@ class AiJobs
         $iv = DB::table('interviews')->find($interviewId);
         $a = Workflow::loadApp($iv->application_id);
         $c = DB::table('cases')->find($a->case_id);
+        $n = count(json_decode($iv->qa_json ?: '[]', true));
         $prompt = "あなたは、IT エンジニアの面談の準備を手伝う担当者です。\n"
             ."次の「想定質問と答え方のヒント」の言い回しを、面談の前に本人が読みやすい、自然でわかりやすい日本語に整えてください。\n"
             ."守ること：\n- 事実を足さない。経験や数字を作らない（盛らない）。\n- 項目の数・順番・category は変えない。\n- 案件名・技術名・期間などの固有の言葉はそのまま残す。\n"
-            ."- 出力は JSON 配列だけ。形：[{\"category\": \"...\", \"q\": \"...\", \"hint\": \"...\"}]\n\n"
+            ."- 全部の項目（{$n}個）を、同じ順番で返す。1つも省かない。\n"
+            ."- 出力は JSON だけ。形：{\"items\": [{\"category\": \"...\", \"q\": \"...\", \"hint\": \"...\"}, ...]}\n\n"
             ."案件：{$c->title}\n必須：{$c->required_skills}\n\n想定質問と答え方のヒント（JSON）：\n".$iv->qa_json;
-        return self::queue('script', 'interview', $interviewId, ['prompt' => $prompt], $actor);
+        return self::queue('script', 'interview', $interviewId, ['prompt' => $prompt, 'count' => $n], $actor);
     }
 
     // ---------- 経歴書から経験票の下書き ----------
@@ -93,6 +95,22 @@ class AiJobs
         return null;
     }
 
+    // 下書きの中身（面談スクリプトは項目の並び、経歴書は案件の並び）。形が違えば null
+    public static function items(object $j): ?array
+    {
+        $d = self::json($j->output);
+        if (!is_array($d)) return null;
+        if ($j->kind === 'script') {
+            $list = $d['items'] ?? (array_is_list($d) ? $d : null);
+            if (!is_array($list)) return null;
+            $list = array_values(array_filter($list, fn ($x) => is_array($x) && !empty($x['q'])));
+            $want = json_decode($j->input, true)['count'] ?? null;
+            return $list && (!$want || count($list) === (int) $want) ? $list : null;
+        }
+        $list = $d['projects'] ?? null;
+        return is_array($list) ? array_values(array_filter($list, fn ($p) => is_array($p) && !empty($p['title']))) : null;
+    }
+
     // ---------- 手元の PC の AI（作業する側）とのやり取り ----------
     public static function next(): ?object
     {
@@ -108,9 +126,9 @@ class AiJobs
     {
         $j = DB::table('ai_jobs')->find($id);
         if (!$j || $j->status !== 'running') return;
-        $ok = $output !== null && $error === null && self::json($output) !== null;
+        $ok = $output !== null && $error === null && self::items((object) ['kind' => $j->kind, 'input' => $j->input, 'output' => $output]) !== null;
         DB::table('ai_jobs')->where('id', $id)->update(['status' => $ok ? 'done' : 'failed', 'output' => $output, 'engine' => $engine, 'done_at' => now_str(),
-            'error' => $ok ? null : ($error ?: 'AI の答えが JSON になっていませんでした')]);
+            'error' => $ok ? null : ($error ?: ($j->kind === 'script' ? 'AI の答えの形が違うか、項目の数が合いませんでした。もう一度頼んでください' : 'AI の答えの形が違いました。もう一度頼んでください'))]);
         if ($ok && $j->created_by) {
             $link = $j->ref_type === 'interview' ? "/interviews/{$j->ref_id}" : '/engineers/'.(json_decode($j->input, true)['engineer_id'] ?? '').'#docs';
             N::notify((int) $j->created_by, 'AI の下書きができました：'.self::KINDS[$j->kind], '中身を確かめて、採用するか捨ててください。', $link, false, 'ai');

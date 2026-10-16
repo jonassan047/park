@@ -324,7 +324,10 @@ class ParkTest extends TestCase
         $job = $this->postJson('/ai/worker/next', [], $h)->json('job');
         $this->assertSame('script', $job['kind']);
         $this->assertStringContainsString('盛らない', $job['prompt']);
-        $out = "```json\n".json_encode([['category' => '自己紹介', 'q' => '自己紹介をお願いします。', 'hint' => '1分で。']], JSON_UNESCAPED_UNICODE)."\n```";
+        $n = count(json_decode(DB::table('interviews')->where('id', $ivId)->value('qa_json'), true));
+        $items = array_fill(0, $n, ['category' => '確認', 'q' => '整えた質問', 'hint' => '整えたヒント']);
+        $items[0] = ['category' => '自己紹介', 'q' => '自己紹介をお願いします。', 'hint' => '1分で。'];
+        $out = "```json\n".json_encode(['items' => $items], JSON_UNESCAPED_UNICODE)."\n```";
         $this->postJson("/ai/worker/{$job['id']}/result", ['output' => $out, 'engine' => 'test'], $h)->assertOk();
         $this->get("/interviews/$ivId")->assertSee('この下書きを採用する');
         $this->get('/admin')->assertSee('AI の下書きができています');

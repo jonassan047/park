@@ -18,7 +18,7 @@
 <ol class="qa">@foreach($qa as $x)<li><span class="badge info">{{ $x['category'] }}</span><p class="q">Q. {{ $x['q'] }}</p><p class="hint">答え方のヒント：{{ $x['hint'] }}</p></li>@endforeach</ol>
 </x-card>
 @if($staff)
-@php $ai = \App\Services\AiJobs::latest('interview', $iv->id, 'script'); $aiQa = $ai && $ai->status === 'done' ? \App\Services\AiJobs::json($ai->output) : null; @endphp
+@php $ai = \App\Services\AiJobs::latest('interview', $iv->id, 'script'); $aiQa = $ai && $ai->status === 'done' ? \App\Services\AiJobs::items($ai) : null; @endphp
 <x-card title="AI に言い回しを整えてもらう">
 @if($ai && in_array($ai->status, ['queued', 'running']))<p>{{ \App\Services\AiJobs::STATUS[$ai->status] }}です（{{ fmt_dt($ai->created_at) }} に頼みました）。手元の PC の AI が動いていると、数分でできます。</p>
 @elseif($aiQa)

@@ -74,8 +74,7 @@ class AiController extends Controller
     {
         $j = $this->job($r, $id);
         abort_unless($j->status === 'done' && $j->kind === 'script', 400);
-        $qa = AiJobs::json($j->output);
-        $qa = array_values(array_filter((array) $qa, fn ($x) => is_array($x) && !empty($x['q'])));
+        $qa = AiJobs::items($j);
         if (!$qa) return $this->go("/interviews/{$j->ref_id}", 'AI の下書きが読めませんでした。捨ててください。', 'bad');
         $qa = array_map(fn ($x) => ['category' => (string) ($x['category'] ?? ''), 'q' => (string) $x['q'], 'hint' => (string) ($x['hint'] ?? '')], $qa);
         DB::table('interviews')->where('id', $j->ref_id)->update(['qa_json' => json_encode($qa, JSON_UNESCAPED_UNICODE)]);
@@ -90,10 +89,11 @@ class AiController extends Controller
         $j = $this->job($r, $id);
         abort_unless($j->status === 'done' && $j->kind === 'resume', 400);
         $eid = (int) json_decode($j->input, true)['engineer_id'];
-        $out = AiJobs::json($j->output);
-        $p = $out['projects'][$n] ?? null;
+        $p = (AiJobs::items($j) ?? [])[$n] ?? null;
         abort_unless(is_array($p) && !empty($p['title']), 404);
-        W::saveProject($eid, array_map(fn ($v) => is_array($v) ? $v : (string) $v, $p));
+        $p = array_map(fn ($v) => is_array($v) ? $v : (string) $v, $p);
+        if (isset($p['team_size'])) $p['team_size'] = preg_replace('/\D/', '', mb_convert_kana($p['team_size'], 'n')); // 「8名」→ 8
+        W::saveProject($eid, $p);
         W::editedBy($eid, $r->user());
         $added = json_decode((string) ($r->session()->get("ai_added_$id") ?? '[]'), true);
         $r->session()->put("ai_added_$id", json_encode(array_values(array_unique(array_merge($added, [$n])))));

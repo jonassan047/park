@@ -55,7 +55,7 @@
 <x-card :title="'AI の経験票の下書き（#'.$ai->id.'）'">
 @if(in_array($ai->status, ['queued', 'running']))<p>{{ \App\Services\AiJobs::STATUS[$ai->status] }}です（{{ fmt_dt($ai->created_at) }} に頼みました）。手元の PC の AI が動いていると、数分でできます。</p>
 @elseif($ai->status === 'failed')<p class="bad-text">失敗しました：{{ $ai->error }}</p><x-post :action="'/ai-jobs/'.$ai->id.'/drop'" label="閉じる" cls="ghost small" />
-@else @php $done = json_decode((string) session('ai_added_'.$ai->id, '[]'), true); $ps = \App\Services\AiJobs::json($ai->output)['projects'] ?? []; @endphp
+@else @php $done = json_decode((string) session('ai_added_'.$ai->id, '[]'), true); $ps = \App\Services\AiJobs::items($ai) ?? []; @endphp
 <p>経歴書から取り出した案件です（{{ $ai->engine }}）。書かれていないことが足されていないか確かめて、合っているものだけ「経験票に足す」を押してください。足したあとも、経験票の画面で直せます。</p>
 <x-table :head="['案件', '期間', '役割・技術', '']" :count="count($ps)" empty="案件を取り出せませんでした。">
 @foreach($ps as $n => $p)<tr><td><b>{{ $p['title'] ?? '' }}</b><div class="muted small">{{ \Illuminate\Support\Str::limit($p['description'] ?? '', 80) }}</div></td><td>{{ $p['period_from'] ?? '' }}〜{{ $p['period_to'] ?? '' }}</td>
