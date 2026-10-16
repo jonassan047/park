@@ -126,6 +126,27 @@ class Workflow
         $v = self::engValues($d, $old);
         DB::table('engineers')->where('id', $id)->update($v + ['updated_at' => now_str()]);
         N::audit($actor->id, 'engineer-update', $v['name']);
+        self::editedBy($id, $actor);
+    }
+
+    // 登録の内容は、本人が責任を持つ。運営・SES が書き換えたら、本人にもう一度確かめてもらう
+    public static function editedBy(int $engineerId, $actor): void
+    {
+        if ($actor && $actor->role !== 'eg') DB::table('engineers')->where('id', $engineerId)->update(['self_confirmed_at' => null]);
+    }
+
+    public static function confirmEngineer(int $engineerId, $actor): void
+    {
+        DB::table('engineers')->where('id', $engineerId)->update(['self_confirmed_at' => now_str()]);
+        N::audit($actor->id, 'engineer-confirm', (string) $engineerId);
+    }
+
+    // 成約した案件のうち、経験票に書いてもらう必要があるもの（始まったのにまだ、終わったのに終わってから書いていない）
+    public static function historyTodo(int $engineerId)
+    {
+        return DB::table('contracts as k')->join('cases as c', 'c.id', '=', 'k.case_id')->where('k.engineer_id', $engineerId)
+            ->where(fn ($q) => $q->whereNull('k.history_updated_at')->orWhere(fn ($q) => $q->where('k.status', 'ended')->whereColumn('k.history_updated_at', '<', 'k.end_date')))
+            ->select('k.*', 'c.title')->orderByDesc('k.start_date')->get();
     }
 
     public static function saveSkills(int $engineerId, array $d): void
@@ -257,6 +278,7 @@ class Workflow
         $e = DB::table('engineers')->find($engineerId);
         if (!$c || !$e) throw new \RuntimeException('案件またはエンジニアが見つかりません');
         if ($c->status !== 'open') throw new \RuntimeException('この案件は募集を終えています');
+        if (!$e->self_confirmed_at) throw new \RuntimeException('エンジニアご本人が、まだ登録の内容を確認していません。ご本人がホームの「登録の内容の確認」を済ませてから応募してください');
         // GP の中での二重応募は受け付けない（同じ人が別の SES 経由で出るのを防ぐ）
         if (DB::table('applications')->where('case_id', $caseId)->where('engineer_id', $engineerId)->exists()) throw new \RuntimeException('この案件には応募済みです');
         $appId = DB::table('applications')->insertGetId([
@@ -363,7 +385,7 @@ class Workflow
         DB::table('engineers')->where('id', $a->engineer_id)->update(['status' => 'working']);
         $won = DB::table('applications')->where('case_id', $a->case_id)->where('status', 'won')->count();
         if ($won >= ($a->headcount ?: 1)) DB::table('cases')->where('id', $a->case_id)->update(['status' => 'filled', 'updated_at' => now_str()]);
-        N::toEg($a->engineer_id, "成約おめでとうございます：{$a->title}", "「{$a->title}」に決まりました。開始は {$start} です。\n最初の1か月に、困りごとがないか短くお話を聞かせてください（PARK のホームから記入できます）。", "/applications/$appId", true, 'won');
+        N::toEg($a->engineer_id, "成約おめでとうございます：{$a->title}", "「{$a->title}」に決まりました。開始は {$start} です。\n最初の1か月に、困りごとがないか短くお話を聞かせてください（PARK のホームから記入できます）。\nこの案件を、経験票にも追加してください（ホームの「経歴の更新」から）。", "/eg", true, 'won');
         N::toSes($a->ses_id, "成約しました：{$a->title}", "{$a->eg_name} さんが「{$a->title}」に決まりました。\n契約：{$start}〜{$end}／".man($price)."\n成功報酬（初期費用）は、稼働開始の月の請求に含まれます。", "/contracts/$kid", true, 'won');
         N::audit($actor->id, 'contract', "{$a->eg_name} / {$a->title} ".man($price));
         return $kid;
@@ -385,5 +407,7 @@ class Workflow
         DB::table('contracts')->where('id', $id)->update(['status' => 'ended', 'end_date' => str_in($d['end_date'] ?? '') ?? ($k->end_date ?: today_str()), 'end_reason' => str_in($d['end_reason'] ?? '')]);
         N::audit($actor->id, 'contract-end', "#$id ".($d['end_reason'] ?? ''));
         self::refreshEngineerStatus($k->engineer_id);
+        $title = DB::table('cases')->where('id', $k->case_id)->value('title');
+        N::toEg($k->engineer_id, "経歴を更新してください：{$title}", "「{$title}」が終わりました。おつかれさまでした。\n終わった月、担当したこと、成果を経験票に書いてください（ホームの「経歴の更新」から）。次の案件のスキルシートに使います。", '/eg', true, 'history');
     }
 }

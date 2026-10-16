@@ -103,6 +103,7 @@ class AdminController extends Controller
             'name' => str_in($r->input('name')), 'rep_name' => str_in($r->input('rep_name')), 'contact_name' => str_in($r->input('contact_name')),
             'email' => strtolower((string) str_in($r->input('email'))) ?: null, 'phone' => str_in($r->input('phone')), 'address' => str_in($r->input('address')),
             'employees' => int_or_null($r->input('employees')), 'strengths' => str_in($r->input('strengths')), 'notes' => str_in($r->input('notes')), 'updated_at' => now_str(),
+            'self_confirmed_at' => null, // 運営が書き換えたら、SES にもう一度確かめてもらう
         ]);
         return $this->go("/admin/ses/$id", '保存しました。');
     }

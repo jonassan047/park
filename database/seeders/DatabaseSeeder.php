@@ -21,7 +21,7 @@ class DatabaseSeeder extends Seeder
         foreach ([['みどり情報システム', '緑川 一郎', 'ses1@park.example', 'Java の業務系、テスト'], ['あおぞらテック', '青木 花子', 'ses2@park.example', 'Web 系（PHP・JavaScript）'],
             ['ひだまりソリューションズ', '日向 健', 'ses3@park.example', 'インフラ・クラウド']] as [$name, $contact, $email, $str]) {
             $id = DB::table('ses_companies')->insertGetId(['name' => $name, 'rep_name' => $contact, 'contact_name' => $contact, 'email' => $email, 'status' => 'active',
-                'strengths' => $str, 'agreed_at' => now_str(), 'joined_at' => today_str(), 'created_at' => now_str(), 'updated_at' => now_str()]);
+                'strengths' => $str, 'agreed_at' => now_str(), 'self_confirmed_at' => now_str(), 'joined_at' => today_str(), 'created_at' => now_str(), 'updated_at' => now_str()]);
             W::createUser($email, $contact, 'ses', $pw, ['ses_id' => $id]);
             $ses[] = $id;
         }
@@ -56,7 +56,7 @@ class DatabaseSeeder extends Seeder
         $engIds = [];
         foreach ($engs as [$sesId, $data, $skills, $projects]) {
             $id = W::createEngineer($sesId, $data, $admin, false);
-            DB::table('engineers')->where('id', $id)->update(['consent_at' => now_str()]);
+            DB::table('engineers')->where('id', $id)->update(['consent_at' => now_str(), 'self_confirmed_at' => now_str()]);
             W::saveSkills($id, ['skill_name' => array_column($skills, 0), 'skill_cat' => array_column($skills, 1), 'skill_years' => array_column($skills, 2), 'skill_level' => array_column($skills, 3)]);
             foreach ($projects as $p) W::saveProject($id, $p);
             if (!empty($data['email'])) W::createUser($data['email'], $data['name'], 'eg', $pw, ['ses_id' => $sesId, 'engineer_id' => $id]);

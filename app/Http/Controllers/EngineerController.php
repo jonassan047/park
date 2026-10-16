@@ -75,6 +75,14 @@ class EngineerController extends Controller
         return $this->go("/engineers/$id", '保存しました。');
     }
 
+    // 本人が、登録の内容（運営・SES が入れたものも含む）を確かめ、責任を持つ
+    public function confirm(Request $r, int $id)
+    {
+        abort_unless($r->user()->role === 'eg' && (int) $r->user()->engineer_id === $id, 403);
+        W::confirmEngineer($id, $r->user());
+        return $this->go('/eg', '登録の内容を確認しました。内容が変わったら、ご自身で直してください。');
+    }
+
     public function invite(Request $r, int $id)
     {
         $e = $this->load($r, $id);
@@ -94,6 +102,7 @@ class EngineerController extends Controller
     {
         $this->load($r, $id);
         W::saveSkills($id, $r->all());
+        W::editedBy($id, $r->user());
         return $this->go("/engineers/$id", 'スキルを保存しました。');
     }
 
@@ -102,7 +111,16 @@ class EngineerController extends Controller
         $e = $this->load($r, $id);
         $p = $pid ? DB::table('engineer_projects')->where('id', $pid)->where('engineer_id', $id)->first() : (object) [];
         abort_unless($p, 404);
-        return view('engineers.project', ['e' => $e, 'p' => $p, 'action' => $pid ? "/engineers/$id/projects/$pid" : "/engineers/$id/projects"]);
+        // ホームの「経歴の更新」から：成約した案件の名前と期間を入れておく
+        $k = $this->contractOf($r, $id);
+        if ($k && !$pid) $p = (object) ['title' => $k->title, 'period_from' => substr($k->start_date, 0, 7), 'period_to' => $k->status === 'ended' && $k->end_date ? substr($k->end_date, 0, 7) : null];
+        return view('engineers.project', ['e' => $e, 'p' => $p, 'contract' => $k, 'action' => $pid ? "/engineers/$id/projects/$pid" : "/engineers/$id/projects"]);
+    }
+
+    private function contractOf(Request $r, int $id)
+    {
+        $kid = int_or_null($r->input('contract'));
+        return $kid ? DB::table('contracts as k')->join('cases as c', 'c.id', '=', 'k.case_id')->where('k.id', $kid)->where('k.engineer_id', $id)->select('k.*', 'c.title')->first() : null;
     }
 
     public function saveProject(Request $r, int $id, ?int $pid = null)
@@ -110,6 +128,9 @@ class EngineerController extends Controller
         $this->load($r, $id);
         if (!str_in($r->input('title'))) return back()->withInput()->with('flash', ['msg' => '案件名を入れてください。', 'type' => 'bad']);
         W::saveProject($id, $r->all(), $pid);
+        W::editedBy($id, $r->user());
+        // 本人が成約した案件を書いたら、経歴の更新は済み
+        if (($k = $this->contractOf($r, $id)) && $r->user()->role === 'eg') DB::table('contracts')->where('id', $k->id)->update(['history_updated_at' => now_str()]);
         return $this->go("/engineers/$id", $pid ? '保存しました。' : '経験票に追加しました。');
     }
 
@@ -117,6 +138,7 @@ class EngineerController extends Controller
     {
         $this->load($r, $id);
         DB::table('engineer_projects')->where('id', $pid)->where('engineer_id', $id)->delete();
+        W::editedBy($id, $r->user());
         return $this->go("/engineers/$id", '削除しました。');
     }
 
@@ -180,6 +202,7 @@ class EngineerController extends Controller
         $this->load($r, $id);
         W::updateEngineer($id, $r->only(array_slice(W::ENG_FIELDS, 15)), $r->user());
         W::saveHistories($id, $r->all());
+        W::editedBy($id, $r->user());
         return $this->go("/engineers/$id", '詳しいプロフィールを保存しました。');
     }
 

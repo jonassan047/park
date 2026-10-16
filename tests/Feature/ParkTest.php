@@ -125,8 +125,10 @@ class ParkTest extends TestCase
         $token = DB::table('users')->where('email', 'invite@park.example')->value('token');
         $this->get("/invite/$token")->assertOk()->assertSee('個人情報の取り扱い');
         $this->post("/invite/$token", ['password' => 'abcd1234', 'password_confirmation' => 'abcd1234'])->assertSessionHasErrors('consent');
-        $this->post("/invite/$token", ['password' => 'abcd1234', 'password_confirmation' => 'abcd1234', 'consent' => '1'])->assertRedirect(url('/eg'));
-        $this->get('/eg')->assertOk(); // メールのリンクから来たので、確認コードは聞かない
+        $this->post("/invite/$token", ['password' => 'abcd1234', 'password_confirmation' => 'abcd1234', 'consent' => '1'])->assertRedirect(url('/two-factor/challenge'));
+        // 初めてのログインも、確認コードを入れるまで中に入れない
+        $this->get('/eg')->assertRedirect(url('/two-factor/challenge'));
+        $this->post('/two-factor/challenge', ['code' => $this->lastCode('invite@park.example')])->assertRedirect(url('/eg'));
         $this->assertNotNull(DB::table('engineers')->where('id', $id)->value('consent_at'));
         $this->assertGreaterThan(10, DB::table('mail_outbox')->count());
     }
@@ -188,6 +190,48 @@ class ParkTest extends TestCase
         $this->post('/login', ['email' => 'eg1@park.example', 'password' => 'park1234']);
         $this->travel(11)->minutes();
         $this->post('/two-factor/challenge', ['code' => $this->lastCode('eg1@park.example')])->assertRedirect(url('/two-factor/challenge'));
+    }
+
+    public function test_self_confirm_and_history(): void
+    {
+        // SES が書き換えると、本人の確認がやり直しになり、応募できない
+        $this->as('ses1@park.example')->post('/engineers/1', ['name' => '山田 太郎', 'summary' => 'SES が書き換えた'])->assertRedirect();
+        $this->assertNull(DB::table('engineers')->where('id', 1)->value('self_confirmed_at'));
+        $this->post('/cases/2/apply', ['engineer_id' => 1, 'start_ok' => 1, 'price_ok' => 1, 'style_ok' => 1]);
+        $this->assertSame(0, DB::table('applications')->where('case_id', 2)->where('engineer_id', 1)->count());
+        $this->get('/ses')->assertSee('ご本人の確認がまだ');
+        // 本人がホームで確かめると、応募できる。他人の確認はできない
+        $eg = $this->as('eg1@park.example');
+        $eg->get('/eg')->assertSee('登録の内容の確認');
+        $eg->post('/engineers/2/confirm')->assertForbidden();
+        $eg->post('/engineers/1/confirm')->assertRedirect(url('/eg'));
+        $this->assertNotNull(DB::table('engineers')->where('id', 1)->value('self_confirmed_at'));
+        $this->as('ses1@park.example')->post('/cases/2/apply', ['engineer_id' => 1, 'start_ok' => 1, 'price_ok' => 1, 'style_ok' => 1]);
+        $this->assertSame(1, DB::table('applications')->where('case_id', 2)->where('engineer_id', 1)->count());
+
+        // 成約したら、本人のホームに「経歴の更新」が出る。書くと消え、終わるとまた出る
+        $this->as('admin@park.example');
+        $ivId = DB::table('interviews')->where('application_id', 1)->value('id');
+        $this->post("/interviews/$ivId/result", ['result' => 'pass']);
+        $this->post('/applications/1/contract', ['price' => 68, 'start_date' => date('Y-m-d')]);
+        $kid = DB::table('contracts')->where('application_id', 1)->value('id');
+        $eg = $this->as('eg1@park.example');
+        $eg->get('/eg')->assertSee('経歴の更新');
+        $eg->get("/engineers/1/projects/new?contract=$kid")->assertOk()->assertSee('PARK で決まった案件');
+        $eg->post('/engineers/1/projects', ['title' => '決まった案件', 'contract' => $kid])->assertRedirect();
+        $this->assertNotNull(DB::table('contracts')->where('id', $kid)->value('history_updated_at'));
+        $eg->get('/eg')->assertDontSee('経歴の更新');
+        DB::table('contracts')->where('id', $kid)->update(['history_updated_at' => date('Y-m-d H:i:s', strtotime('-1 day'))]);
+        $this->as('admin@park.example')->post("/contracts/$kid/end", ['end_date' => date('Y-m-d'), 'end_reason' => '満了']);
+        $this->assertDatabaseHas('app_notifications', ['title' => '経歴を更新してください：'.DB::table('cases')->where('id', 1)->value('title')]);
+        $this->as('eg1@park.example')->get('/eg')->assertSee('終わった案件を書く');
+
+        // 会社の情報：運営が書き換えると、SES の確認がやり直し
+        $this->as('admin@park.example')->post('/admin/ses/1', ['name' => 'みどり情報システム', 'notes' => '運営のメモ']);
+        $this->assertNull(DB::table('ses_companies')->where('id', 1)->value('self_confirmed_at'));
+        $this->as('ses1@park.example')->get('/ses/company')->assertSee('会社の情報の確認');
+        $this->post('/ses/company/confirm')->assertRedirect(url('/ses/company'));
+        $this->assertNotNull(DB::table('ses_companies')->where('id', 1)->value('self_confirmed_at'));
     }
 
     public function test_manuals(): void

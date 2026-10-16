@@ -156,6 +156,7 @@ Route::middleware('role:ses')->prefix('ses')->group(function () {
     Route::get('/invoices', [Ses::class, 'invoices']);
     Route::get('/company', [Ses::class, 'company']);
     Route::post('/company', [Ses::class, 'saveCompany']);
+    Route::post('/company/confirm', [Ses::class, 'confirmCompany']);
 });
 
 // ---------- エンジニア ----------
@@ -166,6 +167,7 @@ Route::middleware('role:eg')->group(function () {
     Route::post('/cases/{id}/decline', [Cas::class, 'decline']);
     Route::post('/interviews/{id}/memo', [Pip::class, 'memo']);
     Route::get('/eg/profile', fn () => redirect('/engineers/'.auth()->user()->engineer_id));
+    Route::post('/engineers/{id}/confirm', [Eng::class, 'confirm']);
     Route::get('/eg/sheet', fn () => redirect('/engineers/'.auth()->user()->engineer_id.'/sheet'));
     Route::get('/eg/messages', fn () => redirect('/engineers/'.auth()->user()->engineer_id.'/messages'));
 });

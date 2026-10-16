@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Services\Billing;
 use App\Services\Matcher;
+use App\Services\Notifier as N;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -91,5 +92,13 @@ class SesController extends Controller
             'address' => str_in($r->input('address')), 'employees' => int_or_null($r->input('employees')), 'strengths' => str_in($r->input('strengths')), 'updated_at' => now_str(),
         ]);
         return $this->go('/ses/company', '保存しました。');
+    }
+
+    // 運営が入れた会社の情報を、SES が確かめて責任を持つ
+    public function confirmCompany(Request $r)
+    {
+        DB::table('ses_companies')->where('id', $r->user()->ses_id)->update(['self_confirmed_at' => now_str()]);
+        N::audit($r->user()->id, 'ses-confirm', (string) $r->user()->ses_id);
+        return $this->go('/ses/company', '会社の情報を確認しました。内容が変わったら、ご自身で直してください。');
     }
 }

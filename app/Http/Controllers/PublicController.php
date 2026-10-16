@@ -101,9 +101,9 @@ class PublicController extends Controller
         DB::table('users')->where('id', $u->id)->update(['password' => Hash::make($r->input('password')), 'token' => null, 'token_expires' => null, 'last_login' => now_str()]);
         N::audit($u->id, 'password-set', $u->email);
         Auth::loginUsingId($u->id);
-        // メールで届いたリンクから来ているので、メールの確認は済んでいる。そのまま中に入れる
-        TwoFactor::pass($r);
-        return $this->go(Auth::user()->home(), 'パスワードを設定しました。次からは、ログインのときにメールで確認コードが届きます。');
+        // 初めてのログインも、登録のメールアドレスとパスワードに加えて、確認コードで2段階認証を通ってもらう
+        TwoFactor::send($r);
+        return $this->go('/two-factor/challenge', 'パスワードを設定しました。メールで届いた確認コードを入れてください。');
     }
 
     public function forgotForm() { return view('public.forgot'); }

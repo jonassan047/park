@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\Qa;
+use App\Services\Workflow as W;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -22,6 +23,7 @@ class EgController extends Controller
             'ivs' => DB::table('interviews as iv')->join('applications as a', 'a.id', '=', 'iv.application_id')->join('cases as c', 'c.id', '=', 'a.case_id')
                 ->where('a.engineer_id', $eid)->where('iv.result', 'pending')->select('iv.*', 'c.title')->orderBy('iv.scheduled_at')->get(),
             'needFollow' => $contract && !DB::table('follow_ups')->where('contract_id', $contract->id)->exists(),
+            'historyTodo' => W::historyTodo($eid),
             'unread' => DB::table('messages')->where('engineer_id', $eid)->where('read_by_eg', false)->count(),
         ]);
     }
