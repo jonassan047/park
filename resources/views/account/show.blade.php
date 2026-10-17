@@ -3,6 +3,11 @@
 <div class="grid2">
 <x-card title="基本"><form method="post" action="{{ url('/account') }}">@csrf
 <x-field label="お名前" name="name" :value="$u->name" required />
+<x-field label="ふりがな" name="kana" :value="$u->kana" />
+<x-field label="電話" name="phone" type="tel" :value="$u->phone" />
+@unless($u->role === 'eg')
+<x-field label="所属・役職" name="position" :value="$u->position" />
+@endunless
 <x-field label="メールでも通知を受け取る" name="mail_opt_in" type="checkbox" :value="$u->mail_opt_in" />
 <p class="muted">メールアドレス：{{ $u->email }}（変えるときは運営にご連絡ください）</p><button class="btn">保存</button></form></x-card>
 <x-card title="パスワードの変更"><form method="post" action="{{ url('/account/password') }}">@csrf

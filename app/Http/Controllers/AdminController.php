@@ -41,9 +41,9 @@ class AdminController extends Controller
     {
         $limit = date('Y-m-d', strtotime('+31 days'));
         return view('admin.dashboard', [
-            'pendingSes' => DB::table('ses_companies')->where('status', 'pending')->orderBy('id')->get(),
+            'pendingSes' => DB::table('ses_companies')->where('kind', 'ses')->where('status', 'pending')->orderBy('id')->get(),
             'counts' => [
-                'ses' => DB::table('ses_companies')->where('status', 'active')->count(),
+                'ses' => DB::table('ses_companies')->where('kind', 'ses')->where('status', 'active')->count(),
                 'eng' => DB::table('engineers')->count(), 'engAvail' => DB::table('engineers')->where('status', 'available')->count(),
                 'cases' => DB::table('cases')->where('status', 'open')->count(),
                 'apps' => DB::table('applications')->whereIn('status', ['applied', 'submitted', 'doc_passed', 'interview', 'interviewed'])->count(),
@@ -69,7 +69,7 @@ class AdminController extends Controller
     // ---------- SES ----------
     public function sesIndex()
     {
-        $list = DB::table('ses_companies as s')->select('s.*')
+        $list = DB::table('ses_companies as s')->where('s.kind', 'ses')->select('s.*')
             ->selectSub(DB::table('engineers')->whereColumn('ses_id', 's.id')->selectRaw('count(*)'), 'engs')
             ->selectSub(DB::table('contracts')->whereColumn('ses_id', 's.id')->where('status', 'active')->selectRaw('count(*)'), 'working')
             ->orderBy('status')->orderBy('name')->get();
@@ -81,14 +81,26 @@ class AdminController extends Controller
     public function sesStore(Request $r)
     {
         if (!str_in($r->input('name'))) return back()->withInput()->with('flash', ['msg' => '会社名を入れてください。', 'type' => 'bad']);
-        $id = W::applySes($r->all() + ['agree' => 1]);
-        return $this->go("/admin/ses/$id", '登録しました。');
+        $email = strtolower((string) str_in($r->input('email')));
+        if ($email && DB::table('users')->where('email', $email)->exists()) return back()->withInput()->with('flash', ['msg' => 'このメールアドレスはすでに使われています。', 'type' => 'bad']);
+        // 運営が登録した SES は、承認の手順を省いて、すぐ参加中にする（担当者のメールがあれば招待が届く）
+        $id = W::applySes($r->all() + ['agree' => 1], $r->user());
+        W::approveSes($id, $r->user(), str_in($r->input('name')).' を PARK に登録しました。');
+        if (!$email) return $this->go("/admin/ses/$id", '登録しました（メールアドレスが無いので、招待は送っていません）。', 'warn');
+        return $this->go("/admin/ses/$id", '登録し、ご担当者に招待メールを送りました。');
+    }
+
+    // SES の画面で扱ってよい会社だけ返す（管理者の直属の入れ物は 404）
+    private function sesOrFail(int $id): object
+    {
+        $s = DB::table('ses_companies')->where('kind', 'ses')->where('id', $id)->first();
+        abort_unless($s, 404);
+        return $s;
     }
 
     public function sesShow(int $id)
     {
-        $s = DB::table('ses_companies')->find($id);
-        abort_unless($s, 404);
+        $s = $this->sesOrFail($id);
         return view('admin.ses-show', [
             's' => $s,
             'engs' => DB::table('engineers')->where('ses_id', $id)->orderBy('name')->get(),
@@ -99,6 +111,7 @@ class AdminController extends Controller
 
     public function sesUpdate(Request $r, int $id)
     {
+        $this->sesOrFail($id);
         DB::table('ses_companies')->where('id', $id)->update([
             'name' => str_in($r->input('name')), 'rep_name' => str_in($r->input('rep_name')), 'contact_name' => str_in($r->input('contact_name')),
             'email' => strtolower((string) str_in($r->input('email'))) ?: null, 'phone' => str_in($r->input('phone')), 'address' => str_in($r->input('address')),
@@ -108,10 +121,16 @@ class AdminController extends Controller
         return $this->go("/admin/ses/$id", '保存しました。');
     }
 
-    public function sesApprove(Request $r, int $id) { W::approveSes($id, $r->user()); return $this->go("/admin/ses/$id", '承認し、招待メールを送りました。'); }
+    public function sesApprove(Request $r, int $id)
+    {
+        $this->sesOrFail($id);
+        W::approveSes($id, $r->user());
+        return $this->go("/admin/ses/$id", '承認し、招待メールを送りました。');
+    }
 
     public function sesSuspend(Request $r, int $id)
     {
+        $this->sesOrFail($id);
         DB::table('ses_companies')->where('id', $id)->update(['status' => 'suspended']);
         N::audit($r->user()->id, 'ses-suspend', (string) $id);
         return $this->go("/admin/ses/$id", '停止しました。');
@@ -119,6 +138,7 @@ class AdminController extends Controller
 
     public function sesUsers(Request $r, int $id)
     {
+        $this->sesOrFail($id);
         $email = strtolower((string) str_in($r->input('email')));
         if (!$email || DB::table('users')->where('email', $email)->whereNotNull('password')->exists()) return $this->go("/admin/ses/$id", 'このメールアドレスは使えません（空か、すでに使われています）。', 'bad');
         W::invite(['email' => $email, 'name' => (string) str_in($r->input('name')), 'role' => 'ses', 'ses_id' => $id], $r->user());
@@ -129,13 +149,15 @@ class AdminController extends Controller
     public function engineers(Request $r)
     {
         $q = trim((string) $r->query('q')); $st = (string) $r->query('status');
-        $list = DB::table('engineers as e')->join('ses_companies as s', 's.id', '=', 'e.ses_id')->select('e.*', 's.name as ses_name')
+        $list = DB::table('engineers as e')->join('ses_companies as s', 's.id', '=', 'e.ses_id')->select('e.*', 's.name as ses_name', 's.kind as ses_kind')
             ->selectSub(DB::table('engineer_projects')->whereColumn('engineer_id', 'e.id')->selectRaw('count(*)'), 'projs')->orderByDesc('e.updated_at')->get();
         $skills = DB::table('engineer_skills')->get()->groupBy('engineer_id');
         foreach ($list as $e) $e->skills = implode('、', ($skills[$e->id] ?? collect())->pluck('name')->all());
         if ($st) $list = $list->where('status', $st);
+        $direct = $r->query('ses') === 'direct';
+        if ($direct) $list = $list->where('ses_kind', 'direct');
         if ($q !== '') $list = $list->filter(fn ($e) => str_contains(mb_strtolower(implode(' ', [$e->name, $e->kana, $e->skills, $e->ses_name, $e->strengths])), mb_strtolower($q)));
-        return view('admin.engineers', ['list' => $list->values(), 'q' => $q, 'st' => $st]);
+        return view('admin.engineers', ['list' => $list->values(), 'q' => $q, 'st' => $st, 'direct' => $direct]);
     }
 
     public function operator(Request $r)
@@ -185,7 +207,7 @@ class AdminController extends Controller
         $period = (string) $r->input('period');
         if (!preg_match('/^\d{4}-\d{2}$/', $period)) return $this->go('/admin/invoices', '対象の月を選んでください。', 'bad');
         $n = 0;
-        foreach (DB::table('ses_companies')->where('status', '!=', 'pending')->pluck('id') as $id) if (Billing::build($id, $period)) $n++;
+        foreach (DB::table('ses_companies')->where('kind', 'ses')->where('status', '!=', 'pending')->pluck('id') as $id) if (Billing::build($id, $period)) $n++;
         N::audit($r->user()->id, 'invoice-build', $period);
         return $this->go("/admin/invoices?period=$period", $n ? "{$period} の請求書を {$n} 件作りました（下書き）。" : "{$period} に請求するものはありません。");
     }
@@ -259,7 +281,7 @@ class AdminController extends Controller
     public function reports()
     {
         $funnel = self::funnel();
-        $sesRows = DB::table('ses_companies')->where('status', 'active')->orderBy('name')->get()->map(function ($s) {
+        $sesRows = DB::table('ses_companies')->where('kind', 'ses')->where('status', 'active')->orderBy('name')->get()->map(function ($s) {
             $f = self::funnel($s->id);
             return [$s->name, $f[0][1], $f[1][1], $f[3][1], $f[5][1], pct($f[5][1], $f[0][1])];
         });
@@ -304,6 +326,15 @@ class AdminController extends Controller
         if (!$email || DB::table('users')->where('email', $email)->exists()) return $this->go('/admin/settings', 'このメールアドレスは使えません（空か、すでに使われています）。', 'bad');
         W::invite(['email' => $email, 'name' => (string) str_in($r->input('name')), 'role' => 'admin'], $r->user());
         return $this->go('/admin/settings', '招待メールを送りました。');
+    }
+
+    // まだパスワードを設定していない管理者に、招待を送り直す（リンクは新しくなり、7日に戻る）
+    public function reinviteAdmin(Request $r, int $id)
+    {
+        $u = DB::table('users')->where('id', $id)->where('role', 'admin')->where('active', 1)->whereNull('password')->first();
+        if (!$u) return $this->go('/admin/settings', 'この人には送り直せません。', 'bad');
+        W::invite(['email' => $u->email, 'name' => $u->name, 'role' => 'admin'], $r->user());
+        return $this->go('/admin/settings', '招待を送り直しました。');
     }
 
     public function audit()

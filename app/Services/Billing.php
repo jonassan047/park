@@ -41,6 +41,7 @@ class Billing
     // 下書きの請求書を作る・作り直す（発行済みは変えない）
     public static function build(int $sesId, string $period): ?object
     {
+        if (Workflow::isDirect($sesId)) return null; // 管理者の直属には請求しない（PARK 自身の契約）
         $ex = DB::table('invoices')->where('ses_id', $sesId)->where('period', $period)->first();
         if ($ex && $ex->status !== 'draft') return $ex;
         $inv = self::items($sesId, $period);
@@ -54,7 +55,7 @@ class Billing
     public static function monthTotal(string $period): int
     {
         $sum = 0;
-        foreach (DB::table('ses_companies')->pluck('id') as $id) $sum += self::items($id, $period)['subtotal'];
+        foreach (DB::table('ses_companies')->where('kind', 'ses')->pluck('id') as $id) $sum += self::items($id, $period)['subtotal'];
         return $sum;
     }
 }

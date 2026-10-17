@@ -3,7 +3,7 @@
 @section('content')
 @if($isNew)<p class="muted">基本情報を登録します。メールアドレスを入れると、ご本人に招待が届き、経験票（これまでの案件）をご本人が入れられます。</p>@endif
 <x-card><form method="post" action="{{ url($action) }}">@csrf<div class="grid2">
-@if($sesList)<x-field label="所属 SES" name="ses_id" type="select" :options="$sesList" :value="$e->ses_id ?? null" required />@endif
+@if($sesList)<x-field label="所属" name="ses_id" type="select" :options="$sesList" blank="選んでください" :value="$e->ses_id ?? null" hint="SES に属さない人は「管理者の直属」を選びます" required />@endif
 <x-field label="氏名" name="name" :value="$e->name ?? null" required />
 <x-field label="ふりがな" name="kana" :value="$e->kana ?? null" placeholder="やまだ たろう" hint="スキルシートのイニシャル（T.Y）に使います" />
 <x-field label="メールで呼ぶ名前（愛称など）" name="nickname" :value="$e->nickname ?? null" placeholder="たろうさん" hint="案件の案内メールの宛名に使います。空なら氏名" />

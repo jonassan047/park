@@ -7,7 +7,8 @@
         'eg' => [['/eg', 'ホーム'], ['/eg/offers', '届いた案件'], ['/eg/applications', '応募・面談'], ['/eg/profile', 'プロフィール'], ['/eg/sheet', 'スキルシート'], ['/eg/messages', 'やり取り'], ['/manual', '使い方']],
     ][$u->role ?? ''] ?? [];
     // 2要素認証が済むまでは、メニューを出さない
-    if ($u && (int) session(\App\Support\TwoFactor::SESSION_KEY) !== (int) $u->id) $nav = [];
+    $passed = $u && (int) session(\App\Support\TwoFactor::SESSION_KEY) === (int) $u->id;
+    if ($u && !$passed) $nav = [];
     $path = '/'.trim(request()->path(), '/');
     $unread = $u ? DB::table('app_notifications')->where('user_id', $u->id)->whereNull('read_at')->count() : 0;
     $flash = session('flash');
@@ -37,6 +38,15 @@
     <nav></nav><div class="me"><a href="{{ url('/manual') }}">使い方</a><a href="{{ url('/apply') }}">参加のお申し込み</a><a class="btn small" href="{{ url('/login') }}">ログイン</a></div>
   @endif
 </div></header>
+{{-- ログイン中の立場（2要素認証が済んだ人だけ） --}}
+@if($passed)
+<div class="loginbar"><div class="wrap">
+  @if($u->role === 'admin')管理者（運営）としてログインしています：{{ $u->name }}
+  @elseif($u->role === 'ses')SES（{{ DB::table('ses_companies')->where('id', $u->ses_id)->value('name') }}）のご担当者としてログインしています
+  @else エンジニアとしてログインしています
+  @endif
+</div></div>
+@endif
 @endunless
 <main class="wrap {{ ($wide ?? false) ? 'wide' : '' }}">
 @if($flash)<div class="flash {{ $flash['type'] }}">{{ $flash['msg'] }}</div>@endif

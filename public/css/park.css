@@ -288,5 +288,7 @@ body.role-admin header.top, body.role-ses header.top, body.role-eg header.top { 
 .rolepill { display: inline-block; background: var(--blue); color: #fff; font-weight: 800; font-size: 11px; border-radius: 999px; padding: 0 9px; margin-right: 3px; }
 .me .who { font-weight: 800; }
 body.role-admin .logo .mark, body.role-eg .logo .mark { box-shadow: 0 3px 8px rgba(0,0,0,.2); }
+/* ログイン中の立場の帯（役割ごとの --blue をそのまま使う） */
+.loginbar { background: var(--blue); color: #fff; font-weight: 700; font-size: 13px; padding: 4px 0; }
 .temp-login { background: #fff8e1; border: 1px dashed #e0a800; border-radius: 12px; padding: 10px 14px; margin: 14px 0; font-size: 13px; }
 .temp-login table { border-collapse: collapse; margin-top: 6px; } .temp-login td, .temp-login th { padding: 2px 12px 2px 0; text-align: left; }

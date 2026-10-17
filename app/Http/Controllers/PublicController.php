@@ -34,7 +34,7 @@ class PublicController extends Controller
             return back()->withInput(['email' => $email])->with('flash', ['msg' => 'メールアドレスかパスワードが違います。', 'type' => 'bad']);
         }
         $u = Auth::user();
-        if ($u->role === 'ses' && DB::table('ses_companies')->where('id', $u->ses_id)->value('status') !== 'active') {
+        if ($u->role === 'ses' && (DB::table('ses_companies')->where('id', $u->ses_id)->value('status') !== 'active' || W::isDirect($u->ses_id))) {
             Auth::logout();
             return back()->withInput(['email' => $email])->with('flash', ['msg' => '会社の参加がまだ承認されていないか、停止されています。', 'type' => 'bad']);
         }
@@ -69,7 +69,7 @@ class PublicController extends Controller
         Auth::loginUsingId($id);
         $r->session()->regenerate();
         TwoFactor::pass($r); // 最初の運営を作るときだけ（まだ誰もいないので）
-        return $this->go('/admin', '運営のアカウントを作りました。次からは、ログインのときにメールで確認コードが届きます。');
+        return $this->go('/welcome', '運営のアカウントを作りました。続けて、あなたの情報を登録してください。');
     }
 
     public function applyForm() { return view('public.apply'); }

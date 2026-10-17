@@ -16,7 +16,7 @@ class CaseController extends Controller
 {
     private function sesList(Request $r)
     {
-        return $r->user()->role === 'admin' ? DB::table('ses_companies')->where('status', 'active')->orderBy('name')->pluck('name', 'id')->all() : [];
+        return $r->user()->role === 'admin' ? DB::table('ses_companies')->where('kind', 'ses')->where('status', 'active')->orderBy('name')->pluck('name', 'id')->all() : [];
     }
 
     public function create(Request $r)

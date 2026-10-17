@@ -111,7 +111,10 @@ class CaseMail
                 DB::table('case_offers')->insert(['case_id' => $c->id, 'engineer_id' => $e->id, 'score' => $score['score'], 'reasons' => implode(' / ', $score['reasons']),
                     'missing' => implode(' / ', $score['missing']), 'sent_by' => $u->id, 'sent_at' => now_str()]);
             }
-            if (!$own) N::toSes($e->ses_id, "グループの案件が、貴社のエンジニアに届きました：{$c->title}", "{$e->name} さんに、グループの案件「{$c->title}」のご案内が届きました。", "/cases/{$c->id}", true, 'offer-ses');
+            if (!$own) {
+                if (Workflow::isDirect((int) $e->ses_id)) N::toSes($e->ses_id, "グループの案件が、直属のエンジニアに届きました：{$c->title}", "直属の{$e->name} さんに、グループの案件「{$c->title}」のご案内が届きました。", "/cases/{$c->id}", true, 'offer-ses');
+                else N::toSes($e->ses_id, "グループの案件が、貴社のエンジニアに届きました：{$c->title}", "{$e->name} さんに、グループの案件「{$c->title}」のご案内が届きました。", "/cases/{$c->id}", true, 'offer-ses');
+            }
             $n++;
         }
         N::audit($u->id, 'case-mail', "{$c->title} → {$n}名（".($mode === 'each' ? '個別' : '同じ内容').'）');

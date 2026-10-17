@@ -88,5 +88,7 @@ class DatabaseSeeder extends Seeder
         W::makeContract($a3, ['price' => 75, 'start_date' => date('Y-m-01')], $admin);
         DB::table('messages')->insert(['engineer_id' => $engIds[1], 'from_user' => $eg(1)->id, 'body' => "【スキルシートのレビュー依頼】\n予約サービスの成果の書き方を見てほしいです。",
             'created_at' => now_str(), 'read_by_eg' => true, 'read_by_admin' => false]);
+        // 見本の人は、最初の情報登録を済ませたことにする（ログイン後に登録の画面へ回さない）
+        DB::table('users')->whereNull('profile_completed_at')->update(['profile_completed_at' => now_str()]);
     }
 }

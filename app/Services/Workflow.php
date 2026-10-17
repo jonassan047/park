@@ -31,6 +31,8 @@ class Workflow
         if (!$email) return null;
         $u = DB::table('users')->where('email', $email)->first();
         if ($u && $u->password) return $u; // すでに使っている人は招待しない
+        // 未設定の人でも、立場（役割・SES・エンジニア）が依頼と違うなら招待しない（別の立場のリンクを渡さないため）
+        if ($u && ($u->role !== $d['role'] || (int) $u->ses_id !== (int) ($d['ses_id'] ?? 0) || (int) $u->engineer_id !== (int) ($d['engineer_id'] ?? 0))) return null;
         if (!$u) {
             $id = DB::table('users')->insertGetId(['email' => $email, 'name' => $d['name'], 'role' => $d['role'], 'ses_id' => $d['ses_id'] ?? null,
                 'engineer_id' => $d['engineer_id'] ?? null, 'created_at' => now_str(), 'updated_at' => now_str()]);
@@ -51,8 +53,50 @@ class Workflow
             'ses_id' => $extra['ses_id'] ?? null, 'engineer_id' => $extra['engineer_id'] ?? null, 'created_at' => now_str(), 'updated_at' => now_str()]);
     }
 
+    // ---------- 最初の情報登録 ----------
+    // 氏名・ふりがな・電話・所属／役職を保存する。登録を済ませた日時は、最初の1回だけ入れる
+    public static function saveProfile($user, array $d): void
+    {
+        $upd = ['kana' => str_in($d['kana'] ?? ''), 'phone' => str_in($d['phone'] ?? ''), 'updated_at' => now_str()];
+        $upd['name'] = str_in($d['name'] ?? '') ?? $user->name;
+        if ($user->role !== 'eg') $upd['position'] = str_in($d['position'] ?? '');
+        if (!DB::table('users')->where('id', $user->id)->value('profile_completed_at')) $upd['profile_completed_at'] = now_str();
+        DB::table('users')->where('id', $user->id)->update($upd);
+        N::audit($user->id, 'profile', '');
+    }
+
+    // 情報の登録のあとに進む先と、そこに出すお知らせ（なければ null）
+    public static function profileHome($user): array
+    {
+        if ($user->role === 'ses') {
+            if (!DB::table('ses_companies')->where('id', $user->ses_id)->value('self_confirmed_at')) return ['/ses/company', '会社の情報も確かめてください。'];
+            return ['/ses', null];
+        }
+        if ($user->role === 'eg') {
+            if (!DB::table('engineers')->where('id', $user->engineer_id)->value('self_confirmed_at')) return ['/engineers/'.$user->engineer_id, '登録の内容を確かめて「確認しました」を押してください。'];
+            return ['/eg', null];
+        }
+        return ['/admin', null];
+    }
+
+    // ---------- 管理者の直属 ----------
+    // 管理者に直接つくエンジニアの入れ物（SES ではない）。必要になったときに1つだけ作る
+    public static function directSesId(): int
+    {
+        $id = DB::table('ses_companies')->where('kind', 'direct')->orderBy('id')->value('id');
+        if ($id) return (int) $id;
+        return (int) DB::table('ses_companies')->insertGetId(['name' => 'PARK 運営（直属）', 'kind' => 'direct', 'status' => 'active',
+            'self_confirmed_at' => now_str(), 'joined_at' => today_str(), 'created_at' => now_str(), 'updated_at' => now_str()]);
+    }
+
+    public static function isDirect(?int $sesId): bool
+    {
+        return $sesId && DB::table('ses_companies')->where('id', $sesId)->value('kind') === 'direct';
+    }
+
     // ---------- SES ----------
-    public static function applySes(array $d): int
+    // 運営（$actor が admin）が登録するときは、申し込みの通知と受付メールを出さない
+    public static function applySes(array $d, $actor = null): int
     {
         $id = DB::table('ses_companies')->insertGetId([
             'name' => str_in($d['name'] ?? ''), 'rep_name' => str_in($d['rep_name'] ?? ''), 'contact_name' => str_in($d['contact_name'] ?? ''),
@@ -60,18 +104,19 @@ class Workflow
             'employees' => int_or_null($d['employees'] ?? null), 'strengths' => str_in($d['strengths'] ?? ''), 'message' => str_in($d['message'] ?? ''),
             'notes' => str_in($d['notes'] ?? ''), 'status' => 'pending', 'agreed_at' => !empty($d['agree']) ? now_str() : null, 'created_at' => now_str(), 'updated_at' => now_str(),
         ]);
+        if (($actor->role ?? '') === 'admin') return $id;
         $name = str_in($d['name'] ?? ''); $contact = str_in($d['contact_name'] ?? '');
         N::toAdmins('SES から参加の申し込みがありました', "{$name}（{$contact} 様）から参加の申し込みがありました。内容を確認し、承認してください。", "/admin/ses/$id", true, 'ses-apply');
         N::queueMail(str_in($d['email'] ?? ''), $contact, '参加のお申し込みを受け付けました', "{$contact} 様\n\nPARK への参加のお申し込みを受け付けました。運営で内容を確認のうえ、ご連絡します。\n\n会社名：{$name}", 'ses-apply');
         return $id;
     }
 
-    public static function approveSes(int $sesId, $actor): void
+    public static function approveSes(int $sesId, $actor, ?string $note = null): void
     {
         $s = DB::table('ses_companies')->find($sesId);
         DB::table('ses_companies')->where('id', $sesId)->update(['status' => 'active', 'joined_at' => $s->joined_at ?: today_str(), 'updated_at' => now_str()]);
         N::audit($actor->id, 'ses-approve', $s->name);
-        if ($s->email) self::invite(['email' => $s->email, 'name' => $s->contact_name ?: ($s->rep_name ?: $s->name), 'role' => 'ses', 'ses_id' => $sesId], $actor, "{$s->name} の PARK への参加を承認しました。");
+        if ($s->email) self::invite(['email' => $s->email, 'name' => $s->contact_name ?: ($s->rep_name ?: $s->name), 'role' => 'ses', 'ses_id' => $sesId], $actor, $note ?? "{$s->name} の PARK への参加を承認しました。");
     }
 
     // ---------- エンジニア ----------
@@ -260,6 +305,7 @@ class Workflow
             $count++;
         }
         foreach ($bySes as $sesId => $names) {
+            if (self::isDirect($sesId)) continue; // 直属は、操作した運営への知らせが要らない
             N::toSes($sesId, "貴社のエンジニアに案件を配信しました：{$c->title}", "次の方に「{$c->title}」を配信しました。\n".implode("\n", $names)."\n\nご本人が応募を決めるほか、貴社から個別にご案内いただくこともできます。", "/cases/$caseId", true, 'offer-ses');
         }
         N::audit($actor->id, 'distribute', "{$c->title} → {$count}名");
@@ -292,7 +338,7 @@ class Workflow
         if ($e->status === 'available') DB::table('engineers')->where('id', $engineerId)->update(['status' => 'proposing']);
         $who = ['eg' => 'ご本人', 'ses' => '所属の SES', 'admin' => '運営'][$actor->role];
         N::toAdmins("応募がありました：{$c->title}", "{$e->name} さんが「{$c->title}」に応募しました（{$who}から）。スキルシートを案件に合わせて整え、提出してください。", "/applications/$appId", true, 'apply');
-        N::toSes($e->ses_id, "貴社のエンジニアが応募しました：{$c->title}", "{$e->name} さんが「{$c->title}」に応募しました。選考の進み具合は PARK でご確認いただけます。", "/applications/$appId", true, 'apply');
+        if (!self::isDirect($e->ses_id)) N::toSes($e->ses_id, "貴社のエンジニアが応募しました：{$c->title}", "{$e->name} さんが「{$c->title}」に応募しました。選考の進み具合は PARK でご確認いただけます。", "/applications/$appId", true, 'apply');
         if ($actor->role !== 'eg') N::toEg($engineerId, "案件に応募しました：{$c->title}", "「{$c->title}」に、{$who}からあなたの応募を出しました。条件に問題があれば、すぐにご連絡ください。", "/applications/$appId", true, 'apply');
         N::audit($actor->id, 'apply', "{$e->name} → {$c->title}");
         return $appId;
@@ -333,7 +379,8 @@ class Workflow
             N::toEg($a->engineer_id, "{$label}：{$a->title}", $msgs[$status], "/applications/$appId", true, 'status');
             N::toSes($a->ses_id, "{$a->eg_name} さん {$label}：{$a->title}", $msgs[$status], "/applications/$appId", true, 'status');
         }
-        if ($status === 'withdrawn') N::toAdmins("応募の取り下げ：{$a->title}", "{$a->eg_name} さんが応募を取り下げました。$note", "/applications/$appId", false);
+        // 直属の応募は、上の toSes が運営に届くので、ここでは重ねて出さない
+        if ($status === 'withdrawn' && !(isset($msgs[$status]) && self::isDirect($a->ses_id))) N::toAdmins("応募の取り下げ：{$a->title}", "{$a->eg_name} さんが応募を取り下げました。$note", "/applications/$appId", false);
         N::audit($actor->id, 'app-status', "{$a->eg_name} / {$a->title} → $label");
         self::refreshEngineerStatus($a->engineer_id);
     }
@@ -388,7 +435,7 @@ class Workflow
         $won = DB::table('applications')->where('case_id', $a->case_id)->where('status', 'won')->count();
         if ($won >= ($a->headcount ?: 1)) DB::table('cases')->where('id', $a->case_id)->update(['status' => 'filled', 'updated_at' => now_str()]);
         N::toEg($a->engineer_id, "成約おめでとうございます：{$a->title}", "「{$a->title}」に決まりました。開始は {$start} です。\n最初の1か月に、困りごとがないか短くお話を聞かせてください（PARK のホームから記入できます）。\nこの案件を、経験票にも追加してください（ホームの「経歴の更新」から）。", "/eg", true, 'won');
-        N::toSes($a->ses_id, "成約しました：{$a->title}", "{$a->eg_name} さんが「{$a->title}」に決まりました。\n契約：{$start}〜{$end}／".man($price)."\n成功報酬（初期費用）は、稼働開始の月の請求に含まれます。", "/contracts/$kid", true, 'won');
+        N::toSes($a->ses_id, "成約しました：{$a->title}", "{$a->eg_name} さんが「{$a->title}」に決まりました。\n契約：{$start}〜{$end}／".man($price).(self::isDirect($a->ses_id) ? '' : "\n成功報酬（初期費用）は、稼働開始の月の請求に含まれます。"), "/contracts/$kid", true, 'won');
         N::audit($actor->id, 'contract', "{$a->eg_name} / {$a->title} ".man($price));
         return $kid;
     }

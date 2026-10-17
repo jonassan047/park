@@ -54,6 +54,8 @@ Route::middleware('role')->group(function () {
     Route::get('/notifications', [Acc::class, 'notifications']);
     Route::get('/notifications/{id}', [Acc::class, 'openNotification']);
     Route::post('/notifications/read-all', [Acc::class, 'readAll']);
+    Route::get('/welcome', [Acc::class, 'welcomeForm']);
+    Route::post('/welcome', [Acc::class, 'welcome']);
     Route::get('/account', [Acc::class, 'show']);
     Route::post('/account', [Acc::class, 'update']);
     Route::post('/account/password', [Acc::class, 'password']);
@@ -161,6 +163,7 @@ Route::middleware('role:admin')->group(function () {
         Route::post('/settings', [Adm::class, 'saveSettings']);
         Route::post('/settings/testmail', [Adm::class, 'testMail']);
         Route::post('/settings/admins', [Adm::class, 'admins']);
+        Route::post('/settings/admins/{id}/reinvite', [Adm::class, 'reinviteAdmin']);
         Route::get('/audit', [Adm::class, 'audit']);
         Route::get('/ai', [Ai::class, 'index']);
         Route::get('/skills', [Adm::class, 'skills']);

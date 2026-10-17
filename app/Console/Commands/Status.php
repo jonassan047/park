@@ -25,9 +25,10 @@ class Status extends Command
             'AI：失敗（7日）' => DB::table('ai_jobs')->where('status', 'failed')->where('created_at', '>=', $ago('-7 days'))->count(),
             'AI：下書きが確かめ待ち' => DB::table('ai_jobs')->where('status', 'done')->count(),
             'AI：最後に取りに来た' => DB::table('ai_jobs')->max('picked_at') ?? 'まだ',
-            'SES：承認待ち' => DB::table('ses_companies')->where('status', 'pending')->count(),
-            'SES：会社の情報の確認がまだ' => DB::table('ses_companies')->where('status', 'active')->whereNull('self_confirmed_at')->count(),
+            'SES：承認待ち' => DB::table('ses_companies')->where('kind', 'ses')->where('status', 'pending')->count(),
+            'SES：会社の情報の確認がまだ' => DB::table('ses_companies')->where('kind', 'ses')->where('status', 'active')->whereNull('self_confirmed_at')->count(),
             'エンジニア：本人の確認がまだ' => DB::table('engineers')->whereNull('self_confirmed_at')->count(),
+            'エンジニア：管理者の直属' => DB::table('engineers')->whereIn('ses_id', DB::table('ses_companies')->where('kind', 'direct')->select('id'))->count(),
             '案内メール：返事なし（3日以上）' => DB::table('case_mails')->where('reply', 'none')->where('sent_at', '<', $ago('-3 days'))->count(),
             '案内メール：応募したいのに応募になっていない' => DB::table('case_mails as m')->where('m.reply', 'interested')
                 ->whereNotExists(fn ($q) => $q->select(DB::raw(1))->from('applications as a')->whereColumn('a.case_id', 'm.case_id')->whereColumn('a.engineer_id', 'm.engineer_id'))->count(),

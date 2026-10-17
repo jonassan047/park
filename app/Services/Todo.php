@@ -94,7 +94,7 @@ class Todo
     public static function admin(): array
     {
         $out = [];
-        foreach (DB::table('ses_companies')->where('status', 'pending')->get() as $s) $out[] = self::item("参加の申し込み：{$s->name}", '内容を確かめて承認する', "/admin/ses/{$s->id}");
+        foreach (DB::table('ses_companies')->where('kind', 'ses')->where('status', 'pending')->get() as $s) $out[] = self::item("参加の申し込み：{$s->name}", '内容を確かめて承認する', "/admin/ses/{$s->id}");
         $out = array_merge($out, self::pipeline(self::apps()));
         $passed = self::apps()->where('a.status', 'interviewed')->where('a.updated_at', '<', date('Y-m-d H:i:s', strtotime('-14 days')))->get();
         foreach ($passed as $a) $out[] = self::item("{$a->eg_name} さん「{$a->title}」：面談を通って2週間", '成約か、次の面談か、見送りかを SES に確かめる', "/applications/{$a->id}");

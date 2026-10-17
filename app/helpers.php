@@ -49,8 +49,10 @@ function lbl(string $map, ?string $key): string
 function user_label(?object $u): string
 {
     if (!$u) return '';
-    $org = $u->role === 'admin' ? setting('operator_name') : (string) DB::table('ses_companies')->where('id', $u->ses_id)->value('name');
-    return trim($org.' '.$u->name);
+    if ($u->role === 'admin') return trim(setting('operator_name').' '.$u->name);
+    $s = DB::table('ses_companies')->where('id', $u->ses_id)->first(['name', 'kind']);
+    if ($u->role === 'eg' && ($s->kind ?? '') === 'direct') return (string) $u->name; // 管理者の直属は、会社名をつけない
+    return trim(($s->name ?? '').' '.$u->name);
 }
 
 function badge(string $map, ?string $key): HtmlString

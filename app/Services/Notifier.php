@@ -70,6 +70,8 @@ class Notifier
     }
     public static function toSes($sesId, string $title, string $body, string $link, bool $mail = true, string $kind = 'notice'): void
     {
+        // 管理者の直属には SES の担当者がいないので、運営全員に届ける
+        if (Workflow::isDirect($sesId ? (int) $sesId : null)) { self::toAdmins($title, $body, $link, $mail, $kind); return; }
         foreach (self::sesUsers($sesId) as $u) self::notify($u->id, $title, $body, $link, $mail, $kind);
     }
     public static function toEg($engineerId, string $title, string $body, string $link, bool $mail = true, string $kind = 'notice'): void

@@ -25,13 +25,22 @@ class EngineerController extends Controller
 
     public function create(Request $r)
     {
-        $sesList = $r->user()->role === 'admin' ? DB::table('ses_companies')->where('status', 'active')->orderBy('name')->pluck('name', 'id')->all() : [];
+        // 運営の登録画面は、先頭に「管理者の直属」を出す（直属の入れ物は、登録のときに作る）
+        $sesList = $r->user()->role === 'admin'
+            ? ['direct' => '管理者の直属（SES なし）'] + DB::table('ses_companies')->where('kind', 'ses')->where('status', 'active')->orderBy('name')->pluck('name', 'id')->all()
+            : [];
         return view('engineers.form', ['e' => (object) ['ses_id' => $r->query('ses')], 'action' => '/engineers', 'isNew' => true, 'sesList' => $sesList]);
     }
 
     public function store(Request $r)
     {
-        $sesId = $r->user()->role === 'ses' ? $r->user()->ses_id : (int) $r->input('ses_id');
+        if ($r->user()->role === 'ses') $sesId = $r->user()->ses_id;
+        elseif ($r->input('ses_id') === 'direct') $sesId = str_in($r->input('name')) ? W::directSesId() : 0;
+        else {
+            // 運営が選べるのは、参加中の SES だけ
+            $sesId = (int) $r->input('ses_id');
+            if (!DB::table('ses_companies')->where('id', $sesId)->where('kind', 'ses')->where('status', 'active')->exists()) $sesId = 0;
+        }
         if (!$sesId || !str_in($r->input('name'))) return back()->withInput()->with('flash', ['msg' => '所属と氏名を入れてください。', 'type' => 'bad']);
         $email = strtolower((string) str_in($r->input('email')));
         if ($email && DB::table('users')->where('email', $email)->exists()) return back()->withInput()->with('flash', ['msg' => 'このメールアドレスはすでに使われています。', 'type' => 'bad']);

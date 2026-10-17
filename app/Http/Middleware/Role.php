@@ -28,6 +28,8 @@ class Role
                 return redirect()->guest(url('/login'));
             }
         }
+        // 最初の情報登録がまだの人は、先に登録の画面へ（アカウントの画面とログアウトはそのまま使える）
+        if (!$u->profile_completed_at && !$request->is('welcome', 'account', 'account/*')) return redirect('/welcome');
         if ($roles && !in_array($u->role, $roles, true)) abort(403, 'このページを見る権限がありません。');
         return $next($request);
     }
