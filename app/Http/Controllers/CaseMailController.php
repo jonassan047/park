@@ -46,7 +46,7 @@ class CaseMailController extends Controller
         $ids = array_values(array_filter(array_map('intval', (array) $r->input('engineer_id', [])), fn ($i) => $allowed->has($i) && !$allowed[$i]['sent']));
         if (!$ids) return back()->withInput()->with('flash', ['msg' => '送る相手を選んでください。', 'type' => 'bad']);
         $mode = $r->input('mode') === 'each' ? 'each' : 'same';
-        $from = $u->role === 'ses' ? DB::table('ses_companies')->where('id', $u->ses_id)->value('name').' '.$u->name : setting('operator_name');
+        $from = $u->role === 'ses' ? DB::table('ses_companies')->where('id', $u->ses_id)->value('name').' '.$u->name : (admin_sender($u) ? admin_sender($u).' '.$u->name : setting('operator_name'));
         $rows = [];
         foreach ($ids as $eid) {
             $m = $allowed[$eid];

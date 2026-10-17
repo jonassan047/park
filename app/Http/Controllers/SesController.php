@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Services\Billing;
 use App\Services\Matcher;
 use App\Services\Notifier as N;
+use App\Services\Workflow as W;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -86,12 +87,15 @@ class SesController extends Controller
 
     public function saveCompany(Request $r)
     {
+        // 名前の変更は、三つの入口（最初の登録・アカウント・ここ）で同じ動きにするため Workflow に任せる
+        $r->merge(['name' => clean_name($r->input('name'))]);
+        $r->validate(['name' => 'nullable|max:100'], [], ['name' => 'SES名（会社名）']);
+        $warn = ($name = $r->input('name')) ? W::renameSes((int) $r->user()->ses_id, $name, $r->user()) : null;
         DB::table('ses_companies')->where('id', $r->user()->ses_id)->update([
-            'name' => str_in($r->input('name')) ?? DB::table('ses_companies')->where('id', $r->user()->ses_id)->value('name'),
             'rep_name' => str_in($r->input('rep_name')), 'contact_name' => str_in($r->input('contact_name')), 'phone' => str_in($r->input('phone')),
             'address' => str_in($r->input('address')), 'employees' => int_or_null($r->input('employees')), 'strengths' => str_in($r->input('strengths')), 'updated_at' => now_str(),
         ]);
-        return $this->go('/ses/company', '保存しました。');
+        return $warn ? $this->go('/ses/company', '保存しました。'.$warn, 'warn') : $this->go('/ses/company', '保存しました。');
     }
 
     // 管理者が入れた会社の情報を、SES が確かめて責任を持つ

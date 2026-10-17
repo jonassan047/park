@@ -34,8 +34,8 @@ tezzo の要求（要約）：
 - I4. 正しく `POST /welcome` すると、`ses_companies.name` が前後の空白を取った値になり、今までどおり `/ses/company`（会社の確認がまだのとき）か `/ses` へ進む。
 - I5. 名前を変えたときだけ（前と違うとき）：
   - `ses_companies.updated_at` が今になる。`self_confirmed_at` は変えない（SES 自身が直したので）。
-  - `audit_logs` に action=`ses-rename`、detail=「旧名 → 新名」が1行入る（会社名は個人情報ではないので入れてよい）。
-  - 管理者全員にベルの通知（メールは送らない。決まったこと 2）「SES の名前が変わりました」本文「{旧名} が名前を {新名} に変えました。」link=`/admin/ses/{id}`、kind=`ses-rename`。
+  - `audit_log` に action=`ses-rename`、detail=「旧名 → 新名」が1行入る（会社名は個人情報ではないので入れてよい）。
+  - 管理者全員にベルの通知（メールは送らない。決まったこと 2）「SES の名前が変わりました」本文「{旧名} が名前を {新名} に変えました。」link=`/admin/ses/{id}`。（`app_notifications` には kind 列がないので、title「SES の名前が変わりました」で確かめる。kind は呼び出しの引数だけ。）
 - I6. 名前が同じ（変えずに登録）なら、`ses_companies` は書き換えず、I5 の記録・通知も出さない。
 - I7. 変えた名前は、保存していない所すべてに出る（どこも `ses_companies.name` を join して表示しているため）：立場の帯、管理者の SES 一覧・詳細、エンジニア一覧の所属、案件・応募・契約・請求書の画面、`user_label`（ヘッダー右・メールの宛名）、`/ses/company`。発行済みの請求書の宛名も新しい名前で出る（決まったこと 3）。
 - I8. ほかの SES と同じ名前でも保存できる。そのときは保存のあとのメッセージを warn にし「登録しました。同じ名前の SES がほかにもあります。見分けられるよう、正式名称で入れてください。」を出す（`/welcome` のときは、行き先の画面にこの文を出す。`/ses/company` に進む場合も、この文を優先する）。I5 の通知の本文に「（同じ名前の SES がほかにもあります）」を足す。比べるのは自分以外の `ses_companies`（kind を問わない）で、前後の空白を取った完全一致。
@@ -263,7 +263,7 @@ tezzo の要求（要約）：
 - I1：ses1 を unfinish → `GET /welcome` に「SES名」と「みどり情報システム」（value に入っている）。
 - I2：`ses_name` 空・空白だけ → エラー。`ses_companies.name` が「みどり情報システム」のまま、`profile_completed_at` null。
 - I3：101 文字 → エラー。
-- I4・I5：`ses_name => '株式会社みどり情報システム'` → `ses_companies.name` が変わり、`self_confirmed_at` は前と同じ。`audit_logs` に action=ses-rename が1行。admin の `app_notifications` に kind=ses-rename が1件。`mail_outbox` は増えない。
+- I4・I5：`ses_name => '株式会社みどり情報システム'` → `ses_companies.name` が変わり、`self_confirmed_at` は前と同じ。`audit_log` に action=ses-rename が1行。admin の `app_notifications` に title「SES の名前が変わりました」が1件。`mail_outbox` は増えない。
 - I6：名前を変えずに登録 → `ses_companies.updated_at` が変わらず、ses-rename の記録・通知が増えない。
 - I7：I4 のあと、ses1 の `/ses` の帯に「SES（株式会社みどり情報システム）」、admin の `/admin/ses` にも新しい名前。
 - I8：もう1つの見本の SES の名前に変える → 保存され、`session('flash')` が warn で「同じ名前の SES がほかにもあります」。通知の本文にも同じ一言。

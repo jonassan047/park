@@ -272,7 +272,7 @@ class AdminController extends Controller
         };
         $q->where(fn ($w) => $w->whereNull('ses_id')->orWhereIn('ses_id', DB::table('ses_companies')->where('status', 'active')->select('id')));
         $users = $q->get();
-        foreach ($users as $u) N::queueMail($u->email, $u->name, $subject, user_label($u)." 様\n\n$body", 'broadcast');
+        foreach ($users as $u) N::queueMail($u->email, $u->name, $subject, user_label($u)." 様\n\n$body", 'broadcast', fromName: admin_sender($r->user()));
         N::audit($r->user()->id, 'broadcast', "{$t}：{$subject}（".count($users).'通）');
         return $this->go('/admin/mail', count($users).'通を配信しました。');
     }
@@ -314,7 +314,7 @@ class AdminController extends Controller
 
     public function testMail(Request $r)
     {
-        $id = N::queueMail((string) $r->input('to'), $r->user()->name, 'テストメール', 'PARK からのテストメールです。届いていれば、メールの設定は正しく動いています。', 'test');
+        $id = N::queueMail((string) $r->input('to'), $r->user()->name, 'テストメール', 'PARK からのテストメールです。届いていれば、メールの設定は正しく動いています。', 'test', fromName: admin_sender($r->user()));
         if (!N::canSend()) return $this->go('/admin/mail', 'メールの送信が設定されていないため、保存だけしました。', 'warn');
         $ok = DB::table('mail_outbox')->where('id', $id)->value('status') === 'sent';
         return $this->go('/admin/settings', $ok ? '送りました。届いたか確認してください。' : '送れませんでした。メールの画面でエラーを確認してください。', $ok ? 'ok' : 'bad');

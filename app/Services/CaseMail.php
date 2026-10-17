@@ -89,7 +89,6 @@ class CaseMail
     public static function send($u, object $c, array $items, string $mode): int
     {
         $sesId = $u->role === 'ses' ? (int) $u->ses_id : null;
-        $from = user_label($u);
         $n = 0;
         foreach ($items as $eid => $it) {
             $e = DB::table('engineers')->find((int) $eid);
@@ -103,7 +102,7 @@ class CaseMail
                 ."応募したい：".url("/r/$token/interested")."\n質問がある：".url("/r/$token/question")."\n見送る　　：".url("/r/$token/declined")
                 .($own ? "\n※このメールに返信しても、担当者に届きます。" : "\n※PARK のグループの案件です。このメールへの返信は担当者に届かないので、上のリンクからお願いします。");
             $to = $e->email ?: DB::table('users')->where('engineer_id', $e->id)->value('email');
-            $outbox = N::queueMail($to, $e->name, (string) $it['subject'], $body, 'case-mail', $own && $sesId ? $u->email : null);
+            $outbox = N::queueMail($to, $e->name, (string) $it['subject'], $body, 'case-mail', $own && $sesId ? $u->email : null, $u->role === 'admin' ? admin_sender($u) : null);
             DB::table('case_mails')->insert(['case_id' => $c->id, 'engineer_id' => $e->id, 'ses_id' => $sesId, 'sent_by' => $u->id, 'route' => $own ? 'own' : 'group', 'mode' => $mode,
                 'subject' => (string) $it['subject'], 'body' => $body, 'score' => $score['score'], 'suggest' => implode(' / ', self::suggestions($c, $e, $score)), 'outbox_id' => $outbox, 'sent_at' => now_str(), 'token' => $token]);
             // 本人が PARK の画面からも見られるように（応募・見送りもできる）

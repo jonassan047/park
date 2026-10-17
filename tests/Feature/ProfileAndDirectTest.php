@@ -103,18 +103,19 @@ class ProfileAndDirectTest extends TestCase
     {
         $this->unfinish('admin@park.example', 'ses1@park.example', 'eg1@park.example');
         $in = ['name' => '登録 太郎', 'kana' => 'とうろく たろう', 'phone' => '03-0000-0000', 'position' => '部長'];
-        $this->as('admin@park.example')->post('/welcome', $in)->assertRedirect(url('/admin'));
+        $this->as('admin@park.example')->post('/welcome', $in + ['company_name' => '見本運営株式会社'])->assertRedirect(url('/admin'));
         $this->assertDatabaseHas('users', ['email' => 'admin@park.example', 'name' => '登録 太郎', 'kana' => 'とうろく たろう', 'phone' => '03-0000-0000', 'position' => '部長']);
         $this->assertNotNull(DB::table('users')->where('email', 'admin@park.example')->value('profile_completed_at'));
 
         // SES：会社の確認がまだなら /ses/company
         $sesId = User::where('email', 'ses1@park.example')->value('ses_id');
         DB::table('ses_companies')->where('id', $sesId)->update(['self_confirmed_at' => null]);
-        $this->as('ses1@park.example')->post('/welcome', $in)->assertRedirect(url('/ses/company'));
+        $sesIn = $in + ['ses_name' => (string) DB::table('ses_companies')->where('id', $sesId)->value('name')];
+        $this->as('ses1@park.example')->post('/welcome', $sesIn)->assertRedirect(url('/ses/company'));
         $this->assertDatabaseHas('users', ['email' => 'ses1@park.example', 'position' => '部長']);
         $this->unfinish('ses1@park.example');
         DB::table('ses_companies')->where('id', $sesId)->update(['self_confirmed_at' => now()]);
-        $this->as('ses1@park.example')->post('/welcome', $in)->assertRedirect(url('/ses'));
+        $this->as('ses1@park.example')->post('/welcome', $sesIn)->assertRedirect(url('/ses'));
 
         // エンジニア：本人の確認がまだなら自分の画面
         $eid = User::where('email', 'eg1@park.example')->value('engineer_id');
@@ -143,11 +144,11 @@ class ProfileAndDirectTest extends TestCase
         $this->as('admin@park.example')->get('/admin')->assertOk();
         $this->get('/welcome')->assertRedirect(url('/account'));
         $this->unfinish('admin@park.example');
-        $this->post('/welcome', ['name' => '一回目'])->assertRedirect();
+        $this->post('/welcome', ['name' => '一回目', 'company_name' => '見本運営株式会社'])->assertRedirect();
         $first = DB::table('users')->where('email', 'admin@park.example')->value('profile_completed_at');
         $this->assertNotNull($first);
         $this->travel(2)->hours();
-        $this->post('/welcome', ['name' => '二回目'])->assertRedirect();
+        $this->post('/welcome', ['name' => '二回目', 'company_name' => '見本運営株式会社'])->assertRedirect();
         $this->assertSame($first, DB::table('users')->where('email', 'admin@park.example')->value('profile_completed_at'));
     }
 
@@ -160,7 +161,13 @@ class ProfileAndDirectTest extends TestCase
         $this->assertNull(DB::table('users')->where('email', 'eg1@park.example')->value('position'));
         // 未登録の人は、ここからでも登録済みになる
         $this->unfinish('admin@park.example');
-        $this->as('admin@park.example')->post('/account', ['name' => '管理 者'])->assertRedirect();
+        // ただし、企業名（管理者）・SES名（SES）が空なら弾かれる
+        $this->as('admin@park.example')->from('/account')->post('/account', ['name' => '管理 者'])->assertSessionHasErrors('company_name');
+        $this->assertNull(DB::table('users')->where('email', 'admin@park.example')->value('profile_completed_at'));
+        $this->unfinish('ses1@park.example');
+        $this->as('ses1@park.example')->from('/account')->post('/account', ['name' => '担当 者'])->assertSessionHasErrors('ses_name');
+        $this->assertNull(DB::table('users')->where('email', 'ses1@park.example')->value('profile_completed_at'));
+        $this->as('admin@park.example')->post('/account', ['name' => '管理 者', 'company_name' => '見本運営株式会社'])->assertRedirect();
         $this->assertNotNull(DB::table('users')->where('email', 'admin@park.example')->value('profile_completed_at'));
     }
 
@@ -524,5 +531,296 @@ class ProfileAndDirectTest extends TestCase
         $this->as('admin@park.example');
         $this->get('/admin/engineers?ses=direct')->assertOk()->assertSee('直属 一郎')->assertDontSee('山田 太郎');
         $this->get('/admin/engineers')->assertOk()->assertSee('直属 一郎')->assertSee('山田 太郎')->assertSee('直属</span>', false);
+    }
+
+    // ---------- H〜J. 企業名（管理者）・SES名（SES）（PLAN 2026-10-17） ----------
+
+    private function sesName(int $id = 1): string
+    {
+        return (string) DB::table('ses_companies')->where('id', $id)->value('name');
+    }
+
+    private function renameNotes(): int
+    {
+        return DB::table('app_notifications')->where('title', 'SES の名前が変わりました')->count();
+    }
+
+    private function renameLogs(): int
+    {
+        return DB::table('audit_log')->where('action', 'ses-rename')->count();
+    }
+
+    private function adminCount(): int
+    {
+        return DB::table('users')->where('role', 'admin')->where('active', 1)->count();
+    }
+
+    public function test_h1_company_name_column_null_for_all(): void
+    {
+        $this->assertTrue(Schema::hasColumn('users', 'company_name'));
+        $this->assertSame(0, DB::table('users')->whereNotNull('company_name')->count());
+    }
+
+    public function test_h2_welcome_shows_company_field(): void
+    {
+        $this->unfinish('admin@park.example');
+        $this->as('admin@park.example')->get('/welcome')->assertOk()->assertSee('企業名')->assertSee('メールの差出人の名前にも使います')->assertDontSee('SES名');
+        DB::table('users')->where('email', 'admin@park.example')->update(['company_name' => '初期値会社']);
+        $this->as('admin@park.example')->get('/welcome')->assertSee('value="初期値会社"', false);
+    }
+
+    public function test_h3_blank_company_is_refused(): void
+    {
+        $this->unfinish('admin@park.example');
+        $this->as('admin@park.example');
+        foreach (['', '   ', '　　', " \t　"] as $blank) {
+            $this->from('/welcome')->post('/welcome', ['name' => '氏名', 'company_name' => $blank])->assertSessionHasErrors('company_name');
+            $this->assertNull(DB::table('users')->where('email', 'admin@park.example')->value('profile_completed_at'));
+            $this->assertNull(DB::table('users')->where('email', 'admin@park.example')->value('company_name'));
+        }
+        $this->from('/welcome')->post('/welcome', ['name' => '氏名'])->assertSessionHasErrors('company_name');
+    }
+
+    public function test_h4_company_length_boundary(): void
+    {
+        $this->unfinish('admin@park.example');
+        $this->as('admin@park.example');
+        $this->from('/welcome')->post('/welcome', ['name' => '氏名', 'company_name' => str_repeat('あ', 101)])->assertSessionHasErrors('company_name');
+        $this->assertNull(DB::table('users')->where('email', 'admin@park.example')->value('profile_completed_at'));
+        $this->post('/welcome', ['name' => '氏名', 'company_name' => str_repeat('あ', 100)])->assertRedirect(url('/admin'));
+        $this->assertSame(str_repeat('あ', 100), DB::table('users')->where('email', 'admin@park.example')->value('company_name'));
+    }
+
+    public function test_h5_company_trimmed_and_saved(): void
+    {
+        $this->unfinish('admin@park.example');
+        $this->as('admin@park.example')->post('/welcome', ['name' => '氏名', 'company_name' => '  見本運営株式会社　'])->assertRedirect(url('/admin'));
+        $this->assertSame('見本運営株式会社', DB::table('users')->where('email', 'admin@park.example')->value('company_name'));
+    }
+
+    public function test_h6_account_company_optional_and_limited(): void
+    {
+        $this->as('admin@park.example')->get('/account')->assertOk()->assertSee('企業名')->assertSee('メールの差出人の名前にも使います');
+        $this->post('/account', ['name' => '管理者 太郎', 'company_name' => '新社名'])->assertRedirect();
+        $this->assertSame('新社名', DB::table('users')->where('email', 'admin@park.example')->value('company_name'));
+        $this->post('/account', ['name' => '管理者 太郎'])->assertRedirect();
+        $this->assertSame('新社名', DB::table('users')->where('email', 'admin@park.example')->value('company_name'));
+        $this->post('/account', ['name' => '管理者 太郎', 'company_name' => '　'])->assertRedirect();
+        $this->assertSame('新社名', DB::table('users')->where('email', 'admin@park.example')->value('company_name'));
+        $this->from('/account')->post('/account', ['name' => '管理者 太郎', 'company_name' => str_repeat('あ', 101)])->assertSessionHasErrors('company_name');
+        $this->assertSame('新社名', DB::table('users')->where('email', 'admin@park.example')->value('company_name'));
+    }
+
+    public function test_h7_login_bar_with_company(): void
+    {
+        $this->as('admin@park.example')->get('/admin')->assertOk()->assertSee('管理者としてログインしています：')->assertDontSee('管理者（');
+        DB::table('users')->where('email', 'admin@park.example')->update(['company_name' => '見本運営株式会社']);
+        $this->as('admin@park.example')->get('/admin')->assertSee('管理者（見本運営株式会社）としてログインしています：', false);
+    }
+
+    public function test_h8_settings_lists_company(): void
+    {
+        DB::table('users')->where('email', 'admin@park.example')->update(['company_name' => '見本運営株式会社']);
+        $this->as('admin@park.example')->get('/admin/settings')->assertOk()->assertSee('企業名')->assertSee('見本運営株式会社');
+    }
+
+    public function test_i1_welcome_shows_ses_name(): void
+    {
+        $this->unfinish('ses1@park.example');
+        $this->as('ses1@park.example')->get('/welcome')->assertOk()->assertSee('SES名')
+            ->assertSee('value="みどり情報システム"', false)->assertSee('管理者が入れた名前です。正式名称に直してください。')->assertDontSee('企業名');
+    }
+
+    public function test_i2_blank_ses_name_is_refused(): void
+    {
+        $this->unfinish('ses1@park.example');
+        $this->as('ses1@park.example');
+        $before = DB::table('ses_companies')->where('id', 1)->first();
+        foreach (['', '   ', '　　'] as $blank) {
+            $this->from('/welcome')->post('/welcome', ['name' => '氏名', 'ses_name' => $blank])->assertSessionHasErrors('ses_name');
+        }
+        $this->from('/welcome')->post('/welcome', ['name' => '氏名'])->assertSessionHasErrors('ses_name');
+        $after = DB::table('ses_companies')->where('id', 1)->first();
+        $this->assertSame('みどり情報システム', $after->name);
+        $this->assertSame($before->updated_at, $after->updated_at);
+        $this->assertNull(DB::table('users')->where('email', 'ses1@park.example')->value('profile_completed_at'));
+        $this->assertSame(0, $this->renameLogs());
+    }
+
+    public function test_i3_ses_name_length_boundary(): void
+    {
+        $this->unfinish('ses1@park.example');
+        $this->as('ses1@park.example');
+        $this->from('/welcome')->post('/welcome', ['name' => '氏名', 'ses_name' => str_repeat('あ', 101)])->assertSessionHasErrors('ses_name');
+        $this->assertSame('みどり情報システム', $this->sesName());
+        $this->post('/welcome', ['name' => '氏名', 'ses_name' => str_repeat('あ', 100)])->assertRedirect();
+        $this->assertSame(str_repeat('あ', 100), $this->sesName());
+    }
+
+    public function test_i4_i5_rename_records_and_notifies(): void
+    {
+        $this->unfinish('ses1@park.example');
+        $confirmed = DB::table('ses_companies')->where('id', 1)->value('self_confirmed_at');
+        DB::table('ses_companies')->where('id', 1)->update(['updated_at' => '2020-01-01 00:00:00']);
+        $mails = DB::table('mail_outbox')->count();
+        $this->as('ses1@park.example')->post('/welcome', ['name' => '氏名', 'ses_name' => '  株式会社みどり情報システム　'])->assertRedirect(url('/ses'));
+        $row = DB::table('ses_companies')->where('id', 1)->first();
+        $this->assertSame('株式会社みどり情報システム', $row->name);
+        $this->assertSame($confirmed, $row->self_confirmed_at);
+        $this->assertNotSame('2020-01-01 00:00:00', $row->updated_at);
+        $this->assertSame(1, $this->renameLogs());
+        $this->assertDatabaseHas('audit_log', ['action' => 'ses-rename', 'detail' => 'みどり情報システム → 株式会社みどり情報システム']);
+        $this->assertSame($this->adminCount(), $this->renameNotes());
+        $n = DB::table('app_notifications')->where('title', 'SES の名前が変わりました')->first();
+        $this->assertSame('みどり情報システム が名前を 株式会社みどり情報システム に変えました。', $n->body);
+        $this->assertSame('/admin/ses/1', $n->link);
+        $this->assertSame($mails, DB::table('mail_outbox')->count(), '名前の変更ではメールを出さない');
+    }
+
+    public function test_i6_same_name_changes_nothing(): void
+    {
+        $this->unfinish('ses1@park.example');
+        DB::table('ses_companies')->where('id', 1)->update(['updated_at' => '2020-01-01 00:00:00']);
+        $this->as('ses1@park.example')->post('/welcome', ['name' => '氏名', 'ses_name' => ' みどり情報システム '])->assertRedirect(url('/ses'));
+        $this->assertSame('2020-01-01 00:00:00', DB::table('ses_companies')->where('id', 1)->value('updated_at'));
+        $this->assertSame(0, $this->renameLogs());
+        $this->assertSame(0, $this->renameNotes());
+    }
+
+    public function test_i7_new_name_shows_everywhere(): void
+    {
+        $this->unfinish('ses1@park.example');
+        $this->as('ses1@park.example')->post('/welcome', ['name' => '氏名', 'ses_name' => '株式会社みどり情報システム']);
+        $this->as('ses1@park.example')->get('/ses')->assertSee('SES（株式会社みどり情報システム）');
+        $this->get('/ses/company')->assertSee('株式会社みどり情報システム');
+        $this->as('admin@park.example')->get('/admin/ses')->assertOk()->assertSee('株式会社みどり情報システム');
+        $this->get('/admin/ses/1')->assertOk()->assertSee('株式会社みどり情報システム');
+        $this->get('/admin/engineers')->assertOk()->assertSee('株式会社みどり情報システム');
+        $this->assertStringContainsString('株式会社みどり情報システム', user_label(User::where('email', 'ses1@park.example')->first()));
+    }
+
+    public function test_i8_duplicate_name_warns(): void
+    {
+        $this->unfinish('ses1@park.example');
+        $this->as('ses1@park.example')->post('/welcome', ['name' => '氏名', 'ses_name' => 'あおぞらテック'])->assertRedirect();
+        $this->assertSame('あおぞらテック', $this->sesName());
+        $flash = session('flash');
+        $this->assertSame('warn', $flash['type']);
+        $this->assertStringContainsString('同じ名前の SES がほかにもあります', $flash['msg']);
+        $n = DB::table('app_notifications')->where('title', 'SES の名前が変わりました')->first();
+        $this->assertStringContainsString('（同じ名前の SES がほかにもあります）', $n->body);
+    }
+
+    public function test_i9_second_contact_sees_updated_name(): void
+    {
+        W::createUser('ses1b@park.example', '緑川 二郎', 'ses', 'park1234', ['ses_id' => 1]);
+        $this->unfinish('ses1@park.example', 'ses1b@park.example');
+        $this->as('ses1@park.example')->post('/welcome', ['name' => '氏名', 'ses_name' => '新名称株式会社'])->assertRedirect();
+        $first = DB::table('users')->where('email', 'ses1@park.example')->value('profile_completed_at');
+        $this->assertNotNull($first);
+        $this->as('ses1b@park.example')->get('/welcome')->assertOk()->assertSee('value="新名称株式会社"', false);
+        $notes = $this->renameNotes();
+        $this->post('/welcome', ['name' => '二郎', 'ses_name' => '新名称株式会社'])->assertRedirect();
+        $this->assertSame($notes, $this->renameNotes());
+        $this->assertSame(1, $this->renameLogs());
+        $this->assertSame($first, DB::table('users')->where('email', 'ses1@park.example')->value('profile_completed_at'));
+        // 後から直せば後の名前になる
+        $this->unfinish('ses1b@park.example');
+        $this->post('/welcome', ['name' => '二郎', 'ses_name' => '後の名前'])->assertRedirect();
+        $this->assertSame('後の名前', $this->sesName());
+        $this->assertSame(2, $this->renameLogs());
+    }
+
+    public function test_i10_account_ses_name(): void
+    {
+        $this->as('ses1@park.example')->get('/account')->assertOk()->assertSee('SES名')->assertSee('value="みどり情報システム"', false);
+        $this->post('/account', ['name' => '緑川 一郎', 'ses_name' => '新しい名前'])->assertRedirect();
+        $this->assertSame('新しい名前', $this->sesName());
+        $this->assertSame(1, $this->renameLogs());
+        $this->assertSame($this->adminCount(), $this->renameNotes());
+        $this->post('/account', ['name' => '緑川 一郎'])->assertRedirect();
+        $this->post('/account', ['name' => '緑川 一郎', 'ses_name' => '　'])->assertRedirect();
+        $this->assertSame('新しい名前', $this->sesName());
+        $this->from('/account')->post('/account', ['name' => '緑川 一郎', 'ses_name' => str_repeat('あ', 101)])->assertSessionHasErrors('ses_name');
+        $this->assertSame('新しい名前', $this->sesName());
+        $this->post('/account', ['name' => '緑川 一郎', 'ses_name' => 'あおぞらテック'])->assertRedirect(url('/account'));
+        $this->assertSame('warn', session('flash')['type']);
+    }
+
+    public function test_i11_company_screen_rename(): void
+    {
+        $this->as('ses1@park.example')->get('/ses/company')->assertOk()->assertSee('SES名（会社名）');
+        $this->post('/ses/company', ['name' => '会社画面で変更'])->assertRedirect(url('/ses/company'));
+        $this->assertSame('会社画面で変更', $this->sesName());
+        $this->assertSame(1, $this->renameLogs());
+        $this->assertSame($this->adminCount(), $this->renameNotes());
+        $this->from('/ses/company')->post('/ses/company', ['name' => str_repeat('あ', 101)])->assertSessionHasErrors('name');
+        $this->post('/ses/company', ['name' => ''])->assertRedirect();
+        $this->assertSame('会社画面で変更', $this->sesName());
+    }
+
+    public function test_i12_ses_name_hint_for_admin(): void
+    {
+        $this->as('admin@park.example')->get('/admin/ses/new')->assertOk()->assertSee('略称でもかまいません');
+        $this->get('/admin/ses/1')->assertOk()->assertSee('略称でもかまいません');
+        $this->post('/admin/ses/1', ['name' => '管理者が直した名前']);
+        $this->assertSame(0, $this->renameNotes());
+        $this->assertNull(DB::table('ses_companies')->where('id', 1)->value('self_confirmed_at'));
+    }
+
+    public function test_j1_engineer_has_no_company_fields(): void
+    {
+        $this->unfinish('eg1@park.example');
+        $eg = User::where('email', 'eg1@park.example')->first();
+        $sesBefore = $this->sesName((int) $eg->ses_id);
+        $this->as('eg1@park.example')->get('/welcome')->assertOk()->assertDontSee('企業名')->assertDontSee('SES名');
+        $this->post('/welcome', ['name' => '山田 太郎', 'company_name' => '勝手な会社', 'ses_name' => '勝手なSES'])->assertRedirect();
+        $this->assertNotNull(DB::table('users')->where('id', $eg->id)->value('profile_completed_at'));
+        $this->assertNull(DB::table('users')->where('id', $eg->id)->value('company_name'));
+        $this->assertSame($sesBefore, $this->sesName((int) $eg->ses_id));
+        $this->get('/account')->assertOk()->assertDontSee('企業名')->assertDontSee('SES名');
+        $this->post('/account', ['name' => '山田 太郎', 'company_name' => '勝手な会社', 'ses_name' => '勝手なSES'])->assertRedirect();
+        $this->assertNull(DB::table('users')->where('id', $eg->id)->value('company_name'));
+        $this->assertSame($sesBefore, $this->sesName((int) $eg->ses_id));
+        $this->assertSame(0, $this->renameLogs());
+    }
+
+    public function test_j2_other_roles_fields_ignored(): void
+    {
+        $this->unfinish('admin@park.example', 'ses1@park.example');
+        $this->as('admin@park.example')->get('/welcome')->assertDontSee('SES名');
+        $this->post('/welcome', ['name' => '管理', 'company_name' => '運営社', 'ses_name' => '混ぜた名前'])->assertRedirect(url('/admin'));
+        $this->assertSame('みどり情報システム', $this->sesName());
+        $this->assertSame('運営社', DB::table('users')->where('email', 'admin@park.example')->value('company_name'));
+        $this->as('ses1@park.example')->get('/welcome')->assertDontSee('企業名');
+        $this->post('/welcome', ['name' => '担当', 'ses_name' => 'みどり情報システム', 'company_name' => '混ぜた会社'])->assertRedirect();
+        $this->assertNull(DB::table('users')->where('email', 'ses1@park.example')->value('company_name'));
+    }
+
+    public function test_j3_done_user_redirected_from_welcome(): void
+    {
+        $this->as('admin@park.example')->get('/welcome')->assertRedirect(url('/account'));
+        $this->as('ses1@park.example')->get('/welcome')->assertRedirect(url('/account'));
+    }
+
+    public function test_j4_direct_row_is_not_renamed(): void
+    {
+        $direct = W::directSesId();
+        $before = $this->sesName($direct);
+        $admin = User::where('email', 'admin@park.example')->first();
+        $this->assertNull(W::renameSes($direct, 'x', $admin));
+        $this->assertSame($before, $this->sesName($direct));
+        $this->assertSame(0, $this->renameLogs());
+        $this->assertSame(0, $this->renameNotes());
+    }
+
+    public function test_hi_control_chars_and_isolation(): void
+    {
+        $this->unfinish('ses1@park.example');
+        $this->as('ses1@park.example')->post('/welcome', ['name' => '氏名', 'ses_name' => "\u{0007}　制御入り\u{0000}　"])->assertRedirect();
+        $this->assertSame('制御入り', $this->sesName(1));
+        $this->assertSame('あおぞらテック', $this->sesName(2));
+        $this->assertSame('ひだまりソリューションズ', $this->sesName(3));
+        $this->as("ses1@park.example")->get('/admin/settings')->assertForbidden();
     }
 }

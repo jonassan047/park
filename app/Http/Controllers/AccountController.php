@@ -30,25 +30,40 @@ class AccountController extends Controller
         return redirect('/notifications');
     }
 
-    public function show(Request $r) { return view('account.show', ['u' => $r->user()]); }
+    public function show(Request $r)
+    {
+        $u = $r->user();
+        return view('account.show', ['u' => $u, 'sesName' => $u->role === 'ses' ? DB::table('ses_companies')->where('id', $u->ses_id)->value('name') : null]);
+    }
 
     public function update(Request $r)
     {
-        $r->validate($this->profileRules(false), [], $this->profileNames());
-        W::saveProfile($r->user(), $r->all());
+        $this->trimNames($r);
+        // まだ登録していない人は、ここからの登録でも企業名・SES名を必須にする
+        $r->validate($this->profileRules(!$r->user()->profile_completed_at, $r->user()->role), [], $this->profileNames());
+        $warn = W::saveProfile($r->user(), $r->all());
         DB::table('users')->where('id', $r->user()->id)->update(['mail_opt_in' => $r->boolean('mail_opt_in')]);
-        return $this->go('/account', '保存しました。');
+        return $warn ? $this->go('/account', '保存しました。'.$warn, 'warn') : $this->go('/account', '保存しました。');
     }
 
-    // 最初の情報登録の入力欄の決まり（氏名は、アカウントの画面では空でもよい＝今の名前のまま）
-    private function profileRules(bool $nameRequired): array
+    // 企業名・SES名の前後の空白（全角の空白も）を取る。空になれば null（Laravel の標準の取り除きは全角の空白を取らないため）
+    private function trimNames(Request $r): void
     {
-        return ['name' => ($nameRequired ? 'required|' : 'nullable|').'max:100', 'kana' => 'nullable|max:100', 'phone' => ['nullable', 'max:30', 'regex:/^[0-9+\-() ]*$/'], 'position' => 'nullable|max:100'];
+        $r->merge(collect(['company_name', 'ses_name'])->mapWithKeys(fn ($k) => [$k => clean_name($r->input($k))])->all());
+    }
+
+    // 最初の情報登録の入力欄の決まり（氏名・企業名・SES名は、アカウントの画面では空でもよい＝今のままにする）
+    private function profileRules(bool $required, string $role): array
+    {
+        $rules = ['name' => ($required ? 'required|' : 'nullable|').'max:100', 'kana' => 'nullable|max:100', 'phone' => ['nullable', 'max:30', 'regex:/^[0-9+\-() ]*$/'], 'position' => 'nullable|max:100'];
+        if ($role === 'admin') $rules['company_name'] = ($required ? 'required' : 'nullable').'|max:100';
+        if ($role === 'ses') $rules['ses_name'] = ($required ? 'required' : 'nullable').'|max:100';
+        return $rules;
     }
 
     private function profileNames(): array
     {
-        return ['name' => '氏名', 'kana' => 'ふりがな', 'phone' => '電話', 'position' => '所属・役職'];
+        return ['name' => '氏名', 'kana' => 'ふりがな', 'phone' => '電話', 'position' => '所属・役職', 'company_name' => '企業名', 'ses_name' => 'SES名'];
     }
 
     // 最初のログインで出す「あなたの情報」。済んでいる人は、アカウントの画面へ
@@ -56,7 +71,9 @@ class AccountController extends Controller
     {
         $u = $r->user();
         if ($u->profile_completed_at) return redirect('/account');
-        $v = (object) ['name' => $u->name, 'kana' => $u->kana, 'phone' => $u->phone, 'position' => $u->position];
+        $v = (object) ['name' => $u->name, 'kana' => $u->kana, 'phone' => $u->phone, 'position' => $u->position,
+            'company_name' => $u->role === 'admin' ? $u->company_name : null,
+            'ses_name' => $u->role === 'ses' ? DB::table('ses_companies')->where('id', $u->ses_id)->value('name') : null];
         if ($u->role === 'eg' && $u->engineer_id) {
             $e = DB::table('engineers')->find($u->engineer_id);
             $v->name = $u->name ?: ($e->name ?? '');
@@ -67,11 +84,12 @@ class AccountController extends Controller
 
     public function welcome(Request $r)
     {
-        $r->validate($this->profileRules(true), [], $this->profileNames());
+        $this->trimNames($r);
         $u = $r->user();
-        W::saveProfile($u, $r->all());
+        $r->validate($this->profileRules(true, $u->role), [], $this->profileNames());
+        $warn = W::saveProfile($u, $r->all());
         [$to, $msg] = W::profileHome($u);
-        return $this->go($to, $msg ?? '登録しました。');
+        return $warn ? $this->go($to, '登録しました。'.$warn, 'warn') : $this->go($to, $msg ?? '登録しました。');
     }
 
     public function password(Request $r)

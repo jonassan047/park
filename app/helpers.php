@@ -45,11 +45,19 @@ function lbl(string $map, ?string $key): string
     return PARK_LABELS[$map][$key] ?? (string) $key;
 }
 
-// メールの宛名・差出人・画面の名前表示用：「SES名 氏名」（管理者は署名の名前 + 氏名）
+// 管理者の企業名（メールの差出人・署名に使う）。管理者でない・企業名が空なら null
+function admin_sender(?object $u): ?string
+{
+    if (!$u || ($u->role ?? '') !== 'admin') return null;
+    $c = trim((string) ($u->company_name ?? ''));
+    return $c === '' ? null : $c;
+}
+
+// メールの宛名・差出人・画面の名前表示用：「SES名 氏名」（管理者は企業名 + 氏名。企業名がなければ運営の名前 + 氏名）
 function user_label(?object $u): string
 {
     if (!$u) return '';
-    if ($u->role === 'admin') return trim(setting('operator_name').' '.$u->name);
+    if ($u->role === 'admin') return trim((admin_sender($u) ?? setting('operator_name')).' '.$u->name);
     $s = DB::table('ses_companies')->where('id', $u->ses_id)->first(['name', 'kind']);
     if ($u->role === 'eg' && ($s->kind ?? '') === 'direct') return (string) $u->name; // 管理者の直属は、会社名をつけない
     return trim(($s->name ?? '').' '.$u->name);
@@ -164,6 +172,14 @@ function loose_match(string $a, string $b): bool
             || (str_starts_with($b, $x) && str_starts_with($a, $y) && !str_starts_with($b, $y))) return false;
     }
     return true;
+}
+
+// 企業名・SES名の整え：文字列でなければ空、改行などの制御文字を取り、前後の空白（全角も）を取る。空なら null
+function clean_name($v): ?string
+{
+    if (!is_string($v)) return null;
+    $v = preg_replace('/^[\s　]+|[\s　]+$/u', '', preg_replace('/\p{Cc}/u', '', $v) ?? '') ?? '';
+    return $v === '' ? null : $v;
 }
 
 function int_or_null($v): ?int { return is_numeric($v) ? (int) $v : null; }

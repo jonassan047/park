@@ -2,7 +2,7 @@
 @section('content')
 <div class="cols"><div>
 <x-card title="基本と報酬の率（仮）"><form method="post" action="{{ url('/admin/settings') }}">@csrf<div class="grid2">
-<x-field label="サービス名" name="app_name" :value="setting('app_name')" /><x-field label="管理者の名前（メールの署名）" name="operator_name" :value="setting('operator_name')" />
+<x-field label="サービス名" name="app_name" :value="setting('app_name')" /><x-field label="運営の名前（企業名が無いとき・自動のメールの署名）" name="operator_name" :value="setting('operator_name')" />
 <x-field label="初期費用（%）" name="fee_initial_rate" type="number" step="0.1" :value="setting('fee_initial_rate')" />
 <x-field label="月額費用（%）" name="fee_monthly_rate" type="number" step="0.1" :value="setting('fee_monthly_rate')" />
 <x-field label="月額は稼働の何か月目から" name="monthly_from" type="select" :options="['1' => '1か月目から', '2' => '2か月目から']" :value="setting('monthly_from')" />
@@ -13,8 +13,8 @@
 <p class="muted">パスワードを画面や Git に残さないため、メールの送信の設定は <code>.env</code> の MAIL_ の欄に書きます（Git には上げません）。書き方は README にあります。</p>
 <form method="post" action="{{ url('/admin/settings/testmail') }}">@csrf<x-field label="テストメールの宛先" name="to" type="email" :value="auth()->user()->email" /><button class="btn ghost small">テストメールを送る</button></form></x-card>
 </div><div>
-<x-card title="管理者"><x-table :head="['名前', 'メール', '状態', '最終ログイン', '']" :count="$admins->count()">
-@foreach($admins as $u)<tr><td>{{ $u->name }}</td><td>{{ $u->email }}</td><td>{{ !$u->active ? '停止' : ($u->password ? '使用中' : '招待中') }}</td><td>{{ fmt_dt($u->last_login) }}</td>
+<x-card title="管理者"><x-table :head="['名前', '企業名', 'メール', '状態', '最終ログイン', '']" :count="$admins->count()">
+@foreach($admins as $u)<tr><td>{{ $u->name }}</td><td>{{ $u->company_name ?: '—' }}</td><td>{{ $u->email }}</td><td>{{ !$u->active ? '停止' : ($u->password ? '使用中' : '招待中') }}</td><td>{{ fmt_dt($u->last_login) }}</td>
 <td>@if($u->active && !$u->password)<form method="post" action="{{ url('/admin/settings/admins/'.$u->id.'/reinvite') }}" class="inline">@csrf<button class="btn ghost small">招待を送り直す</button></form>@endif</td></tr>@endforeach</x-table>
 <form method="post" action="{{ url('/admin/settings/admins') }}">@csrf<div class="grid2"><x-field label="名前" name="name" required /><x-field label="メール" name="email" type="email" required /></div><button class="btn ghost small">管理者を招待</button></form></x-card>
 <x-card title="技術マスタ"><p>案件メールとエンジニアのスキルを突き合わせる辞書（分類・別名）。</p><a class="btn ghost small" href="{{ url('/admin/skills') }}">技術マスタを開く</a></x-card>

@@ -132,7 +132,7 @@ FOCUS では、Windows の起動で自動で動く（2026-10-16〜）。Ollama �
 
 - 立場は ADM（管理者。今は2人）・SES・EG（エンジニア）。登録できるのは上の立場の人だけ：管理者が管理者・SES を、SES（と管理者）がエンジニアを登録する。
 - 上の立場の人が入れた情報も、本人が責任を持つ。本人が「確認しました」を押すまで `self_confirmed_at` は空で、エンジニアは応募できない。管理者・SES が書き換えると空に戻る（`engineers`・`ses_companies`）。
-- 最初の情報登録（2026-10-17）：`users` に `kana`・`phone`・`position`・`profile_completed_at` を足した。`profile_completed_at` が空の人は、2要素認証のあと、`Role` ミドルウェアが `/welcome`（あなたの情報）へ回す（`/account`・ログアウト・使い方は開ける）。ログイン中の画面の上に、立場の帯（管理者／SES／エンジニア）を出す。管理者は `/admin/settings` で管理者を招待・送り直しでき、管理者が登録した SES はすぐ参加中になる。
+- 最初の情報登録（2026-10-17）：`users` に `kana`・`phone`・`position`・`profile_completed_at` を足した。`profile_completed_at` が空の人は、2要素認証のあと、`Role` ミドルウェアが `/welcome`（あなたの情報）へ回す（`/account`・ログアウト・使い方は開ける）。ログイン中の画面の上に、立場の帯（管理者／SES／エンジニア）を出す。管理者は `/admin/settings` で管理者を招待・送り直しでき、管理者が登録した SES はすぐ参加中になる。最初の情報登録では、管理者は企業名（`users.company_name`。メールの差出人にも使う）、SES は SES名（`ses_companies.name`。変えると管理者にベルで知らせる）も必須で入れる。
 - 管理者の直属のエンジニア（2026-10-17）：`ses_companies.kind`（`ses`／`direct`）。`direct` の行（`W::directSesId()` が必要なときに1つ作る）は SES として扱わず、一覧・数・請求・SES ログインから外す。直属の知らせ（`N::toSes`）は管理者全員に届く。直属の行の名前は「管理者の直属」。
 - エンジニアは案件ごとに経歴を更新する。成約するとホームに「経歴の更新」が出て、書くと `contracts.history_updated_at` が入る。契約を終了にすると本人に知らせ、終了日より前に書いたものは書き直してもらう。
 
@@ -152,6 +152,8 @@ MAIL_PASSWORD=アプリ パスワード
 MAIL_FROM_ADDRESS=送信に使うアドレス
 MAIL_FROM_NAME="PARK 管理者"
 ```
+
+`MAIL_FROM_NAME` は、企業名を入れていない管理者のメールと、自動のメール（通知・確認コードなど）の差出人の名前です。企業名を入れた管理者が自分で送るメールは、差出人の名前がその企業名になります。アドレス（`MAIL_FROM_ADDRESS`）は全メール共通です。
 
 設定したら `php artisan config:clear` をして、管理者の「設定」→「テストメールを送る」で確かめる。
 

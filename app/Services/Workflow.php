@@ -42,7 +42,7 @@ class Workflow
         $what = ['eg' => 'エンジニアとして PARK に登録されました。', 'ses' => 'SES のご担当者として PARK にご招待します。', 'admin' => 'PARK の管理者に招待されました。'][$d['role']];
         N::queueMail($email, $d['name'], 'ご招待：パスワードを設定してください',
             user_label($u)." 様\n\n{$what}".($note ? "\n$note" : '')."\n\n次のリンクから、パスワードを設定してください（7日間有効）。\n".url("/invite/$t")."\n\n"
-            .($d['role'] === 'eg' ? 'パスワードの設定のときに、個人情報の取り扱いへの同意をお願いしています。スキルシートは、事実にもとづいて一緒に作ります。' : ''), 'invite');
+            .($d['role'] === 'eg' ? 'パスワードの設定のときに、個人情報の取り扱いへの同意をお願いしています。スキルシートは、事実にもとづいて一緒に作ります。' : ''), 'invite', null, admin_sender($actor));
         N::audit($actor->id ?? null, 'invite', lbl('role', $d['role'])." {$d['name']} <$email>");
         return $u;
     }
@@ -55,14 +55,35 @@ class Workflow
 
     // ---------- 最初の情報登録 ----------
     // 氏名・ふりがな・電話・所属／役職を保存する。登録を済ませた日時は、最初の1回だけ入れる
-    public static function saveProfile($user, array $d): void
+    // 管理者は企業名、SES は SES名（ses_companies.name）も保存する。戻り値は、画面に出す注意（なければ null）
+    public static function saveProfile($user, array $d): ?string
     {
         $upd = ['kana' => str_in($d['kana'] ?? ''), 'phone' => str_in($d['phone'] ?? ''), 'updated_at' => now_str()];
         $upd['name'] = str_in($d['name'] ?? '') ?? $user->name;
         if ($user->role !== 'eg') $upd['position'] = str_in($d['position'] ?? '');
+        if ($user->role === 'admin' && ($c = str_in($d['company_name'] ?? '')) !== null) $upd['company_name'] = $c;
         if (!DB::table('users')->where('id', $user->id)->value('profile_completed_at')) $upd['profile_completed_at'] = now_str();
-        DB::table('users')->where('id', $user->id)->update($upd);
+        $warn = null;
+        DB::transaction(function () use ($user, $upd, $d, &$warn) {
+            DB::table('users')->where('id', $user->id)->update($upd);
+            if ($user->role === 'ses' && ($n = str_in($d['ses_name'] ?? '')) !== null) $warn = self::renameSes((int) $user->ses_id, $n, $user);
+        });
         N::audit($user->id, 'profile', '');
+        return $warn;
+    }
+
+    // SES名を変える（最初の情報登録・アカウント・会社の画面の三つの入口で同じ動き）。変えたときだけ記録して、管理者にベルで知らせる。
+    // 同じ名前の SES がほかにあれば、その注意の文を返す
+    public static function renameSes(int $sesId, string $name, $actor): ?string
+    {
+        $name = trim($name);
+        $s = DB::table('ses_companies')->find($sesId);
+        if (!$s || $s->kind !== 'ses' || $name === '' || $s->name === $name) return null;
+        DB::table('ses_companies')->where('id', $sesId)->update(['name' => $name, 'updated_at' => now_str()]);
+        N::audit($actor->id ?? null, 'ses-rename', "{$s->name} → $name");
+        $dup = DB::table('ses_companies')->where('id', '!=', $sesId)->where('name', $name)->exists();
+        N::toAdmins('SES の名前が変わりました', "{$s->name} が名前を $name に変えました。".($dup ? '（同じ名前の SES がほかにもあります）' : ''), "/admin/ses/$sesId", false, 'ses-rename');
+        return $dup ? '同じ名前の SES がほかにもあります。見分けられるよう、正式名称で入れてください。' : null;
     }
 
     // 情報の登録のあとに進む先と、そこに出すお知らせ（なければ null）

@@ -5,6 +5,11 @@
 <x-field label="お名前" name="name" :value="$u->name" required />
 <x-field label="ふりがな" name="kana" :value="$u->kana" />
 <x-field label="電話" name="phone" type="tel" :value="$u->phone" />
+@if($u->role === 'admin')
+<x-field label="企業名" name="company_name" :value="$u->company_name" hint="メールの差出人の名前にも使います。" />
+@elseif($u->role === 'ses')
+<x-field label="SES名" name="ses_name" :value="$sesName" hint="変えると、管理者にお知らせが届きます。" />
+@endif
 @unless($u->role === 'eg')
 <x-field label="所属・役職" name="position" :value="$u->position" />
 @endunless

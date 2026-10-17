@@ -14,12 +14,12 @@ class Notifier
         return !in_array(config('mail.default'), ['log', 'array', null], true);
     }
 
-    public static function queueMail(?string $to, ?string $name, string $subject, string $body, string $kind = 'general', ?string $replyTo = null): ?int
+    public static function queueMail(?string $to, ?string $name, string $subject, string $body, string $kind = 'general', ?string $replyTo = null, ?string $fromName = null): ?int
     {
         if (!$to) return null;
-        $footer = "\n\n――――――――――\n".setting('operator_name')."\n".url('/')."\n※このメールは PARK から自動で送っています。";
+        $footer = "\n\n――――――――――\n".($fromName ?: setting('operator_name'))."\n".url('/')."\n※このメールは PARK から自動で送っています。";
         $id = DB::table('mail_outbox')->insertGetId([
-            'to_email' => $to, 'to_name' => $name ?? '', 'subject' => '['.setting('app_name').'] '.$subject, 'body' => $body.$footer,
+            'to_email' => $to, 'to_name' => $name ?? '', 'from_name' => $fromName ?: null, 'subject' => '['.setting('app_name').'] '.$subject, 'body' => $body.$footer,
             'kind' => $kind, 'status' => self::canSend() ? 'queued' : 'saved', 'created_at' => now_str(), 'reply_to' => $replyTo,
         ]);
         if (self::canSend()) self::deliver($id);
@@ -34,6 +34,7 @@ class Notifier
             Mail::raw($m->body, function ($msg) use ($m) {
                 $msg->to($m->to_email, $m->to_name)->subject($m->subject);
                 if (!empty($m->reply_to)) $msg->replyTo($m->reply_to);
+                if ($from = self::fromOf($m)) $msg->from(...$from);
             });
             DB::table('mail_outbox')->where('id', $id)->update(['status' => 'sent', 'sent_at' => now_str(), 'error' => null]);
             return true;
@@ -41,6 +42,12 @@ class Notifier
             DB::table('mail_outbox')->where('id', $id)->update(['status' => 'failed', 'error' => mb_substr($e->getMessage(), 0, 500)]);
             return false;
         }
+    }
+
+    // 差出人の名前があれば [アドレス, 名前]。アドレスは全メール共通のまま（送信ドメインの認証のため）。なければ null（.env の既定）
+    public static function fromOf(object $m): ?array
+    {
+        return empty($m->from_name) ? null : [config('mail.from.address'), $m->from_name];
     }
 
     public static function flush(): void
