@@ -2,11 +2,11 @@
 
 SES 企業どうしを1つのグループにまとめ、届いた案件に、グループ全体のエンジニアからいちばん合う人を出して、**エンジニアの成約率を上げる**ための Web アプリ。成約したときだけ成功報酬（初期費用・月額費用）をいただく仕組み。
 
-構想・企画は [41_Park-Project](https://github.com/jonassan047/41_Park-Project)。2026-10-15 に、Node.js の試作（41_Park-Project の `81_PARKアプリ`）から PHP（Laravel 12）＋ MySQL（MariaDB）に移した。
+構想・企画は [41_Parks-Project](https://github.com/jonassan047/41_Parks-Project)。2026-10-15 に、Node.js の試作（41_Parks-Project の `81_PARKアプリ`）から PHP（Laravel 12）＋ MySQL（MariaDB）に移した。
 
 ## 動かし方（XAMPP）
 
-- 場所：`D:\xampp\htdocs\park`、URL：http://localhost/parks/
+- 場所：`D:\xampp\htdocs\parks`、URL：http://localhost/parks/
 - DB：`jonassan_park`（MariaDB、utf8mb4）
 - Apache：`httpd-vhosts.conf` に `Alias /parks "D:/xampp/htdocs/parks/public"` と、`public` の `<Directory>` に `RewriteOptions MergeBase`・`RewriteBase /parks/`（ほかの Laravel アプリと同じ形）。
 
@@ -72,11 +72,11 @@ git pull --ff-only
 
 ## デザイン
 
-緑系・丸いフォント（M PLUS Rounded 1c、Google Fonts）の公園風。見本は 41_Park-Project の `99_Data/index.html`（2026-10-16 に適用）。トップの写真（`public/img/`）は Unsplash のフリー画像を取り込んだもの（外部からは読み込まない）。
+緑系・丸いフォント（M PLUS Rounded 1c、Google Fonts）の公園風。見本は 41_Parks-Project の `99_Data/index.html`（2026-10-16 に適用）。トップの写真（`public/img/`）は Unsplash のフリー画像を取り込んだもの（外部からは読み込まない）。
 
 ## マニュアル
 
-運営・SES 企業さま・エンジニアの3種類。正本は `resources/manuals/`（`admin.md`・`ses.md`・`engineer.md`）で、アプリの「使い方」（`/manual`）から読める。SES・エンジニア向けはログイン前でも読める。運営向けは運営だけ。画面や流れを変えたら、マニュアルも直す。マニュアルとこの README の写しを、41_Park-Project の `04_Manual` に置いている（WIZ から読むため）。直したら写し直す。
+運営・SES 企業さま・エンジニアの3種類。正本は `resources/manuals/`（`admin.md`・`ses.md`・`engineer.md`）で、アプリの「使い方」（`/manual`）から読める。SES・エンジニア向けはログイン前でも読める。運営向けは運営だけ。画面や流れを変えたら、マニュアルも直す。マニュアルとこの README の写しを、41_Parks-Project の `04_Manual` に置いている（WIZ から読むため）。直したら写し直す。
 
 ## ログイン（2要素認証）
 
@@ -104,7 +104,7 @@ SES が受けた案件メールから、エンジニアへの案内メールを�
 
 ## 状態の点検（2026-10-16）
 
-`php artisan park:status` で、メール・AI の仕事・選考・確認待ちなどを数で出す（個人情報は出さない）。PARKS 担当のエージェント（41_Park-Project の `.claude/agents/park-manager.md`）が点検に使う。公開サーバーでは `/opt/php-8.3/bin/php artisan park:status`。
+`php artisan park:status` で、メール・AI の仕事・選考・確認待ちなどを数で出す（個人情報は出さない）。PARKS 担当のエージェント（41_Parks-Project の `.claude/agents/park-manager.md`）が点検に使う。公開サーバーでは `/opt/php-8.3/bin/php artisan park:status`。
 
 ## AI の仕事の箱（2026-10-16）
 
