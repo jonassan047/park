@@ -14,7 +14,20 @@ class Role
     {
         $u = $request->user();
         if (!$u || !$u->active) return redirect()->guest(url('/login'));
-        if ((int) $request->session()->get(TwoFactor::SESSION_KEY) !== (int) $u->id) return redirect()->guest(url('/two-factor/challenge'));
+        if ((int) $request->session()->get(TwoFactor::SESSION_KEY) !== (int) $u->id) {
+            // 一度確認コードを通った人は、聞かない（ブラウザに残ったログインの記録から戻ってきたときも）
+            if (TwoFactor::confirmed($u)) {
+                $request->session()->put(TwoFactor::SESSION_KEY, $u->id);
+            } elseif (TwoFactor::pending($request)) {
+                return redirect()->guest(url('/two-factor/challenge')); // ログインの途中。コードを入れてもらう
+            } else {
+                // パスワードを入れた記録（自動ログイン）だけが残っている。ログイン画面からやり直してもらう
+                auth()->logout();
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
+                return redirect()->guest(url('/login'));
+            }
+        }
         if ($roles && !in_array($u->role, $roles, true)) abort(403, 'このページを見る権限がありません。');
         return $next($request);
     }
