@@ -1,327 +1,230 @@
-# PLAN：最初の情報登録・ログイン中の立場の表示・管理者による登録・直属のエンジニア（2026-10-17）
+# PLAN：最初の情報登録に「企業名」（管理者）・「SES名」（SES）を足す（2026-10-17）
 
 ## 背景
 
 tezzo の要求（要約）：
 
-1. 管理者（運営、role=admin）・SES・エンジニアとも、最初のログインで自分の情報を登録する画面を出す。
-2. 色は今のまま（body.role-admin の青）で、「管理者でログインしている」ことを画面に明記する。
-3. 管理者は管理者・SES・エンジニアを登録できる。
-4. エンジニアは SES に紐づくが、例外として管理者に紐づく（直属の）エンジニアもいる。
+1. 最初のログインの「あなたの情報」（`/welcome`）で、管理者は「企業名」、SES は「SES名」を必須にする。エンジニアは変わらない。
+2. 管理者の企業名は保存先がないので `users` に列を足す。SES名は `ses_companies.name` に保存する（管理者が招待時に入れた略称が最初から入っている。正式名称は SES 自身が入れる）。
+3. 対象は `profile_completed_at` が空の人だけ。登録済みの管理者・SES は「アカウント」（`/account`）で直せる（必須にはしない）。
 
-方針（A〜G）は Leo が決めたもの。下の仕様はそれをそのまま形にしている。迷ったところは「仮定」として書き、末尾の「tezzo への質問」にまとめた。
+前の計画（最初の情報登録・立場の帯・直属）は実装済み。この計画はその上に足す。迷ったところは「仮定」に書き、末尾の「tezzo への質問」にまとめた。
 
-守ること：Laravel 12・Blade・`DB::table`、業務の手続きは `app/Services`（主に `Workflow`）、画面の文は日本語のやさしい言い方。外部ライブラリは足さない。個人情報を PLAN・テスト・コメントに書かない（テストは見本データ `@park.example` だけ使う）。
+守ること：Laravel 12・Blade・`DB::table`、業務の手続きは `app/Services/Workflow`、画面の文は日本語のやさしい言い方。外部ライブラリは足さない。テストは見本データ（`@park.example`）だけ使う。
 
 ## 受け入れ条件
 
-### A. 最初の情報登録
+### H. 管理者の企業名
 
-- A1. `users` に `kana`・`phone`・`position`（いずれも string null）と `profile_completed_at`（datetime null）がある。マイグレーション後、既存の人は全員 `profile_completed_at` が null。
-- A2. `profile_completed_at` が null の人が、2要素認証を済ませたあと、role ミドルウェアのかかる画面（例：`/admin`・`/ses`・`/eg`・`/cases/1`）を開くと `/welcome` へ転送される。
-- A3. A2 の人でも `/welcome`・`/account`（`/account/password` を含む）は転送されずに開ける。`/logout`・`/manual` も使える。
-- A4. 2要素認証が済んでいない人は、今までどおり `/two-factor/challenge`（または `/login`）へ回り、`/welcome` へは回らない。
-- A5. `GET /welcome`（題「あなたの情報」）に、氏名（必須）・ふりがな・電話・所属・役職（admin・ses だけ）が出る。初期値：admin・ses は `users` の値。eg は `users.name`（空なら `engineers.name`）と `engineers.kana`。
-- A6. 氏名が空で `POST /welcome` すると、保存されず、エラーが出る（`profile_completed_at` も null のまま）。
-- A7. 正しく `POST /welcome` すると `users` の name・kana・phone・position（eg は position を保存しない）と `profile_completed_at` が入る。
-- A8. 保存後の行き先：
-  - admin → `/admin`
-  - ses → 会社の `self_confirmed_at` が null なら `/ses/company`（メッセージ「会社の情報も確かめてください。」）、そうでなければ `/ses`
-  - eg → `engineers.self_confirmed_at` が null なら `/engineers/{engineer_id}`（メッセージ「登録の内容を確かめて『確認しました』を押してください。」）、そうでなければ `/eg`
-- A9. eg の `/welcome` の保存は `engineers` を書き換えない（`engineers.self_confirmed_at` も変わらない）。
-- A10. `profile_completed_at` が入った人は、A2 の画面を開いても転送されない。`GET /welcome` を開くと `/account` へ転送される。
-- A11. `/account` の「基本」で、氏名・ふりがな・電話・所属・役職（admin・ses だけ）を直せる。保存したとき `profile_completed_at` が null なら入れる。
-- A12. `/setup` で最初の運営を作ると、`/welcome` へ転送される（`/admin` ではない）。`/welcome` の氏名には setup で入れた名前が入っている。
-- A13. 見本データ（`DatabaseSeeder`）の人は `profile_completed_at` が入っていて、今のテストが転送で壊れない。
+- H1. `users` に `company_name`（string(100) null）がある。マイグレーション後、既存の人は全員 null。
+- H2. `profile_completed_at` が null の管理者の `GET /welcome` に「企業名」の欄（必須）が出る。初期値は `users.company_name`（null なら空）。
+- H3. 企業名が空・空白だけ（半角・全角の空白）で `POST /welcome` すると、保存されず「企業名」のエラーが出る（`profile_completed_at` も null のまま）。
+- H4. 101 文字以上でもエラー。100 文字ちょうどは保存できる。
+- H5. 正しく `POST /welcome` すると、`users.company_name` に前後の空白を取った値が入り、`/admin` へ進む。
+- H6. 登録済みの管理者の `/account`「基本」に「企業名」の欄（必須ではない）があり、直して保存できる。空で保存すると今の値のまま（氏名と同じ扱い）。101 文字以上はエラー。
+- H7. 立場の帯：企業名がある管理者は「管理者（{企業名}）としてログインしています：{氏名}」。無い管理者は今のまま「管理者としてログインしています：{氏名}」。
+- H8. `/admin/settings` の管理者の一覧に「企業名」の列が出る（無い人は「—」）。
 
-### B. ログイン中の立場の明記
+### I. SES の SES名
 
-- B1. admin が2要素認証を済ませて開いた画面のヘッダーの下に、帯で「管理者（運営）としてログインしています：{氏名}」が出る。
-- B2. ses なら「SES（{会社名}）のご担当者としてログインしています」、eg なら「エンジニアとしてログインしています」が出る。
-- B3. 2要素認証が済む前（`/two-factor/challenge`）と、ログイン前の画面には帯が出ない。
-- B4. 印刷用の画面（`$print` が true。例：`/engineers/1/sheet`）には帯が出ない。
-- B5. `lbl('role','admin')` は「運営」のまま。
+- I1. `profile_completed_at` が null の SES の `GET /welcome` に「SES名」の欄（必須）が出て、`ses_companies.name`（管理者が入れた名前）が入力済みで表示される。欄の下に hint「管理者が入れた名前です。正式名称に直してください。」。
+- I2. SES名が空・空白だけで `POST /welcome` すると、保存されず「SES名」のエラーが出る。`ses_companies.name` も `profile_completed_at` も変わらない。
+- I3. 101 文字以上でもエラー（`ses_companies.name` は 255 まで入るが、画面の上限は 100 にそろえる）。
+- I4. 正しく `POST /welcome` すると、`ses_companies.name` が前後の空白を取った値になり、今までどおり `/ses/company`（会社の確認がまだのとき）か `/ses` へ進む。
+- I5. 名前を変えたときだけ（前と違うとき）：
+  - `ses_companies.updated_at` が今になる。`self_confirmed_at` は変えない（SES 自身が直したので）。
+  - `audit_logs` に action=`ses-rename`、detail=「旧名 → 新名」が1行入る（会社名は個人情報ではないので入れてよい）。
+  - 管理者全員にベルの通知（メールは送らない）「SES の名前が変わりました」本文「{旧名} が名前を {新名} に変えました。」link=`/admin/ses/{id}`、kind=`ses-rename`。
+- I6. 名前が同じ（変えずに登録）なら、`ses_companies` は書き換えず、I5 の記録・通知も出さない。
+- I7. 変えた名前は、保存していない所すべてに出る（どこも `ses_companies.name` を join して表示しているため）：立場の帯、管理者の SES 一覧・詳細、エンジニア一覧の所属、案件・応募・契約・請求書の画面、`user_label`（ヘッダー右・メールの差出人の表示）、`/ses/company`。発行済みの請求書の宛名も新しい名前で出る（仮定 c）。
+- I8. ほかの SES と同じ名前でも保存できる。そのときは保存のあとのメッセージを warn にし「登録しました。同じ名前の SES がほかにもあります。見分けられるよう、正式名称で入れてください。」を出す（`/welcome` のときは、行き先の画面にこの文を出す。`/ses/company` に進む場合も、この文を優先する）。I5 の通知の本文に「（同じ名前の SES がほかにもあります）」を足す。比べるのは自分以外の `ses_companies`（kind を問わない）で、前後の空白を取った完全一致。
+- I9. 同じ SES に担当者が2人以上いるとき：
+  - SES名は会社に1つなので、2人目の `/welcome` には、1人目が直したあとの名前が入力済みで出る。
+  - 2人目がそのまま登録すれば I6（何も起きない）。直せば I5（後から保存した名前になる）。
+  - 1人目の `profile_completed_at` には影響しない。
+- I10. 登録済みの SES の `/account`「基本」に「SES名」の欄（必須ではない、今の `ses_companies.name` が入っている）がある。直して保存すると I5・I8 と同じ。空で保存すると今の名前のまま。101 文字以上はエラー。
+- I11. `/ses/company` の「会社名」の欄は今のまま（保存の先は同じ `ses_companies.name`）。ただしラベルを「SES名（会社名）」にそろえ、ここで名前を変えたときも I5 の記録・通知を出す（三つの入口で同じ動きにする）。
+- I12. `/admin/ses/new`・`/admin/ses/{id}` の名前の欄に hint「略称でもかまいません。正式名称は、SES のご担当者が最初のログインで入れます。」を出す。管理者が名前を直す動き（`sesUpdate`）は今のまま（`self_confirmed_at` を null に戻す）。
 
-### C. 管理者の登録
+### J. エンジニアと登録済みの人
 
-- C1. `/admin/settings` のカード「管理者（運営メンバー）」の一覧に、名前・メール・状態（`password` が null なら「招待中」、あれば「使用中」、`active` が false なら「停止」）・最終ログインが出る。
-- C2. 招待中の人の行にだけ「招待を送り直す」ボタンが出る。押すと `POST /admin/settings/admins/{id}/reinvite` で、その人の `token` が新しくなり、`mail_outbox` に招待メール（kind=invite）が1通増える。
-- C3. 使用中の人・admin 以外の人・存在しない id に reinvite すると、何も変えずにエラーのメッセージで `/admin/settings` に戻る。
-- C4. 今の「招待する」（`POST /admin/settings/admins`）はそのまま動く（新しい admin が招待中で一覧に出る）。
-- C5. ses・eg は `/admin/settings` と reinvite を使えない（403）。
+- J1. エンジニアの `/welcome`・`/account` に「企業名」「SES名」の欄は出ない。送っても、`users.company_name`・`ses_companies.name` は変わらない。
+- J2. 管理者の `/welcome` に「SES名」、SES の `/welcome` に「企業名」は出ない。送っても保存しない（SES の `users.company_name` は null のまま。管理者の POST に `ses_name` があっても `ses_companies` は変わらない）。
+- J3. `profile_completed_at` が入っている人は、今までどおり `/welcome` を開くと `/account` へ転送される（企業名・SES名が空でも、画面は出さない）。
+- J4. 管理者の直属（kind=direct）の行には role=ses の人がいない（ログインもできない）ので、`/welcome` から直属の行の名前は変わらない（念のため、`saveProfile` は kind=ses の行だけ書き換える）。
 
-### D. SES の登録
+### K. マニュアル・README・テスト
 
-- D1. admin が `/admin/ses/new` から登録すると、その会社は `status=active`・`joined_at=今日` になる。
-- D2. D1 で担当者のメールがあれば、そのメールで role=ses・ses_id=その会社の users ができ、招待メール（kind=invite）が届く。メールが無ければ招待しない（会社だけ active で作る）。
-- D3. D1 のとき、運営への「SES から参加の申し込みがありました」の通知と、SES への「お申し込みを受け付けました」のメールは出さない。
-- D4. 公開の `/apply` は今までどおり `status=pending`、通知・受付メールも今までどおり。
-- D5. `/admin/ses/new` の説明文が「登録すると参加中になり、担当の方に招待メールが届きます。」になる。
-
-### E. 管理者に紐づくエンジニア（直属）
-
-- E1. `ses_companies` に `kind`（string 10、既定 `'ses'`）がある。既存の行はすべて `'ses'`。
-- E2. `W::directSesId()` を呼ぶと、`kind='direct'` の行を返す。無ければ「PARK 運営（直属）」の行を1つ作る（status=active・self_confirmed_at=今・joined_at=今日）。何度呼んでも行は1つ。
-- E3. admin の `/engineers/new` の「所属」の選択肢の先頭に「管理者の直属（SES なし）」が出る。`kind='direct'` の行はほかの選択肢に重ねて出ない。SES の人の画面には所属の欄が出ない（今のまま）。
-- E4. admin が「管理者の直属」を選んで登録すると、`engineers.ses_id` が直属の行の id になる。メールを入れたら招待が届き、作られる users は role=eg・ses_id=直属の行・engineer_id=そのエンジニア。
-- E5. 直属のエンジニアが応募すると、`applications.ses_id` は直属の行の id。admin は選考（書類提出・面談・成約）を今の画面でできる。成約の `contracts.ses_id` も直属の行。
-- E6. どの SES の担当者も、直属のエンジニア・その応募・契約を見られない（`/engineers/{id}`・`/applications/{id}` が 403）。
-- E7. 直属の行は SES として扱わない：
-  - `/admin/ses` の一覧に出ない。`/admin/ses/{直属の id}`（表示・保存・承認・停止・担当者の招待）は 404。
-  - 運営のダッシュボードの「SES」の数に入らない。分析（`/admin/reports`）の SES ごとの行に出ない。
-  - 案件の「持ち込んだ SES」の選択肢に出ない。
-  - `php artisan park:status` の SES の数に入らない。
-  - role=ses の人が直属の行に属していても、ログインできない（念のため）。
-- E8. 請求：`/admin/invoices/build` で直属の行の請求書は作られない。`Billing::build(直属の id, 月)` は null を返し、invoices に行を作らない。`Billing::monthTotal` に直属の契約は入らない。
-- E9. 通知：`N::toSes(直属の id, …)` は admin 全員に届く（ベルとメール）。同じ出来事で運営への通知がすでに出ているところ（下の「直すファイル」の Workflow・CaseMail の印のところ）では、二重に出さない。
-- E10. 宛名：直属のエンジニアのメールの宛名は「{氏名} 様」（「PARK 運営（直属） 氏名 様」にしない）。
-- E11. `/admin/engineers?ses=direct` で直属のエンジニアだけに絞れる。一覧の所属に「直属」と分かる印が出る。
-- E12. 既存のエンジニアとその所属は変わらない（マイグレーションで ses_id を書き換えない）。
-
-### F. マニュアル
-
-- F1. `resources/manuals/` の admin・ses・engineer（`*.md` と `*-steps.md`）に、最初の情報登録の説明がある。admin には加えて、帯の表示・管理者の招待と送り直し・SES の登録（すぐ参加中になる）・直属のエンジニアの登録が書いてある。
-
-### G. テスト
-
-- G1. A〜E の受け入れ条件を `tests/Feature/ProfileAndDirectTest.php`（新規）でたどる（手順は下の「テストの手順」）。
-- G2. `php artisan test` が全部通る（今のテストを弱めない）。
+- K1. `resources/manuals/` の admin・ses（`*.md` と `*-steps.md`）の初回ログインの説明に、企業名・SES名（必須）が書いてある。SES には「管理者が入れた名前が入っています。正式名称に直してください。」。アカウントの節に、あとから直せることが書いてある。engineer の2つは変えない。
+- K2. README の「最初の情報登録」の段落に、`users.company_name` と SES名の保存先を1行足す。
+- K3. `tests/Feature/ProfileAndDirectTest.php` の既存のテストが通る（管理者・SES の `POST /welcome` に企業名・SES名を足す。テストを弱めない）。H〜J を新しいテストでたどる（下の「テストの手順」）。
+- K4. `php artisan test` が全部通る。
 
 ## 仕様
 
-### データ（マイグレーション `database/migrations/2026_10_17_000001_profile_and_direct.php`）
+### データ（マイグレーション `database/migrations/2026_10_17_000003_user_company_name.php`）
 
-- `users`：`kana` string null、`phone` string(30) null、`position` string null、`profile_completed_at` datetime null。
-- `ses_companies`：`kind` string(10) default `'ses'`（`index` を付ける）。
-- 直属の行はマイグレーションで作らない（`W::directSesId()` が必要になったときに作る）。
-- `down()` は足した列を消す。
+- `users`：`company_name` string(100) null（`position` の後）。`down()` で消す。
+- `ses_companies` は変えない（`name` は string 255、NOT NULL、unique なし）。
+- seeder は変えない（見本の管理者の企業名は null のまま。今の帯のテストが通るように）。
+
+### 入力の決まり（`AccountController`）
+
+- 先に、`company_name`・`ses_name` の前後の空白（半角・全角の空白、改行）を取って `$r->merge()` する。`preg_replace('/^[\s　]+|[\s　]+$/u', '', ...)`。空になれば `null`。Laravel の空白の取り除きは全角の空白を取らないため。
+- `profileRules(bool $required, string $role)` にする：
+  - 今の4つ（name・kana・phone・position）はそのまま。
+  - role=admin：`company_name` → `$required ? 'required' : 'nullable'` ＋ `|max:100`。
+  - role=ses：`ses_name` → 同じ。
+  - role=eg：足さない。
+- `profileNames()` に `company_name => '企業名'`、`ses_name => 'SES名'` を足す。
+- `welcome()`・`update()` とも、`$r->user()->role` を渡す。
 
 ### 業務の手続き（`app/Services/Workflow.php`）
 
-- `directSesId(): int`（E2）。
-- `isDirect(?int $sesId): bool`：`ses_companies.kind === 'direct'`。
-- `saveProfile($user, array $d): void`：name・kana・phone を保存。position は role が admin・ses のときだけ。`profile_completed_at` が null なら今を入れる。`updated_at` も。`N::audit($user->id, 'profile', '')`（detail に個人情報を入れない）。
-- `profileHome($user): string`：A8 の行き先と、出すメッセージ（または null）を返す（`[$url, $msg]`）。
-- `applySes(array $d, $actor = null)`：`$actor` が admin のときは、D3 の通知・受付メールを出さない。そのあと呼び出し側で `approveSes`。
-- `apply()`：`toSes($e->ses_id, …)`（295 行目）は直属なら呼ばない（すぐ上で toAdmins 済み）。
-- `distribute()`：`$bySes` のうち直属の分は `toSes` しない（操作したのが運営なので）。
-- `setStatus()`：直属で status が `withdrawn` のときは、`toAdmins` の行（336 行目）を呼ばない（toSes が運営に届くので）。
-- `createUser()` は今のまま（seeder 用）。
+- `saveProfile($user, array $d): ?string` に変える（戻り値は warn のメッセージ、無ければ null）：
+  - admin：`company_name` が null でなければ `users.company_name` に入れる（null なら今の値のまま。`/welcome` では required なので必ず入る）。
+  - ses：`ses_name` が null でなければ `self::renameSes($user->ses_id, $d['ses_name'], $user)` を呼び、その戻り値を返す。
+  - eg：どちらも触らない。
+  - ほかは今のまま。`users` の更新と `renameSes` は `DB::transaction` でまとめる。
+- 新しく `renameSes(int $sesId, string $name, $actor): ?string`：
+  - 行が無い・kind が `ses` でない → 何もせず null（J4）。
+  - 前と同じ名前 → 何もせず null（I6）。
+  - 違う → `ses_companies` の name・updated_at を更新、`N::audit($actor->id, 'ses-rename', "旧 → 新")`、`N::toAdmins('SES の名前が変わりました', 本文, "/admin/ses/$sesId", false, 'ses-rename')`（I5）。
+  - 自分以外に同じ名前があれば、I8 の文を返す（同じ名前のとき、通知の本文にも足す）。無ければ null。
+- `SesController@saveCompany`：名前の部分を `W::renameSes(...)` に任せ、ほかの列は今のまま更新する。戻り値があれば warn で返す（I11）。
+- `AdminController@sesUpdate` は変えない（管理者が直すときは通知しない）。
 
-### 通知（`app/Services/Notifier.php`）
+### 画面とルート（ルートは変えない）
 
-- `toSes($sesId, …)`：`W::isDirect($sesId)` なら `toAdmins($title, $body, $link, $mail, $kind)` を呼んで終わる。そうでなければ今のまま。
-- `sesUsers()` は今のまま（直属に ses の人はいない）。
+#### `/welcome`（`account/welcome.blade.php`・`welcomeForm`・`welcome`）
 
-### 請求（`app/Services/Billing.php`）
+- `welcomeForm`：`$v` に `company_name`（admin：`$u->company_name`）、`ses_name`（ses：`ses_companies.name`）を足す。
+- 欄の並び：氏名 → ふりがな → 電話 → （admin）企業名（required）／（ses）SES名（required、hint は I1）→ 所属・役職（eg 以外）。
+- `welcome()`：`$warn = W::saveProfile(...)`。`[$to, $msg] = W::profileHome($u)`。`$warn` があれば `go($to, $warn, 'warn')`、無ければ今のまま。
 
-- `build()`：直属なら何もせず null（既存の下書きがあっても触らない）。
-- `monthTotal()`：`where('kind','ses')` の行だけ足す。
+#### `/account`（`account/show.blade.php`・`update`）
 
-### ミドルウェア（`app/Http/Middleware/Role.php`）
+- 「基本」に、admin は「企業名」、ses は「SES名」（今の名前を入れる。`show()` で `ses_companies.name` を渡す）。どちらも required を付けない。
+- `update()`：`$warn` があれば `go('/account', '保存しました。'.' '.$warn, 'warn')`。
 
-- 2要素認証の判定のあと・役割の判定の前に：`$u->profile_completed_at` が null で、`$request->is('welcome', 'account', 'account/*')` でなければ `redirect('/welcome')`。
-- 403 より先に転送する（役割が合わない画面でも、まず情報の登録へ）。
+#### 立場の帯（`layouts/app.blade.php`）
 
-### 画面とルート
+- admin の行：`$u->company_name` があれば「管理者（{{ $u->company_name }}）としてログインしています：{{ $u->name }}」、無ければ今の文（H7）。
 
-`routes/web.php` の `Route::middleware('role')` の群に：
+#### 管理者の一覧（`admin/settings.blade.php`）
 
-- `GET /welcome` → `AccountController@welcomeForm`、`POST /welcome` → `AccountController@welcome`。
+- 表の列を 名前・企業名・メール・状態・最終ログイン・（操作）にする（H8）。
 
-`role:admin` の `admin` 群に：
+#### SES の画面
 
-- `POST /admin/settings/admins/{id}/reinvite` → `AdminController@reinviteAdmin`。
+- `ses/company.blade.php`：ラベル「会社名」→「SES名（会社名）」（I11）。
+- `admin/ses-new.blade.php`・`admin/ses-show.blade.php`（名前の欄）：hint を足す（I12）。ファイル名は実物に合わせる。
 
-#### `/welcome`（新規 `resources/views/account/welcome.blade.php`）
+### 正常系・境界（まとめ）
 
-- 題「あなたの情報」。説明「はじめに、あなたの情報を登録してください。あとから『アカウント』で直せます。」
-- 欄：氏名（必須）・ふりがな・電話・所属・役職（`@unless($u->role === 'eg')`）。ボタン「登録する」。
-- 検証：name 必須・100 文字まで、kana 100 文字まで、phone 30 文字まで・`/^[0-9+\-() ]*$/`、position 100 文字まで。属性名は日本語（氏名・ふりがな・電話・所属・役職）。
-- `welcomeForm`：完了済みなら `/account` へ（A10）。
-- `welcome`：`W::saveProfile` → `W::profileHome` の行き先へ `go()`。メッセージが無いときは「登録しました。」。
-
-#### `/account`（`account/show.blade.php`・`AccountController@update`）
-
-- 「基本」に ふりがな・電話・所属・役職（eg 以外）を足す。保存は `W::saveProfile` を使う（name が空なら今の名前のまま。今の動きを保つ）。`mail_opt_in` は今のまま別に保存。
-
-#### `/setup`（`PublicController@setup`）
-
-- 作ったあとの行き先を `/welcome` にし、メッセージを「運営のアカウントを作りました。続けて、あなたの情報を登録してください。」にする。
-
-#### 帯（`resources/views/layouts/app.blade.php`）
-
-- `@unless($print)` の中、`</header>` のすぐ後に、`$u` があり2要素認証が済んでいる（`$nav` を空にしている条件の逆）ときだけ：
-  - `<div class="loginbar"><div class="wrap">…</div></div>`
-  - 文：admin「管理者（運営）としてログインしています：{{ $u->name }}」／ses「SES（{{ 会社名 }}）のご担当者としてログインしています」／eg「エンジニアとしてログインしています」。会社名は `DB::table('ses_companies')->where('id',$u->ses_id)->value('name')`。
-- `public/css/park.css` に `.loginbar { background: var(--blue); color: #fff; font-weight: 700; font-size: 13px; padding: 4px 0; }` を足す（役割ごとの `--blue` をそのまま使うので、admin は今の青）。
-
-#### 管理者（`admin/settings.blade.php`・`AdminController`）
-
-- カードの題を「管理者（運営メンバー）」に。表の列：名前・メール・状態・最終ログイン・（操作）。状態は `badge` ではなく文字でよい（招待中／使用中／停止）。
-- 招待中の行に `<form method="post" action="/admin/settings/admins/{id}/reinvite">` の「招待を送り直す」。
-- 招待のボタンの文は「管理者を招待」。
-- `reinviteAdmin(Request $r, int $id)`：`role='admin'`・`password` が null・存在、でなければ「この人には送り直せません。」（bad）。そうなら `W::invite(['email'=>$u->email,'name'=>$u->name,'role'=>'admin'], $r->user())` → 「招待を送り直しました。」。
-- 「停止」の操作は今回作らない（自分自身を止めないための仕掛けも不要）。
-
-#### SES の登録（`AdminController@sesStore`・`admin/ses-new.blade.php`）
-
-- `$id = W::applySes($r->all() + ['agree'=>1], $r->user()); W::approveSes($id, $r->user());`
-- メッセージ：会社のメールがあれば「登録し、ご担当者に招待メールを送りました。」、無ければ「登録しました（メールアドレスが無いので、招待は送っていません）。」。
-- 担当者のメールがすでに使用中の users にあるときは、`W::invite` が招待しない（今の動き）。そのときは「登録しました。このメールアドレスはすでに使われているため、招待は送っていません。」（warn）。
-- `ses-new.blade.php` の説明文を D5 に。
-
-#### 直属のエンジニア
-
-- `EngineerController@create`：admin の `$sesList` を `['direct' => '管理者の直属（SES なし）'] + （kind='ses' かつ active の id=>name）` にする。`?ses=direct` なら初期値 `direct`。
-- `EngineerController@store`：admin のとき `ses_id` が `'direct'` なら `W::directSesId()`。数字なら、その行が `kind='ses'` かつ active であることを確かめる（違えば「所属と氏名を入れてください。」と同じ扱いで戻す）。
-- `engineers/form.blade.php`：`$sesList` の欄の label を「所属」に、hint「SES に属さない人は『管理者の直属』を選びます」。
-- `AdminController@engineers`：select に `s.kind as ses_kind`。`?ses=direct` なら `ses_kind === 'direct'` だけ。`admin/engineers.blade.php` の所属の列は、直属なら「直属」の印（`<span class="badge info">直属</span>`）。絞り込みのリンク「直属だけ」を足す。
-- `PipelineController` の選考の操作は、ルートが `role:admin,ses` で admin は全部通るので、変えない。
-
-#### 直属の行を SES から外す
-
-- `user_label()`（`app/helpers.php`）：role が eg で、所属が直属なら `$u->name` だけ返す。
-- `PublicController@login`：role=ses で会社が直属なら、停止と同じメッセージでログインさせない。
-
-### 正常系・境界
-
-- 0件：直属の行がまだ無いとき、`/admin/engineers?ses=direct` は0件で表示できる（行を作らない）。`/engineers/new` を開いても行は作らない（作るのは store のとき）。
-- 二重の操作：`POST /welcome` を2回しても `profile_completed_at` は最初の日時のまま（上書きしない）。reinvite を2回押すと token は2回とも新しくなる（前のリンクは使えなくなる）。`directSesId()` は1行だけ。
-- 権限：`/welcome` は role ミドルウェアの群なので、ログイン前は `/login` へ。reinvite は admin だけ。
-- 期限切れ：招待の期限（7日）は今のまま。送り直すと7日に戻る。
+| 場面 | 動き |
+|---|---|
+| 空欄・空白だけ（`/welcome`） | エラー。何も保存しない（H3・I2） |
+| 空欄（`/account`・`/ses/company`） | 今の値のまま（H6・I10） |
+| 101 文字以上 | エラー（H4・I3・H6・I10） |
+| 前後の空白 | 取って保存（H5・I4） |
+| SES名を変えた | ses_companies に反映、記録・管理者へのベル。表示は全画面で新しい名前（I5・I7） |
+| 変えなかった | 何も書き換えない（I6） |
+| 他の SES と同じ名前 | 保存はする。warn と通知に一言（I8） |
+| 同じ SES の担当者が複数 | 名前は会社に1つ。後から保存した名前になる（I9） |
+| 登録済みの人 | `/welcome` は出ない。`/account` で任意に直す（J3・H6・I10） |
+| エンジニア・別の立場の欄を送った | 無視（J1・J2） |
+| 二重の POST `/welcome` | 2回目は `profile_completed_at` を上書きしない（今のまま）。名前が同じなら I6 |
+| 権限 | 変わらない（`/welcome`・`/account` は role ミドルウェアの群。他社の SES名は自分の `ses_id` の行しか触れない） |
 
 ## 直すファイルと箇所の一覧
 
 | ファイル | 箇所 | 直すこと |
 |---|---|---|
-| `database/migrations/2026_10_17_000001_profile_and_direct.php` | 新規 | users の4列、ses_companies.kind |
-| `database/seeders/DatabaseSeeder.php` | 末尾 | 全 users に `profile_completed_at = now` |
-| `app/Http/Middleware/Role.php` | 2要素認証の後 | `/welcome` への転送 |
-| `routes/web.php` | role 群・admin 群 | `/welcome` GET/POST、reinvite |
-| `app/Http/Controllers/AccountController.php` | 新規 `welcomeForm`・`welcome`、`update` | 情報の登録・直す |
-| `app/Http/Controllers/PublicController.php` | `setup`（72 行目）、`login`（37 行目） | 行き先を `/welcome`、直属の ses を弾く |
-| `app/Http/Controllers/AdminController.php` | `dashboard` 46 行目 | SES の数を kind=ses だけに |
-| 同上 | `sesIndex` 72 行目 | `where('s.kind','ses')` |
-| 同上 | `sesStore` 81 行目 | active にして招待 |
-| 同上 | `sesShow`・`sesUpdate`・`sesApprove`・`sesSuspend`・`sesUsers` | 直属なら 404 |
-| 同上 | `engineers` 129 行目 | `ses_kind`・`?ses=direct` |
-| 同上 | `buildInvoices` 188 行目 | `where('kind','ses')` |
-| 同上 | `reports` 262 行目 | `where('kind','ses')` |
-| 同上 | `settings`・新規 `reinviteAdmin` | 管理者の一覧と送り直し |
-| `app/Http/Controllers/EngineerController.php` | `create` 28 行目・`store` 34 行目 | 直属の選択肢と登録 |
-| `app/Http/Controllers/CaseController.php` | 19 行目（案件の SES の選択肢） | `where('kind','ses')` |
-| `app/Services/Workflow.php` | 新規 `directSesId`・`isDirect`・`saveProfile`・`profileHome`、`applySes`、`apply` 295 行目、`distribute` 262 行目、`setStatus` 336 行目 | 上の仕様 |
-| `app/Services/Notifier.php` | `toSes` 71 行目 | 直属なら運営へ |
-| `app/Services/CaseMail.php` | `send` 114 行目 | 直属のときは、運営あての文を「グループの案件が、直属のエンジニアに届きました」にする（toSes は呼ぶ。運営が送ると `$own` なので、もともと呼ばれない） |
-| `app/Services/Billing.php` | `build` 42 行目・`monthTotal` 57 行目 | 直属を外す |
-| `app/Services/Todo.php` | `admin` 97 行目 | `where('kind','ses')` を足す（念のため） |
-| `app/Console/Commands/Status.php` | 28・29 行目 | `where('kind','ses')`。「エンジニア：直属」の数の行を足す |
-| `app/helpers.php` | `user_label` 52 行目 | 直属の eg は氏名だけ |
-| `resources/views/layouts/app.blade.php` | `</header>` の後 | 立場の帯 |
-| `public/css/park.css` | 末尾 | `.loginbar` |
-| `resources/views/account/welcome.blade.php` | 新規 | あなたの情報 |
-| `resources/views/account/show.blade.php` | 「基本」 | 項目を足す |
-| `resources/views/admin/settings.blade.php` | 運営メンバーのカード | 状態・送り直し |
-| `resources/views/admin/ses-new.blade.php` | 3 行目 | 説明文 |
-| `resources/views/admin/engineers.blade.php` | 所属の列・絞り込み | 直属の印とリンク |
-| `resources/views/engineers/form.blade.php` | 6 行目 | 所属の label・hint |
-| `resources/manuals/admin.md`・`admin-steps.md` | — | F1 |
-| `resources/manuals/ses.md`・`ses-steps.md` | — | 最初の情報登録 |
-| `resources/manuals/engineer.md`・`engineer-steps.md` | — | 最初の情報登録 |
-| `README.md` | データの説明・流れ | `profile_completed_at`・`kind`・直属の説明を1〜2行 |
-| `tests/Feature/ProfileAndDirectTest.php` | 新規 | G1 |
+| `database/migrations/2026_10_17_000003_user_company_name.php` | 新規 | `users.company_name` |
+| `app/Http/Controllers/AccountController.php` | `show`・`update`・`profileRules`・`profileNames`・`welcomeForm`・`welcome` | 欄・検証・空白の取り除き・warn |
+| `app/Services/Workflow.php` | `saveProfile`、新規 `renameSes` | 保存・記録・通知・同名の判定 |
+| `app/Http/Controllers/SesController.php` | `saveCompany`（87 行目） | 名前は `renameSes` に任せる |
+| `resources/views/account/welcome.blade.php` | 欄 | 企業名・SES名 |
+| `resources/views/account/show.blade.php` | 「基本」 | 企業名・SES名 |
+| `resources/views/layouts/app.blade.php` | 帯の admin の行（44 行目） | 企業名 |
+| `resources/views/admin/settings.blade.php` | 管理者の一覧 | 企業名の列 |
+| `resources/views/ses/company.blade.php` | 4 行目 | ラベル |
+| `resources/views/admin/ses-new.blade.php`・SES の詳細の画面 | 名前の欄 | hint |
+| `resources/manuals/admin.md`（29・30 行目）・`admin-steps.md`（12 行目・3-1） | — | K1 |
+| `resources/manuals/ses.md`（24 行目・7 章）・`ses-steps.md`（12 行目・3-2） | — | K1 |
+| `README.md` | 135 行目の段落 | K2 |
+| `tests/Feature/ProfileAndDirectTest.php` | 既存の `POST /welcome`（106・113・117 行目、146・150 行目が admin なら） | `company_name`・`ses_name` を足す |
+| 同上 | 新規のテスト | H〜J |
 
-変えなくてよいと確かめたところ（直属の行が active なので、そのまま動く）：`Matcher::forCase`（直属も配信候補に入る）、`EngineerController::load`、`Workflow::loadApp`、`PipelineController`（契約・請求書の表示の join）、`AdminController` の applications・contracts・invoices の join、`broadcast`（eg 宛てに直属も入る。ses 宛てには直属の人がいない）、`Perms`（ses_id が違うので SES からは見えない）、`SesController`（直属に ses の人はいない）。
+変えなくてよいと確かめたところ：`Role` ミドルウェア（`profile_completed_at` だけで判断）、`profileHome`、`user_label`（admin は `operator_name`＋氏名のまま。仮定 a）、`Notifier` の差出人、名前を join している各画面（I7。保存していないので自動で新しい名前になる）。
 
 ## 作業の手順
 
-1. マイグレーションを書き、`php artisan migrate`（手元）。seeder の末尾に `profile_completed_at` を入れる。
-2. `Workflow` に `directSesId`・`isDirect`・`saveProfile`・`profileHome` を足す。
-3. `Role.php` に転送を足し、`routes/web.php` に `/welcome` を足す。`AccountController` に `welcomeForm`・`welcome` と `welcome.blade.php` を作る。
-4. `/account` の「基本」と `update` を直す。`/setup` の行き先を直す。
-5. ここで `php artisan test` を回し、今のテストが通ることを確かめる（壊れたら、テストを弱めずに原因を直す。新しく users を作って画面を開くテストは、`/welcome` を通る手順を足すか、`profile_completed_at` を入れる）。
-6. 帯（layout と css）。
-7. 管理者の一覧と reinvite。
-8. SES の登録（`applySes` の `$actor`、`sesStore`、`ses-new` の文）。
-9. 直属：`EngineerController`・form、`Notifier::toSes`、二重の通知の止め、`Billing`、AdminController の SES の画面・数・請求・分析、CaseController の選択肢、Todo・Status、`user_label`、login の弾き、admin のエンジニア一覧の絞り込み。
-10. マニュアル（6 ファイル）と README。
-11. `php artisan test` が全部通ることを確かめ、reviewer・tester に回す。
-12. 公開版への反映は、JOE が push 後に `park-deploy.sh` で行う（migrate を含む。常時了承の範囲）。メールの一斉送信・データの削除・`.env` の書き換えは、この件では行わない。41_Park-Project の `04_Manuals` のマニュアルの写しは JOE が写し直す。
+1. マイグレーションを書き、`php artisan migrate`（手元）。
+2. `Workflow::renameSes` と `saveProfile` の変更。
+3. `AccountController`（空白の取り除き・`profileRules`・`profileNames`・`welcomeForm`・`welcome`・`show`・`update`）。
+4. `welcome.blade.php`・`show.blade.php`。
+5. ここで既存のテストの `POST /welcome`（admin・ses）に `company_name`・`ses_name` を足し、`php artisan test` が通ることを確かめる。
+6. `SesController@saveCompany` と `ses/company.blade.php` のラベル。
+7. 帯（layout）と管理者の一覧（settings）。SES の登録・詳細の hint。
+8. 新しいテスト（下の手順）。
+9. マニュアル（admin・ses の4ファイル）と README。
+10. `php artisan test` が全部通ることを確かめ、reviewer・tester に回す。
+11. 公開版への反映は、JOE が push 後に `park-deploy.sh` で行う（**migrate を含む**。`users.company_name` を足すため。常時了承の範囲）。メールの送信・データの削除・`.env` の書き換えはこの件では無い（I5 の通知はベルだけ）。41_Park-Project の `04_Manuals` の写し（`管理者`・`SES` の `マニュアル.md`・`操作手順書.md`）は JOE が写し直す（`エンジニア` は変わらない）。
 
-## テストの手順（`tests/Feature/ProfileAndDirectTest.php`）
+## テストの手順（`tests/Feature/ProfileAndDirectTest.php` に足す）
 
-`RefreshDatabase`・`$seed = true`。ログインは ParkTest と同じく `actingAs` ＋ `withSession([TwoFactor::SESSION_KEY => id])`。
+今と同じく `as()`・`unfinish()` を使う。
 
-- A1・A13：`Schema::hasColumns('users', [...])`、`Schema::hasColumn('ses_companies','kind')`。seeder の admin の `profile_completed_at` が null でない。
-- A2：admin@park.example の `profile_completed_at` を null にし、`/admin`・`/cases/1` が `/welcome` へ転送。ses1・eg1 も同じく `/ses`・`/eg` が `/welcome` へ。
-- A3：同じ状態で `/welcome`・`/account` が 200、`POST /account/password`（今のパスワードを違えて）が `/welcome` へ転送されない。
-- A4：セッションに SESSION_KEY を入れず（pending も無し）`/admin` → `/login` へ（`/welcome` ではない）。
-- A5：`/welcome` を開き、admin は「所属・役職」が見える、eg は見えない。eg の氏名の初期値が見える。
-- A6：`POST /welcome` name 空 → エラー、`profile_completed_at` null のまま。
-- A7・A8：admin → `/admin`。ses1（会社の `self_confirmed_at` を null にして）→ `/ses/company`、確認済みなら `/ses`。eg1（`engineers.self_confirmed_at` を null にして）→ `/engineers/1`、確認済みなら `/eg`。DB に kana・phone・position・profile_completed_at。
-- A9：eg の保存の前後で `engineers` の行が同じ。
-- A10：完了済みで `GET /welcome` → `/account`。2回目の `POST /welcome` で `profile_completed_at` が変わらない。
-- A11：`POST /account` で kana・phone・position が保存される。eg は position を送っても保存されない。
-- A12：`users` を空にし（admin がいない状態を作る）`POST /setup` → `/welcome` へ。続けて `GET /welcome` に setup の名前が見える。
-- B1・B2：admin の `/admin` に「管理者（運営）としてログインしています」と名前。ses1 の `/ses` に「SES（みどり情報システム）のご担当者としてログインしています」。eg1 の `/eg` に「エンジニアとしてログインしています」。
-- B3：パスワードだけ通った状態（`TwoFactor::send` 後）の `/two-factor/challenge` に「としてログインしています」が無い。`/login` にも無い。
-- B4：admin の `/engineers/1/sheet` に帯の文が無い。
-- B5：`lbl('role','admin') === '運営'`。
-- C1・C2：admin が `POST /admin/settings/admins`（name・email）で招待 → `/admin/settings` に「招待中」と「招待を送り直す」。reinvite で token が変わり、kind=invite のメールが1通増える。
-- C3：使用中の admin（自分）・ses の人の id に reinvite → token もメールの数も変わらない。
-- C4：上の招待で users に role=admin・password null の行がある。
-- C5：ses1 で `/admin/settings` と reinvite が 403。
-- D1〜D3：admin が `POST /admin/ses`（name・contact_name・email）→ その会社が active・joined_at=今日、users に role=ses、`mail_outbox` に kind=invite。kind=ses-apply のメールと「参加の申し込み」の通知は増えない。email 無しでも active で、users は増えない。
-- D4：`POST /apply` は pending（ParkTest の既存の手順と同じ）。
-- D5：`/admin/ses/new` に新しい説明文。
-- E1・E2：既存の行の kind が全部 ses。`W::directSesId()` を2回呼んで同じ id、kind=direct の行は1つ、status=active・self_confirmed_at あり。
-- E3：admin の `/engineers/new` に「管理者の直属（SES なし）」。ses1 の `/engineers/new` には無い。
-- E4：admin が `POST /engineers`（ses_id=direct・name・email）→ engineers.ses_id=直属の id、users に role=eg・ses_id=直属・engineer_id、招待メール。
-- E5：そのエンジニアを確認済み（self_confirmed_at）にして、eg として `POST /cases/{open の案件}/apply` → applications.ses_id=直属。admin が status（submitted）・interview・contract を進められ、contracts.ses_id=直属。
-- E6：ses1 で `/engineers/{直属}`・`/applications/{直属の応募}` が 403。
-- E7：admin の `/admin/ses` に「PARK 運営（直属）」が無い、`/admin/ses/{直属}` が 404。`/cases/new` の選択肢に無い。`Artisan::call('park:status', ['--json'=>true])` の「SES：会社の情報の確認がまだ」等に直属が数えられない。直属の行に role=ses の users を作って `POST /login` → ログインできない。
-- E8：直属の契約がある月で `POST /admin/invoices/build` → 直属の invoices が無い。`Billing::build(直属, 月)` が null。`Billing::monthTotal(月)` に直属の契約の額が入らない。
-- E9：直属のエンジニアの応募を ses_id に持つとき、admin の status 変更（doc_passed）で、admin に通知が届く（app_notifications）。直属の応募で、応募1回あたりの admin への「応募がありました」の通知が1件だけ（二重でない）。
-- E10：直属の eg の招待メールの本文が「{氏名} 様」で始まり、「PARK 運営（直属）」を含まない。
-- E11：`/admin/engineers?ses=direct` に直属の人だけが出て、山田 太郎は出ない。
-- E12：マイグレーション後、見本データの engineers.ses_id が seeder のまま。
+- H1：`Schema::hasColumn('users','company_name')`。seeder のあと全員 null。
+- H2：admin を unfinish → `GET /welcome` に「企業名」。
+- H3：`POST /welcome` name あり・`company_name` が `''`、`'   '`、`'　　'`（全角）→ それぞれ `assertSessionHasErrors('company_name')`、`profile_completed_at` null。
+- H4：`str_repeat('あ',101)` はエラー、100 文字は `/admin` へ。
+- H5：`company_name => '  見本運営株式会社　'` → DB に `見本運営株式会社`、`/admin` へ。
+- H6：登録済みの admin で `POST /account` `company_name=新社名` → 保存。`company_name` 無しで `POST /account` → 前の値のまま。
+- H7：`company_name` を入れた admin の `/admin` に「管理者（見本運営株式会社）としてログインしています：」。null の admin は今の文（既存の test_b はそのまま通る）。
+- H8：`/admin/settings` に「企業名」と値。
+- I1：ses1 を unfinish → `GET /welcome` に「SES名」と「みどり情報システム」（value に入っている）。
+- I2：`ses_name` 空・空白だけ → エラー。`ses_companies.name` が「みどり情報システム」のまま、`profile_completed_at` null。
+- I3：101 文字 → エラー。
+- I4・I5：`ses_name => '株式会社みどり情報システム'` → `ses_companies.name` が変わり、`self_confirmed_at` は前と同じ。`audit_logs` に action=ses-rename が1行。admin の `app_notifications` に kind=ses-rename が1件。`mail_outbox` は増えない。
+- I6：名前を変えずに登録 → `ses_companies.updated_at` が変わらず、ses-rename の記録・通知が増えない。
+- I7：I4 のあと、ses1 の `/ses` の帯に「SES（株式会社みどり情報システム）」、admin の `/admin/ses` にも新しい名前。
+- I8：もう1つの見本の SES の名前に変える → 保存され、`session('flash')` が warn で「同じ名前の SES がほかにもあります」。通知の本文にも同じ一言。
+- I9：同じ ses_id で role=ses の users を1人足し（`W::createUser` か insert、`profile_completed_at` null）、ses1 が名前を変えたあと、その人の `GET /welcome` に新しい名前。そのまま `POST` → 通知が増えない。ses1 の `profile_completed_at` は変わらない。
+- I10：登録済みの ses1 で `POST /account` `ses_name=新しい名前` → 反映・通知。`ses_name` 無し → 今のまま。
+- I11：ses1 で `POST /ses/company` の name を変える → 反映・ses-rename の記録。`/ses/company` に「SES名（会社名）」。
+- I12：admin の `/admin/ses/new` に「略称でもかまいません」。
+- J1：eg1 を unfinish → `/welcome` に「企業名」「SES名」が無い。`company_name`・`ses_name` を送って登録 → eg1 の `company_name` null、所属 SES の名前は変わらない。
+- J2：admin の `POST /welcome` に `ses_name` を混ぜても `ses_companies` が変わらない。ses1 の POST に `company_name` を混ぜても `users.company_name` null。
+- J3：登録済みの admin（company_name null）の `GET /welcome` → `/account`。
+- J4：`W::renameSes(W::directSesId(), 'x', admin)` → null を返し、直属の行の名前が「管理者の直属」のまま。
 
 ## 仮定
 
-- a. 「所属・役職」は1つの欄（`users.position`）にまとめる。eg には出さない（所属は SES か直属で決まるため）。
-- b. 情報の登録で直せるのは氏名・ふりがな・電話・所属・役職。メールアドレスは今までどおり運営に連絡して変える。
-- c. `/welcome` を済ませるまで、通知（`/notifications`）も開けない（転送する）。要求の「最初に登録」を優先した。
-- d. 直属の行の名前は「PARK 運営（直属）」の固定。設定の「運営の名前」とは連動しない。
-- e. 直属のエンジニアへの案件の案内メール（CaseMail）は、SES の人から見ると「グループのほかの人」（名前を伏せる）になる。
-- f. 運営への通知が二重になるところだけ止め、それ以外の `toSes`（面談・成約・延長など）は、直属なら運営全員に届く（操作した本人にも届く）。
-- g. 分析の「SES ごとの行」に直属は出さない（全体のファネルには入る）。
-- h. 帯の文は方針のとおり（eg は名前なし）。ヘッダー右の「運営のアカウント」の表示はそのまま残す。
-- i. 管理者を止める（active=false）操作は今回作らない。一覧に「停止」の表示だけ用意する。
+- a. 管理者の企業名は帯・アカウント・管理者の一覧に出すだけ。メールの差出人やヘッダー右の表示（`user_label`、設定の「運営の名前」）は変えない。
+- b. 管理者の企業名の初期値は空（設定の「運営の名前」を入れておくことはしない）。
+- c. SES名は保存していない（毎回 join して出す）ので、名前を変えると、過去の請求書・契約の画面の宛名も新しい名前になる。請求書の名前を発行時のまま残す仕組みは今回作らない。
+- d. 同じ名前の SES は止めない（略称が重なることも、正式名称がたまたま同じこともあるため）。warn と通知で知らせる。
+- e. SES が名前を変えても、`self_confirmed_at` は消さない（SES 自身が直したので）。管理者が直したときは今のまま消す。
+- f. SES の名前の変更は、管理者へベルだけで知らせる（メールは送らない）。
+- g. 上限は 100 文字（氏名などとそろえる）。
 
 ## tezzo への質問
 
-**1** 呼び名「運営」と「管理者」
-画面の帯は「管理者（運営）」にしましたが、メニュー・役割の呼び名（`lbl('role','admin')`）は「運営」のままです。
-a. このまま（帯だけ「管理者（運営）」）
-b. 全体を「管理者」に変える
-
-**2** 直属のエンジニアの通知
-直属のエンジニアの選考の知らせ（面談が決まった・成約した など）は、SES の代わりに管理者全員に届くようにしました。操作した本人にも届きます。
+**1** 管理者の「企業名」を出す場所
+帯（「管理者（○○）としてログインしています」）・アカウント・管理者の一覧に出すようにしました。メールの差出人の名前（今は設定の「運営の名前」）は変えていません。
 a. このまま
-b. 操作した本人には送らない
+b. メールの差出人にも企業名を使いたい
 
-**3** 直属の成約の売上
-直属のエンジニアの成約は、請求書を作らず、ダッシュボードの「今月の成功報酬」にも入れていません（PARK 自身の契約なので）。
+**2** SES が名前を変えたときの知らせ
+SES が名前を直すと、管理者全員にベルの通知が届きます（メールは送りません）。
 a. このまま
-b. 別の数字（直属の売上）として見たい
+b. メールでも知らせる
+c. 知らせなくてよい
 
-**4** 最初の情報登録の項目
-氏名・ふりがな・電話・所属・役職にしました。ほかに入れたい項目があれば教えてください（例：住所・生年月日。個人情報が増えるので、最小にしています）。
-a. このまま
-b. 足したい項目がある
-
-**5** SES を運営が登録したとき
-運営が登録した SES は、すぐ「参加中」になり、担当者のメールに招待がすぐ届きます（承認の手順を省きます）。
-a. このまま
-b. 招待を送る前に、もう一度確かめる手順がほしい
+**3** 過去の請求書の宛名
+SES名は保存していないので、名前を直すと、前に作った請求書の宛名も新しい名前で表示されます。
+a. このまま（正式名称になるので、むしろよい）
+b. 発行したときの名前のまま残したい（請求書に名前を保存する仕組みを足す）
