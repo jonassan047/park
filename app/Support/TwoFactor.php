@@ -27,8 +27,15 @@ class TwoFactor
         return $p && (int) $p['user'] === (int) $r->user()->id ? $p : null;
     }
 
+    // 手元（APP_ENV=local）で .env に PARK_SKIP_2FA=true を書いたときだけ、確認コードを省く。公開版では効かない
+    public static function skipped(): bool
+    {
+        return app()->environment('local') && filter_var(env('PARK_SKIP_2FA', false), FILTER_VALIDATE_BOOL);
+    }
+
     public static function send(Request $r): void
     {
+        if (self::skipped()) { self::pass($r); return; }
         $u = $r->user();
         $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
         $r->session()->put(self::PENDING_KEY, ['user' => $u->id, 'hash' => self::hash($code), 'expires' => now()->getTimestamp() + self::TTL, 'tries' => 0, 'sent' => now()->getTimestamp()]);
