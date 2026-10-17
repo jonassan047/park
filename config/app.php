@@ -15,6 +15,11 @@ return [
 
     'name' => env('APP_NAME', 'Laravel'),
 
+    // 制作中だけ：2段階認証（確認コード）を省く。skip_2fa は手元（local）だけで効く。
+    // skip_2fa_domain は、そのドメインのメールアドレスの人だけ省く（例：park.example。メールの届かないテスト用の人向け）
+    'skip_2fa' => (bool) env('PARK_SKIP_2FA', false),
+    'skip_2fa_domain' => strtolower((string) env('PARK_SKIP_2FA_DOMAIN', '')),
+
     /*
     |--------------------------------------------------------------------------
     | Application Environment

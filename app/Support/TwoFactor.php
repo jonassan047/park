@@ -28,15 +28,18 @@ class TwoFactor
     }
 
     // 手元（APP_ENV=local）で .env に PARK_SKIP_2FA=true を書いたときだけ、確認コードを省く。公開版では効かない
-    public static function skipped(): bool
+    // PARK_SKIP_2FA_DOMAIN を書いたときは、そのドメインのメールアドレスの人だけ省く（メールの届かないテスト用の人向け）
+    public static function skipped(?object $u = null): bool
     {
-        return app()->environment('local') && filter_var(env('PARK_SKIP_2FA', false), FILTER_VALIDATE_BOOL);
+        if (app()->environment('local') && config('app.skip_2fa')) return true;
+        $d = config('app.skip_2fa_domain');
+        return $d !== '' && $u && str_ends_with(strtolower((string) $u->email), '@'.$d);
     }
 
     public static function send(Request $r): void
     {
-        if (self::skipped()) { self::pass($r); return; }
         $u = $r->user();
+        if (self::skipped($u)) { self::pass($r); return; }
         $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
         $r->session()->put(self::PENDING_KEY, ['user' => $u->id, 'hash' => self::hash($code), 'expires' => now()->getTimestamp() + self::TTL, 'tries' => 0, 'sent' => now()->getTimestamp()]);
         N::queueMail($u->email, $u->name, "確認コード {$code}", user_label($u)." 様\n\nPARK にログインするための確認コードです。\n\n　{$code}\n\nログインの画面に入れてください（10分間有効）。\n\n心当たりがない場合は、このメールを無視してください。パスワードを知っている誰かがログインしようとしている可能性があるので、パスワードの変更をおすすめします。", '2fa');
