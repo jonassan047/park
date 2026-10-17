@@ -113,3 +113,77 @@
 - コード・ハッシュ・セッション ID そのものはどこにも残さない・出さない。
 - 公開版でコマンドを実行した結果を、公開リポジトリにそのまま貼らない。
 - データの削除・`.env` の書き換え・メールの送信はこの作業に含まない（要るときは tezzo の了承を取る）。
+
+---
+
+# PLAN：ログイン画面にメールアドレスを残しておく（2026-10-17）
+
+## 背景
+
+tezzo の要望：ログアウトしてログイン画面に戻ったとき、メールアドレスが入っていてほしい。パスワードはブラウザの保存に任せる。
+
+## 受け入れ条件
+
+1. パスワードが通ったとき、メールアドレスを cookie `park-last-email` に保存する（1年、httponly、Laravel の暗号化 cookie）。
+2. ログイン画面を開くと、この cookie の値がメールアドレス欄に入っている（ログアウトのあとも）。
+3. ログアウトでは cookie を消さない。
+4. cookie が無ければメールアドレス欄は空。
+5. ログインに失敗して戻ったときは、今入れたメールアドレス（old）が cookie より優先される。
+6. メールアドレスが入っているときは、パスワード欄に最初からカーソルがある（autofocus）。空のときはメールアドレス欄に autofocus。
+7. パスワード欄・メールアドレス欄の `autocomplete`（`current-password`／`username`）は変えない。
+
+仮定：
+- a. 保存するのは、SES の会社の承認チェックも通ったあと（`regenerate()` の直後）。確認コードの前でよい（アドレスが合っていることはパスワードで分かっている）。
+- b. 共用 PC では前の人のメールアドレスが見えるが、メールアドレスだけ（パスワード・コードは残さない）なので許容する（tezzo 了承済みの方針）。
+- c. secure・path・domain・same_site は Laravel の既定（`config/session.php` の値を CookieJar が使う）に任せ、引数で指定しない。
+
+## 仕様
+
+### PublicController（app/Http/Controllers/PublicController.php）
+
+- `login`：`$r->session()->regenerate();` の直後に
+  `Cookie::queue('park-last-email', $email, 60 * 24 * 365);`
+  （`use Illuminate\Support\Facades\Cookie;` を足す。httponly は既定で true。暗号化は web の EncryptCookies が行う）。
+- `loginForm`：`view('public.login', ['lastEmail' => (string) $r->cookie('park-last-email', '')])`。ログイン済みのときのリダイレクトは今のまま。
+- `logout`：変えない（cookie を消さない）。
+
+### x-field（resources/views/components/field.blade.php）
+
+- `@props` に `'autofocus' => false` を足し、普通の input に `@if($autofocus) autofocus @endif` を付ける。ほかの画面は既定 false なので変わらない。
+
+### resources/views/public/login.blade.php
+
+- 先頭で `@php $em = old('email', $lastEmail ?? ''); @endphp`。
+- email：`<x-field ... :value="$em" :autofocus="$em === ''" />`（x-field の中で `old('email', $value)` なので、失敗時は old が優先される）。
+- password：`:autofocus="$em !== ''"`。
+- `autocomplete` 属性はそのまま。
+
+### マニュアル
+
+- 運営・SES・エンジニアの `*-steps.md` のログインの手順（「メールアドレスとパスワードを入れて「ログイン」。」）の後に、一言足す：「前にログインしたことがあれば、メールアドレスは最初から入っています。」（`admin-steps.md`・`ses-steps.md`・`engineer-steps.md`）。写し（41_Park-Project の `04_Manuals`）は JOE が写し直す。
+
+## 作業手順
+
+1. `field.blade.php` に `autofocus` を足す。
+2. `PublicController` の `login`（cookie を queue）と `loginForm`（`lastEmail` を渡す）を直す。
+3. `login.blade.php` を直す。
+4. テストを足し、`php artisan test` で全部通す。
+5. マニュアル3つに一言足す。
+6. （JOE）commit・push、公開版へ反映（常時了承の範囲）、マニュアルの写し。
+
+## テスト（tests/Feature/LoginRememberEmailTest.php、新規。seed あり）
+
+エンジニアは見本の `eg1@park.example`。
+
+| 条件 | 手順 | 確かめること |
+|---|---|---|
+| 1 保存 | `/login` を正しいパスワードで POST | `assertCookie('park-last-email', 'eg1@park.example')`（復号して比べる）。失敗の POST では `assertCookieMissing('park-last-email')` |
+| 2・3・6 ログアウト後 | ログイン → `/logout` を POST（レスポンスに `park-last-email` を消す cookie が無い）→ `withCookie('park-last-email', 'eg1@park.example')->get('/login')` | `value="eg1@park.example"` が出る。パスワードの input に `autofocus` が付く |
+| 4・6 cookie なし | 何も持たずに `get('/login')` | メールアドレスの input の `value=""`。メールアドレスの input に `autofocus` |
+| 5 失敗時 | `withCookie('park-last-email', 'eg1@park.example')` で `other@park.example`・違うパスワードを POST → リダイレクト先の `/login` を開く | `value="other@park.example"` が出て、`value="eg1@park.example"` は出ない |
+| 7 autocomplete | `get('/login')` | `autocomplete="username"` と `autocomplete="current-password"` が今のまま出る |
+
+## 守ること
+
+- cookie に入れるのはメールアドレスだけ。パスワード・確認コードは入れない。
+- この件でデータの削除・メールの送信・`.env` の書き換えはしない。

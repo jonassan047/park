@@ -8,6 +8,7 @@ use App\Services\Workflow as W;
 use App\Support\TwoFactor;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
@@ -23,7 +24,7 @@ class PublicController extends Controller
 
     public function loginForm(Request $r)
     {
-        return $r->user() ? redirect($r->user()->home()) : view('public.login');
+        return $r->user() ? redirect($r->user()->home()) : view('public.login', ['lastEmail' => (string) $r->cookie('park-last-email', '')]);
     }
 
     public function login(Request $r)
@@ -38,6 +39,8 @@ class PublicController extends Controller
             return back()->withInput(['email' => $email])->with('flash', ['msg' => '会社の参加がまだ承認されていないか、停止されています。', 'type' => 'bad']);
         }
         $r->session()->regenerate();
+        // 次にログイン画面を開いたとき、メールアドレスを最初から入れておく（1年。パスワードは残さない）
+        Cookie::queue('park-last-email', $email, 60 * 24 * 365);
         // パスワードの次は2要素認証（メールで確認コードを送る）。済むまでほかの画面は開けない
         N::audit($u->id, 'login', '');
         TwoFactor::send($r, 'login');
