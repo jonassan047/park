@@ -5,7 +5,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\HtmlString;
 
 const PARK_LABELS = [
-    'role' => ['admin' => '運営', 'ses' => 'SES', 'eg' => 'エンジニア'],
+    'role' => ['admin' => '管理者', 'ses' => 'SES', 'eg' => 'エンジニア'],
     'sesStatus' => ['pending' => '申込中', 'active' => '参加中', 'suspended' => '停止'],
     'engStatus' => ['available' => '待機中', 'proposing' => '提案中', 'working' => '稼働中', 'unavailable' => '休止'],
     'caseStatus' => ['draft' => '下書き', 'open' => '募集中', 'filled' => '充足', 'closed' => '終了'],
@@ -29,7 +29,7 @@ const PARK_TONE = [
     'pass' => 'ok', 'fail' => 'mute', 'ended' => 'mute', 'issued' => 'warn', 'paid' => 'ok', 'queued' => 'warn', 'failed' => 'bad', 'saved' => 'mute',
 ];
 
-// 設定（運営の「設定」画面で変えられる。率は仮）
+// 設定（管理者の「設定」画面で変えられる。率は仮）
 const PARK_DEFAULT_SETTINGS = [
     'app_name' => 'PARK',
     'fee_initial_rate' => '7',
@@ -37,7 +37,7 @@ const PARK_DEFAULT_SETTINGS = [
     'monthly_from' => '2',
     'tax_rate' => '10',
     'match_threshold' => '40',
-    'operator_name' => 'PARK 運営事務局',
+    'operator_name' => 'PARK 管理者',
 ];
 
 function lbl(string $map, ?string $key): string
@@ -45,7 +45,7 @@ function lbl(string $map, ?string $key): string
     return PARK_LABELS[$map][$key] ?? (string) $key;
 }
 
-// メールの宛名・差出人・画面の名前表示用：「SES名 氏名」（運営は運営事務局名 + 氏名）
+// メールの宛名・差出人・画面の名前表示用：「SES名 氏名」（管理者は署名の名前 + 氏名）
 function user_label(?object $u): string
 {
     if (!$u) return '';

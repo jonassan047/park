@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
-// ログイン前の画面：トップ・ログイン・SES の参加申込・招待（パスワード設定）・パスワード再設定・最初の運営アカウント
+// ログイン前の画面：トップ・ログイン・SES の参加申込・招待（パスワード設定）・パスワード再設定・最初の管理者アカウント
 class PublicController extends Controller
 {
     public function home(Request $r)
@@ -68,8 +68,8 @@ class PublicController extends Controller
         $id = W::createUser($r->input('email'), $r->input('name'), 'admin', $r->input('password'));
         Auth::loginUsingId($id);
         $r->session()->regenerate();
-        TwoFactor::pass($r); // 最初の運営を作るときだけ（まだ誰もいないので）
-        return $this->go('/welcome', '運営のアカウントを作りました。続けて、あなたの情報を登録してください。');
+        TwoFactor::pass($r); // 最初の管理者を作るときだけ（まだ誰もいないので）
+        return $this->go('/welcome', '管理者のアカウントを作りました。続けて、あなたの情報を登録してください。');
     }
 
     public function applyForm() { return view('public.apply'); }
@@ -78,7 +78,7 @@ class PublicController extends Controller
     {
         $r->validate(['name' => 'required', 'contact_name' => 'required', 'email' => 'required|email', 'agree' => 'accepted'], [], ['name' => '会社名', 'contact_name' => 'ご担当者名', 'agree' => '守秘義務への同意']);
         W::applySes($r->all());
-        return view('public.message', ['title' => 'お申し込みを受け付けました', 'text' => 'ありがとうございます。運営で内容を確認のうえ、ご連絡します。']);
+        return view('public.message', ['title' => 'お申し込みを受け付けました', 'text' => 'ありがとうございます。管理者が内容を確認のうえ、ご連絡します。']);
     }
 
     // エンジニアが、まだ個人情報の取り扱いに同意していないか
@@ -90,7 +90,7 @@ class PublicController extends Controller
     public function inviteForm(string $token)
     {
         $u = W::userByToken($token);
-        if (!$u) return view('public.message', ['title' => 'リンクの期限切れ', 'text' => 'このリンクは使えません（期限切れか、使用済み）。運営またはご担当の SES にご連絡ください。']);
+        if (!$u) return view('public.message', ['title' => 'リンクの期限切れ', 'text' => 'このリンクは使えません（期限切れか、使用済み）。管理者またはご担当の SES にご連絡ください。']);
         return view('public.invite', ['u' => $u, 'token' => $token, 'needConsent' => $this->needConsent($u)]);
     }
 

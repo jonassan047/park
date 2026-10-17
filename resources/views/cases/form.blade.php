@@ -10,7 +10,7 @@
 <div class="grid2">
 <x-field label="案件名" name="title" :value="$c->title ?? null" required cls="span2" />
 <x-field label="元請け（伏せ字でよい）" name="client_label" :value="$c->client_label ?? null" placeholder="例：SH-A 社" hint="元請けの名前は外に出しません。伏せ字で構いません。" />
-@if($sesList)<x-field label="案件を持ち込んだ SES" name="source_ses_id" type="select" :options="$sesList" blank="（運営が直接）" :value="$c->source_ses_id ?? null" />@else<div></div>@endif
+@if($sesList)<x-field label="案件を持ち込んだ SES" name="source_ses_id" type="select" :options="$sesList" blank="（管理者が直接）" :value="$c->source_ses_id ?? null" />@else<div></div>@endif
 <x-field label="金額（万円／月）" name="price" type="number" step="0.5" :value="num_disp($c->price ?? null)" hint="SES が元請けから受け取る月額。成功報酬の基準になります。" />
 <x-field label="金額のメモ" name="price_note" :value="$c->price_note ?? null" placeholder="例：スキル見合い、精算 140-180h" />
 <x-field label="必須スキル" name="required_skills" type="textarea" rows="2" :value="$c->required_skills ?? null" placeholder="Java、Spring Boot、SQL（「、」区切り）" />

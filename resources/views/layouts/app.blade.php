@@ -41,7 +41,7 @@
 {{-- ログイン中の立場（2要素認証が済んだ人だけ） --}}
 @if($passed)
 <div class="loginbar"><div class="wrap">
-  @if($u->role === 'admin')管理者（運営）としてログインしています：{{ $u->name }}
+  @if($u->role === 'admin')管理者としてログインしています：{{ $u->name }}
   @elseif($u->role === 'ses')SES（{{ DB::table('ses_companies')->where('id', $u->ses_id)->value('name') }}）のご担当者としてログインしています
   @else エンジニアとしてログインしています
   @endif

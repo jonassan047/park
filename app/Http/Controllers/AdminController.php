@@ -8,7 +8,7 @@ use App\Services\Workflow as W;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
-// 運営の画面：ダッシュボード・SES・エンジニア・案件・選考・契約・請求・やり取り・メール・分析・設定・記録
+// 管理者の画面：ダッシュボード・SES・エンジニア・案件・選考・契約・請求・やり取り・メール・分析・設定・記録
 class AdminController extends Controller
 {
     // 応募のファネル（応募 → 成約）。見送り・辞退の応募も、どの段階まで進んだかで数える
@@ -83,7 +83,7 @@ class AdminController extends Controller
         if (!str_in($r->input('name'))) return back()->withInput()->with('flash', ['msg' => '会社名を入れてください。', 'type' => 'bad']);
         $email = strtolower((string) str_in($r->input('email')));
         if ($email && DB::table('users')->where('email', $email)->exists()) return back()->withInput()->with('flash', ['msg' => 'このメールアドレスはすでに使われています。', 'type' => 'bad']);
-        // 運営が登録した SES は、承認の手順を省いて、すぐ参加中にする（担当者のメールがあれば招待が届く）
+        // 管理者が登録した SES は、承認の手順を省いて、すぐ参加中にする（担当者のメールがあれば招待が届く）
         $id = W::applySes($r->all() + ['agree' => 1], $r->user());
         W::approveSes($id, $r->user(), str_in($r->input('name')).' を PARK に登録しました。');
         if (!$email) return $this->go("/admin/ses/$id", '登録しました（メールアドレスが無いので、招待は送っていません）。', 'warn');
@@ -116,7 +116,7 @@ class AdminController extends Controller
             'name' => str_in($r->input('name')), 'rep_name' => str_in($r->input('rep_name')), 'contact_name' => str_in($r->input('contact_name')),
             'email' => strtolower((string) str_in($r->input('email'))) ?: null, 'phone' => str_in($r->input('phone')), 'address' => str_in($r->input('address')),
             'employees' => int_or_null($r->input('employees')), 'strengths' => str_in($r->input('strengths')), 'notes' => str_in($r->input('notes')), 'updated_at' => now_str(),
-            'self_confirmed_at' => null, // 運営が書き換えたら、SES にもう一度確かめてもらう
+            'self_confirmed_at' => null, // 管理者が書き換えたら、SES にもう一度確かめてもらう
         ]);
         return $this->go("/admin/ses/$id", '保存しました。');
     }

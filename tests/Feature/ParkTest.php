@@ -235,8 +235,8 @@ class ParkTest extends TestCase
         $this->assertDatabaseHas('app_notifications', ['title' => '経歴を更新してください：'.DB::table('cases')->where('id', 1)->value('title')]);
         $this->as('eg1@park.example')->get('/eg')->assertSee('終わった案件を書く');
 
-        // 会社の情報：運営が書き換えると、SES の確認がやり直し
-        $this->as('admin@park.example')->post('/admin/ses/1', ['name' => 'みどり情報システム', 'notes' => '運営のメモ']);
+        // 会社の情報：管理者が書き換えると、SES の確認がやり直し
+        $this->as('admin@park.example')->post('/admin/ses/1', ['name' => 'みどり情報システム', 'notes' => '管理者のメモ']);
         $this->assertNull(DB::table('ses_companies')->where('id', 1)->value('self_confirmed_at'));
         $this->as('ses1@park.example')->get('/ses/company')->assertSee('会社の情報の確認');
         $this->post('/ses/company/confirm')->assertRedirect(url('/ses/company'));
@@ -374,13 +374,13 @@ class ParkTest extends TestCase
 
     public function test_manuals(): void
     {
-        $this->get('/manual')->assertOk()->assertSee('SES 企業さま向けマニュアル')->assertDontSee('運営マニュアル');
+        $this->get('/manual')->assertOk()->assertSee('SES 企業さま向けマニュアル')->assertDontSee('管理者マニュアル');
         $this->get('/manual/ses')->assertOk()->assertSee('参加のお申し込み')->assertSee('<table>', false);
         $this->get('/manual/engineer')->assertOk()->assertSee('経験票');
         $this->get('/manual/admin')->assertForbidden();
         $this->get('/manual/xxx')->assertNotFound();
-        // 操作手順書：ログイン前は SES・エンジニアのもの、運営のものは運営だけ。ログインすると自分の立場のものだけ並ぶ
-        $this->get('/manual')->assertSee('エンジニア 操作手順書')->assertDontSee('運営 操作手順書');
+        // 操作手順書：ログイン前は SES・エンジニアのもの、管理者のものは管理者だけ。ログインすると自分の立場のものだけ並ぶ
+        $this->get('/manual')->assertSee('エンジニア 操作手順書')->assertDontSee('管理者 操作手順書');
         $this->get('/manual/ses-steps')->assertOk()->assertSee('案件メール');
         $this->get('/manual/engineer-steps')->assertOk()->assertSee('確認コード');
         $this->get('/manual/admin-steps')->assertForbidden();

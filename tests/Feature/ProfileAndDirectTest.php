@@ -30,7 +30,7 @@ class ProfileAndDirectTest extends TestCase
         DB::table('users')->whereIn('email', $emails)->update(['profile_completed_at' => null]);
     }
 
-    // 管理者の直属のエンジニアを1人登録して、その engineers.id を返す（運営として操作する）
+    // 管理者の直属のエンジニアを1人登録して、その engineers.id を返す（管理者として操作する）
     private function directEngineer(string $email = 'direct-eg@park.example', string $name = '直属 一郎'): int
     {
         $this->as('admin@park.example')->post('/engineers', ['ses_id' => 'direct', 'name' => $name, 'email' => $email])->assertRedirect();
@@ -167,8 +167,8 @@ class ProfileAndDirectTest extends TestCase
     public function test_a12_setup_goes_to_welcome(): void
     {
         DB::table('users')->delete();
-        $this->post('/setup', ['name' => '最初 の運営', 'email' => 'first@park.example', 'password' => 'abcd1234'])->assertRedirect(url('/welcome'));
-        $this->get('/welcome')->assertOk()->assertSee('最初 の運営');
+        $this->post('/setup', ['name' => '最初 の管理者', 'email' => 'first@park.example', 'password' => 'abcd1234'])->assertRedirect(url('/welcome'));
+        $this->get('/welcome')->assertOk()->assertSee('最初 の管理者');
         $this->get('/admin')->assertRedirect(url('/welcome'));
     }
 
@@ -176,12 +176,12 @@ class ProfileAndDirectTest extends TestCase
 
     public function test_b_login_bar(): void
     {
-        $this->as('admin@park.example')->get('/admin')->assertSee('管理者（運営）としてログインしています：'.User::where('email', 'admin@park.example')->value('name'));
+        $this->as('admin@park.example')->get('/admin')->assertSee('管理者としてログインしています：'.User::where('email', 'admin@park.example')->value('name'));
         $this->as('ses1@park.example')->get('/ses')->assertSee('SES（みどり情報システム）のご担当者としてログインしています');
         $this->as('eg1@park.example')->get('/eg')->assertSee('エンジニアとしてログインしています');
         // 印刷用
         $this->as('admin@park.example')->get('/engineers/1/sheet')->assertOk()->assertDontSee('としてログインしています');
-        $this->assertSame('運営', lbl('role', 'admin'));
+        $this->assertSame('管理者', lbl('role', 'admin'));
     }
 
     public function test_b3_no_bar_before_two_factor(): void
@@ -202,7 +202,7 @@ class ProfileAndDirectTest extends TestCase
         $nu = DB::table('users')->where('email', 'new-admin@park.example')->first();
         $this->assertSame('admin', $nu->role);
         $this->assertNull($nu->password);
-        $this->get('/admin/settings')->assertOk()->assertSee('管理者（運営メンバー）')->assertSee('招待中')->assertSee('使用中')->assertSee('招待を送り直す');
+        $this->get('/admin/settings')->assertOk()->assertSee('管理者を招待')->assertSee('招待中')->assertSee('使用中')->assertSee('招待を送り直す');
         // 送り直しは毎回 token が新しくなる
         $mails = DB::table('mail_outbox')->where('kind', 'invite')->count();
         $t0 = $nu->token;
@@ -258,8 +258,8 @@ class ProfileAndDirectTest extends TestCase
         $this->as('admin@park.example');
         $this->get('/admin/ses/new')->assertOk()->assertSee('登録すると参加中になり、担当の方に招待メールが届きます。');
         $notes = DB::table('app_notifications')->count();
-        $this->post('/admin/ses', ['name' => '運営登録 SES', 'contact_name' => '担当 花子', 'email' => 'reg-ses@park.example'])->assertRedirect();
-        $s = DB::table('ses_companies')->where('name', '運営登録 SES')->first();
+        $this->post('/admin/ses', ['name' => '管理者登録 SES', 'contact_name' => '担当 花子', 'email' => 'reg-ses@park.example'])->assertRedirect();
+        $s = DB::table('ses_companies')->where('name', '管理者登録 SES')->first();
         $this->assertSame('active', $s->status);
         $this->assertSame(date('Y-m-d'), substr($s->joined_at, 0, 10));
         $this->assertDatabaseHas('users', ['email' => 'reg-ses@park.example', 'role' => 'ses', 'ses_id' => $s->id]);
@@ -330,7 +330,7 @@ class ProfileAndDirectTest extends TestCase
         $this->get('/admin/engineers?ses=direct')->assertOk(); // 0件でも開ける
         $this->assertSame(0, DB::table('ses_companies')->where('kind', 'direct')->count()); // 開いただけでは作らない
         W::directSesId();
-        $this->assertStringNotContainsString('PARK 運営（直属）', $this->get('/engineers/new')->getContent());
+        $this->assertStringNotContainsString('>管理者の直属<', $this->get('/engineers/new')->getContent()); // 「（SES なし）」付きの選択肢とは別に、行の名前は出ない
         $this->as('ses1@park.example')->get('/engineers/new')->assertOk()->assertDontSee('管理者の直属');
     }
 
@@ -403,7 +403,7 @@ class ProfileAndDirectTest extends TestCase
         $s0 = json_decode(Artisan::output(), true);
         $this->as('admin@park.example');
         $list = $this->get('/admin/ses')->assertOk();
-        $this->assertStringNotContainsString('PARK 運営（直属）', $list->getContent());
+        $this->assertStringNotContainsString('管理者の直属', $list->getContent());
         foreach (["/admin/ses/$direct"] as $p) $this->get($p)->assertNotFound();
         $this->post("/admin/ses/$direct", ['name' => 'x'])->assertNotFound();
         $this->post("/admin/ses/$direct/approve")->assertNotFound();
@@ -416,8 +416,8 @@ class ProfileAndDirectTest extends TestCase
         $expect = DB::table('ses_companies')->where('kind', 'ses')->where('status', 'active')->count();
         $this->assertSame($expect, $d->viewData('counts')['ses']);
         // 分析・案件の持ち込み SES
-        $this->assertStringNotContainsString('PARK 運営（直属）', $this->get('/admin/reports')->assertOk()->getContent());
-        $this->assertStringNotContainsString('PARK 運営（直属）', $this->get('/cases/new')->assertOk()->getContent());
+        $this->assertStringNotContainsString('管理者の直属', $this->get('/admin/reports')->assertOk()->getContent());
+        $this->assertStringNotContainsString('管理者の直属', $this->get('/cases/new')->assertOk()->getContent());
         // park:status
         $this->assertSame(0, $s0['SES：会社の情報の確認がまだ']);
         $this->assertSame(0, $s0['SES：承認待ち'] - 1); // 見本の保留 1 社だけ
@@ -470,11 +470,11 @@ class ProfileAndDirectTest extends TestCase
         $kisha0 = DB::table('app_notifications')->where('title', 'like', '貴社のエンジニアが応募しました%')->count();
         $apps0 = DB::table('app_notifications')->whereIn('user_id', $adminIds)->where('title', 'like', '応募がありました%')->count();
         $appId = W::apply($caseId, $eid, ['start_ok' => 1], $admin);
-        // 応募の知らせは、運営あてに1回分だけ（二重にしない）
+        // 応募の知らせは、管理者あてに1回分だけ（二重にしない）
         $this->assertSame($apps0 + $adminIds->count(), DB::table('app_notifications')->whereIn('user_id', $adminIds)->where('title', 'like', '応募がありました%')->count());
         $this->assertSame($kisha0, DB::table('app_notifications')->where('title', 'like', '貴社のエンジニアが応募しました%')->count());
 
-        // 書類通過 → 運営に届く
+        // 書類通過 → 管理者に届く
         $before = DB::table('app_notifications')->whereIn('user_id', $adminIds)->count();
         W::setStatus($appId, 'doc_passed', $admin, '', '');
         $this->assertGreaterThan($before, DB::table('app_notifications')->whereIn('user_id', $adminIds)->count());
@@ -492,7 +492,7 @@ class ProfileAndDirectTest extends TestCase
         // 宛名
         $invite = DB::table('mail_outbox')->where('to_email', 'direct-eg@park.example')->where('kind', 'invite')->first();
         $this->assertStringStartsWith('直属 一郎 様', $invite->body);
-        $this->assertStringNotContainsString('PARK 運営（直属）', $invite->body);
+        $this->assertStringNotContainsString('管理者の直属', $invite->body);
     }
 
     public function test_e9_ses_contract_still_mentions_billing(): void

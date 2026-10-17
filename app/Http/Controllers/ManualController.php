@@ -6,12 +6,12 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use League\CommonMark\Extension\Table\TableExtension;
 
-// マニュアル（正本は resources/manuals/*.md）。SES・エンジニア向けはログイン前でも読める。運営向けは運営だけ
+// マニュアル（正本は resources/manuals/*.md）。SES・エンジニア向けはログイン前でも読める。管理者向けは管理者だけ
 // 操作手順書（*-steps）：ログイン・設定・メールの処理だけを、立場ごとに順に書いたもの
 class ManualController extends Controller
 {
     const KINDS = [
-        'admin-steps' => '運営 操作手順書', 'admin' => '運営マニュアル',
+        'admin-steps' => '管理者 操作手順書', 'admin' => '管理者マニュアル',
         'ses-steps' => 'SES 企業さま 操作手順書', 'ses' => 'SES 企業さま向けマニュアル',
         'engineer-steps' => 'エンジニア 操作手順書', 'engineer' => 'エンジニア向けマニュアル',
     ];
@@ -20,7 +20,7 @@ class ManualController extends Controller
     {
         $u = $r->user();
         $role = $u ? ['admin' => 'admin', 'ses' => 'ses', 'eg' => 'engineer'][$u->role] ?? 'engineer' : null;
-        // 運営はすべて。SES・エンジニアは自分の立場の2つ。ログイン前は運営向け以外
+        // 管理者はすべて。SES・エンジニアは自分の立場の2つ。ログイン前は管理者向け以外
         $kinds = array_filter(self::KINDS, fn ($k) => $role === 'admin' || ($role ? str_starts_with($k, $role) : !str_starts_with($k, 'admin')), ARRAY_FILTER_USE_KEY);
         return view('manual.index', ['kinds' => $kinds]);
     }
@@ -28,7 +28,7 @@ class ManualController extends Controller
     public function show(Request $r, string $kind)
     {
         abort_unless(isset(self::KINDS[$kind]), 404);
-        // 運営向けは、2要素認証まで済ませた運営だけ
+        // 管理者向けは、2要素認証まで済ませた管理者だけ
         if (str_starts_with($kind, 'admin')) abort_unless($r->user() && $r->user()->role === 'admin' && (int) $r->session()->get(\App\Support\TwoFactor::SESSION_KEY) === (int) $r->user()->id, 403);
         $md = file_get_contents(resource_path("manuals/$kind.md"));
         // 見出しに飛べるよう id を付け、目次を作る

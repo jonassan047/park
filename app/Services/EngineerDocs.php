@@ -13,7 +13,7 @@ use PhpOffice\PhpSpreadsheet\Worksheet\PageSetup;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 // エンジニアごとのデータ領域：最新の履歴書・業務経歴書を Excel で書き出して保存する。アップロードした書類もここに置く。
-// 置き場所は storage/app/private/engineers/{id}/（公開されない）。ダウンロードは画面から、本人・所属 SES・運営だけ。
+// 置き場所は storage/app/private/engineers/{id}/（公開されない）。ダウンロードは画面から、本人・所属 SES・管理者だけ。
 class EngineerDocs
 {
     const KINDS = ['resume' => '履歴書', 'careersheet' => '業務経歴書', 'other' => 'その他の書類'];

@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 
 // メール配信・アプリ内の通知（ベル）・操作の記録。
-// メールはすべて mail_outbox に残す。MAIL_MAILER が log / array のときは「保存のみ」（運営の「メール」画面で中身を確認できる）。
+// メールはすべて mail_outbox に残す。MAIL_MAILER が log / array のときは「保存のみ」（管理者の「メール」画面で中身を確認できる）。
 class Notifier
 {
     public static function canSend(): bool
@@ -70,7 +70,7 @@ class Notifier
     }
     public static function toSes($sesId, string $title, string $body, string $link, bool $mail = true, string $kind = 'notice'): void
     {
-        // 管理者の直属には SES の担当者がいないので、運営全員に届ける
+        // 管理者の直属には SES の担当者がいないので、管理者全員に届ける
         if (Workflow::isDirect($sesId ? (int) $sesId : null)) { self::toAdmins($title, $body, $link, $mail, $kind); return; }
         foreach (self::sesUsers($sesId) as $u) self::notify($u->id, $title, $body, $link, $mail, $kind);
     }

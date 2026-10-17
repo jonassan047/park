@@ -110,7 +110,7 @@ class SkillCatalog
         return self::map()[norm_skill_raw($word)] ?? null;
     }
 
-    // マスタに無い言葉なら、自動で足す（運営が分類を確かめるまで「未確認」）。足したら名前を返す
+    // マスタに無い言葉なら、自動で足す（管理者が分類を確かめるまで「未確認」）。足したら名前を返す
     public static function ensure(string $word, string $category = 'other'): ?string
     {
         $word = trim($word);

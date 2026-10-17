@@ -4,7 +4,7 @@ namespace App\Models;
 
 use Illuminate\Foundation\Auth\User as Authenticatable;
 
-// ログインする人（運営・SES の担当者・エンジニア）。role で画面が分かれる
+// ログインする人（管理者・SES の担当者・エンジニア）。role で画面が分かれる
 class User extends Authenticatable
 {
     protected $guarded = ['id'];

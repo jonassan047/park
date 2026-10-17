@@ -128,7 +128,7 @@ Route::middleware('role:admin,eg')->group(function () {
 
 Route::middleware('role:ses,eg')->post('/applications/{id}/withdraw', [Pip::class, 'withdraw']);
 
-// ---------- 運営 ----------
+// ---------- 管理者 ----------
 Route::middleware('role:admin')->group(function () {
     Route::post('/contracts/{id}/extend', [Pip::class, 'extend']);
     Route::post('/contracts/{id}/end', [Pip::class, 'end']);

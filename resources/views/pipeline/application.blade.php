@@ -35,7 +35,7 @@
   <form method="post" action="{{ url('/applications/'.$a->id.'/interview') }}">@csrf<h3>面談依頼が来た（{{ $ivs->count() + 1 }}回目）</h3>
   <div class="grid2"><x-field label="日時" name="scheduled_at" type="datetime-local" /><x-field label="場所・URL" name="place" placeholder="オンライン（URL は追って）" /></div>
   <x-field label="依頼の内容（先方が確かめたいこと。1行に1つ）" name="request_note" type="textarea" rows="3" placeholder="Spring Boot での設計の経験&#10;リーダー経験の有無" />
-  <p class="muted">記録すると、案件と本人のスキルを突き合わせて<b>面談スクリプト</b>（想定質問と答え方）を作り、本人・SES・運営に知らせます。</p><button class="btn">面談依頼を記録する</button></form>
+  <p class="muted">記録すると、案件と本人のスキルを突き合わせて<b>面談スクリプト</b>（想定質問と答え方）を作り、本人・SES・管理者に知らせます。</p><button class="btn">面談依頼を記録する</button></form>
 @endif
 @if(in_array($a->status, ['interview', 'interviewed']))
   <form method="post" action="{{ url('/applications/'.$a->id.'/contract') }}" onsubmit="return confirm('成約として記録し、本人と SES に知らせます。よろしいですか？')">@csrf<h3>成約を記録</h3>

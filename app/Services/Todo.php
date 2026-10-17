@@ -23,7 +23,7 @@ class Todo
         return compact('text', 'do', 'url');
     }
 
-    // 応募のうち、次の手を打つ必要があるもの（SES・運営で共通）
+    // 応募のうち、次の手を打つ必要があるもの（SES・管理者で共通）
     private static function pipeline($q): array
     {
         $out = [];

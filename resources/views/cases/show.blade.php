@@ -9,7 +9,7 @@
 <dl class="dl">
 <dt>状態</dt><dd>{{ badge('caseStatus', $c->status) }}</dd>
 <dt>金額</dt><dd>{{ man($c->price) }} <span class="muted">{{ $c->price_note }}</span></dd>
-@if($u->role !== 'eg')<dt>元請け</dt><dd>{{ $c->client_label ?: '—' }}</dd><dt>持ち込み</dt><dd>{{ $c->ses_name ?: '運営' }}</dd>@endif
+@if($u->role !== 'eg')<dt>元請け</dt><dd>{{ $c->client_label ?: '—' }}</dd><dt>持ち込み</dt><dd>{{ $c->ses_name ?: '管理者' }}</dd>@endif
 <dt>必須</dt><dd><x-chips :list="parse_list($c->required_skills)" /></dd>
 <dt>尚可</dt><dd><x-chips :list="parse_list($c->preferred_skills)" /></dd>
 <dt>経験年数</dt><dd>{{ $c->min_years ? num_disp($c->min_years).'年以上' : '—' }}</dd>
@@ -65,7 +65,7 @@
   @else
   @if($canMail)<p class="muted">案内は「エンジニアに案内する」から、メールで送ります（返事のリンク付き。送った記録と返事は、左の「案内メール」に出ます）。</p>
   <p><a class="btn" href="{{ url('/cases/'.$c->id.'/mail') }}">エンジニアに案内する</a></p>
-  @else<p class="muted">この案件は{{ $c->ses_name ? 'ほかの SES' : '運営' }}が持ち込んだものです。合う方がいれば「推薦する」で、持ち込んだ{{ $c->ses_name ? ' SES' : '運営' }}に知らせます（名前は伏せて伝えます）。</p>@endif
+  @else<p class="muted">この案件は{{ $c->ses_name ? 'ほかの SES' : '管理者' }}が持ち込んだものです。合う方がいれば「推薦する」で、持ち込んだ{{ $c->ses_name ? ' SES' : '管理者' }}に知らせます（名前は伏せて伝えます）。</p>@endif
   <x-table :head="['エンジニア', '点数', '足りない点', '']" :count="count($rows)" empty="登録しているエンジニアがいません。">
   @foreach($rows as $row)<tr><td><a href="{{ url('/engineers/'.$row['e']->id) }}">{{ $row['e']->name }}</a><div class="muted">{{ lbl('engStatus', $row['e']->status) }}</div></td>
     <td><x-score :n="$row['score']" /></td><td><small class="bad-text">{{ implode('、', $row['missing']) }}</small></td>

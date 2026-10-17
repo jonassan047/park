@@ -17,7 +17,7 @@
 <dt>稼働できる日</dt><dd>{{ fmt_date($e->available_from) }}</dd>
 <dt>働き方</dt><dd>{{ lbl('workStyle', $e->work_style) }}・週{{ $e->days_per_week ?: 5 }}日</dd>
 <dt>強み</dt><dd>{{ $e->strengths ?: '—' }}</dd><dt>自己PR</dt><dd>{!! nl2br(e($e->summary)) ?: '—' !!}</dd>
-<dt>本人の確認</dt><dd>@if($e->self_confirmed_at)済み（{{ fmt_dt($e->self_confirmed_at) }}）@else<b>まだ</b>@if(!$mine)<span class="muted">（ご本人が確かめるまで、応募できません。運営・SES が書き換えると、もう一度確認が必要になります）</span>@endif @endif</dd>
+<dt>本人の確認</dt><dd>@if($e->self_confirmed_at)済み（{{ fmt_dt($e->self_confirmed_at) }}）@else<b>まだ</b>@if(!$mine)<span class="muted">（ご本人が確かめるまで、応募できません。管理者・SES が書き換えると、もう一度確認が必要になります）</span>@endif @endif</dd>
 @unless($mine)<dt>アカウント</dt><dd>{{ $eu ? ($eu->password ? '利用中（最終ログイン '.fmt_dt($eu->last_login).'）' : '招待中（未設定）') : 'なし' }}</dd>@endunless
 
 <dt>個人情報の同意</dt><dd>@if($e->consent_at){{ fmt_date($e->consent_at) }}@else<span class="bad-text">未</span>@endif</dd>
@@ -66,7 +66,7 @@
 </x-card>
 @endforeach
 <x-card title="📁 データ領域（履歴書・業務経歴書）">
-<p class="muted">登録した内容から、最新の履歴書・業務経歴書を Excel で書き出して保存します。書き出すたびに版が残り、いつでもダウンロードできます。手持ちの書類（PDF など）も置けます。見られるのは、本人・所属の SES・運営だけです。</p>
+<p class="muted">登録した内容から、最新の履歴書・業務経歴書を Excel で書き出して保存します。書き出すたびに版が残り、いつでもダウンロードできます。手持ちの書類（PDF など）も置けます。見られるのは、本人・所属の SES・管理者だけです。</p>
 <p><x-post :action="'/engineers/'.$e->id.'/docs/generate'" label="履歴書を書き出す" :fields="['kind' => 'resume']" cls="small" />
 <x-post :action="'/engineers/'.$e->id.'/docs/generate'" label="業務経歴書を書き出す" :fields="['kind' => 'careersheet']" cls="small" />
 <x-post :action="'/engineers/'.$e->id.'/docs/generate'" label="業務経歴書（名前を伏せた版）" :fields="['kind' => 'careersheet', 'anon' => 1]" cls="ghost small" /></p>
@@ -82,7 +82,7 @@
 <x-card title="スキルシートの完成度"><div class="meter"><i style="width:{{ $check['score'] }}%"></i><b>{{ $check['score'] }}%</b></div>
 <ul class="tips">@foreach($check['tips'] as $t)<li>{{ $t }}</li>@endforeach</ul>
 <p><a class="btn" href="{{ url('/engineers/'.$e->id.'/sheet') }}">スキルシートを見る</a> <a class="btn ghost" href="{{ url('/engineers/'.$e->id.'/sheet?anon=1') }}">名前を伏せた版</a></p>
-@if($u->role !== 'ses')<p><a href="{{ url('/engineers/'.$e->id.'/messages') }}">運営とのやり取り（スキルシートの相談）</a></p>@endif
+@if($u->role !== 'ses')<p><a href="{{ url('/engineers/'.$e->id.'/messages') }}">管理者とのやり取り（スキルシートの相談）</a></p>@endif
 </x-card>
 <x-card title="応募・選考"><x-table :head="['案件', '状態', '']" :count="$apps->count()">
 @foreach($apps as $a)<tr><td>{{ $a->title }}</td><td>{{ badge('appStatus', $a->status) }}</td><td><a href="{{ url('/applications/'.$a->id) }}">詳細</a></td></tr>@endforeach

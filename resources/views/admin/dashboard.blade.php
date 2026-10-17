@@ -11,7 +11,7 @@
 @foreach($pendingSes as $s)<tr><td>{{ $s->name }}</td><td>{{ $s->contact_name }}</td><td>{{ fmt_date($s->created_at) }}</td><td><a href="{{ url('/admin/ses/'.$s->id) }}">確認する</a></td></tr>@endforeach
 </x-table></x-card>
 @endif
-<x-card title="いま運営がやること"><x-table :head="['案件', 'エンジニア', '状態', '次の手順', '']" :count="$todo->count()" empty="ありません。">
+<x-card title="いま管理者がやること"><x-table :head="['案件', 'エンジニア', '状態', '次の手順', '']" :count="$todo->count()" empty="ありません。">
 @foreach($todo as $a)<tr><td>{{ $a->title }}</td><td>{{ $a->eg_name }}</td><td>{{ badge('appStatus', $a->status) }}</td><td>{{ $next[$a->status] }}</td><td><a href="{{ url('/applications/'.$a->id) }}">開く</a></td></tr>@endforeach
 </x-table></x-card>
 <x-card title="募集中の案件"><x-slot:actions><a class="btn small" href="{{ url('/cases/new') }}">案件を登録</a></x-slot:actions>

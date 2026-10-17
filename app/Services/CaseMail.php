@@ -13,7 +13,7 @@ class CaseMail
     const REPLIES = ['none' => '返事なし', 'interested' => '応募したい', 'question' => '質問あり', 'declined' => '見送り'];
     const PLACEHOLDERS = ['{呼び名}', '{案件名}', '{単価}', '{開始}', '{場所}', '{働き方}', '{必須}', '{合う点}', '{送り主}'];
 
-    // 誰が案内できるか：運営と、案件を持ち込んだ SES
+    // 誰が案内できるか：管理者と、案件を持ち込んだ SES
     public static function canSend($u, $c): bool
     {
         return $u->role === 'admin' || ($u->role === 'ses' && (int) $c->source_ses_id === (int) $u->ses_id);

@@ -94,7 +94,7 @@ class SesController extends Controller
         return $this->go('/ses/company', '保存しました。');
     }
 
-    // 運営が入れた会社の情報を、SES が確かめて責任を持つ
+    // 管理者が入れた会社の情報を、SES が確かめて責任を持つ
     public function confirmCompany(Request $r)
     {
         DB::table('ses_companies')->where('id', $r->user()->ses_id)->update(['self_confirmed_at' => now_str()]);

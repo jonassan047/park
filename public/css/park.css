@@ -281,7 +281,7 @@ input[type=file] { padding: 6px; }
 .mailbody{white-space:pre-wrap;font-family:inherit;background:#f7faf7;border-radius:12px;padding:12px;margin:0}
 .todo{margin:0;padding-left:1.4em}.todo li{margin:.35em 0}.todo a{display:block;text-decoration:none;color:inherit;padding:.45em .7em;border-radius:12px;background:#f3f8f1}.todo a:hover{background:#e6f1e2}.todo b{display:block}.todo span{font-size:.9em;color:#4a7a43}
 
-/* 役割ごとの色：SES＝緑（既定）、運営＝青、エンジニア＝紫。ヘッダーの帯と役割の札で、どの立場かがひと目でわかる */
+/* 役割ごとの色：SES＝緑（既定）、管理者＝青、エンジニア＝紫。ヘッダーの帯と役割の札で、どの立場かがひと目でわかる */
 body.role-admin { --ink: #1f3a5f; --sub: #5a7090; --line: #d3dfee; --bg: #f1f5fb; --blue: #3b6fb6; --blue-dark: #2a5496; --blue2: #e0eaf7; --blue3: #bfd2ec; --ok: #2a5496; --shadow: 0 1px 2px rgba(31,58,95,.06), 0 4px 14px rgba(31,58,95,.06); }
 body.role-eg { --ink: #432a63; --sub: #7a6694; --line: #e2d8ee; --bg: #f7f3fb; --blue: #8a5bb5; --blue-dark: #6e3f9c; --blue2: #eee4f7; --blue3: #d8c5ea; --ok: #6e3f9c; --shadow: 0 1px 2px rgba(67,42,99,.06), 0 4px 14px rgba(67,42,99,.06); }
 body.role-admin header.top, body.role-ses header.top, body.role-eg header.top { border-top: 5px solid var(--blue); }

@@ -6,13 +6,13 @@ use App\Services\Workflow;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
-// 公開サーバーで、最初の運営アカウントを作る（招待のリンクを出す）。
+// 公開サーバーで、最初の管理者アカウントを作る（招待のリンクを出す）。
 // 画面の「はじめの設定」は、公開中だとほかの人に先に使われるおそれがあるので、サーバーの中からこちらを使う。
 // 使い方：php artisan park:invite-admin メールアドレス 名前
 class InviteAdmin extends Command
 {
     protected $signature = 'park:invite-admin {email} {name}';
-    protected $description = '運営のアカウントを作り、パスワード設定用のリンク（7日間有効）を表示する';
+    protected $description = '管理者のアカウントを作り、パスワード設定用のリンク（7日間有効）を表示する';
 
     public function handle(): int
     {

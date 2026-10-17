@@ -104,7 +104,7 @@ class CaseController extends Controller
         return $this->go("/cases/$id", "{$n}名に配信しました（メールと通知）。");
     }
 
-    // 持ち込んでいない SES が、自社のエンジニアを推薦する（持ち込んだ SES／運営に、名前を伏せて知らせる）
+    // 持ち込んでいない SES が、自社のエンジニアを推薦する（持ち込んだ SES／管理者に、名前を伏せて知らせる）
     public function recommend(Request $r, int $id)
     {
         $u = $r->user();
@@ -122,7 +122,7 @@ class CaseController extends Controller
         if ($c->source_ses_id) N::toSes($c->source_ses_id, "エンジニアの推薦がありました：{$c->title}", $text, "/cases/$id/mail?scope=group", true, 'recommend');
         N::toAdmins("エンジニアの推薦がありました：{$c->title}", $text, "/cases/$id/mail", !$c->source_ses_id, 'recommend');
         N::audit($u->id, 'recommend', $key);
-        return $this->go("/cases/$id", '推薦しました。持ち込んだ'.($c->source_ses_id ? ' SES' : '運営').'に知らせました。');
+        return $this->go("/cases/$id", '推薦しました。持ち込んだ'.($c->source_ses_id ? ' SES' : '管理者').'に知らせました。');
     }
 
     public function apply(Request $r, int $id)
@@ -138,7 +138,7 @@ class CaseController extends Controller
         try {
             $appId = W::apply($id, $eid, $r->all(), $u);
             CM::reply($id, $eid, 'interested', str_in($r->input('condition_note')), $u->role === 'eg' ? 'app' : 'ses');
-            return $this->go("/applications/$appId", '応募しました。運営がスキルシートを案件に合わせて整え、提出します。');
+            return $this->go("/applications/$appId", '応募しました。管理者がスキルシートを案件に合わせて整え、提出します。');
         } catch (\RuntimeException $e) {
             return $this->go("/cases/$id", $e->getMessage(), 'bad');
         }

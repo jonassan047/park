@@ -15,7 +15,7 @@
 <table class="edit" id="skills"><thead><tr><th>スキル</th><th>分類</th><th>年数</th><th>レベル</th><th></th></tr></thead>
 <tbody>@foreach($skills as $s){!! $row($s) !!}@endforeach{!! $row() !!}{!! $row() !!}{!! $row() !!}</tbody></table>
 <datalist id="skillterms">@foreach($terms as $t)<option value="{{ $t->name }}">{{ lbl('skillCat', $t->category) }}</option>@endforeach</datalist>
-<p class="muted">スキル名は、候補（技術マスタ）から選ぶと、案件とのマッチングが正確になります。候補に無いものも入れられます（運営が分類を確かめます）。</p>
+<p class="muted">スキル名は、候補（技術マスタ）から選ぶと、案件とのマッチングが正確になります。候補に無いものも入れられます（管理者が分類を確かめます）。</p>
 <template id="skillrow">{!! $row() !!}</template>
 <p><button type="button" class="btn ghost small" onclick="addRow('skills','skillrow')">行を足す</button></p>
 <button class="btn">保存する</button></form></x-card>

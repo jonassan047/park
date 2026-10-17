@@ -8,6 +8,6 @@
 @unless($u->role === 'eg')
 <x-field label="所属・役職" name="position" :value="$v->position" hint="例：営業部 部長" />
 @endunless
-<p class="muted">メールアドレス：{{ $u->email }}（変えるときは運営にご連絡ください）</p>
+<p class="muted">メールアドレス：{{ $u->email }}（変えるときは管理者にご連絡ください）</p>
 <button class="btn">登録する</button></form></x-card>
 @endsection

@@ -5,7 +5,7 @@ namespace App\Services;
 use Illuminate\Support\Facades\DB;
 
 // 面談対策の Q&A と、スキルシートの完成度。
-// 案件の要件と本人の経験票から作る（外部の AI には渡さない）。文は運営が画面で直せる。
+// 案件の要件と本人の経験票から作る（外部の AI には渡さない）。文は管理者が画面で直せる。
 class Qa
 {
     private static function projectsUsing($projects, string $skill): array

@@ -14,7 +14,7 @@ class DatabaseSeeder extends Seeder
     {
         \App\Support\SkillCatalog::sync(); // 技術マスタの辞書
         $pw = 'park1234';
-        $adminId = W::createUser('admin@park.example', '運営 太郎', 'admin', $pw);
+        $adminId = W::createUser('admin@park.example', '管理者 太郎', 'admin', $pw);
         $admin = DB::table('users')->find($adminId);
 
         $ses = [];

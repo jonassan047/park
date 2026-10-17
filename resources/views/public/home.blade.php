@@ -15,12 +15,12 @@
   <a class="spot" href="{{ url('/manual/ses') }}" style="background-image:url('{{ asset('img/ses.jpg') }}')"><div><em>SES 企業さま</em><b>🏡 グループで、仕事を回す</b>
     <small>1社では受けきれない案件も、仲間のエンジニアで埋められます。自社のエンジニアとの相性もひと目でわかります。</small></div></a>
   <a class="spot" href="{{ url('/manual/engineer') }}" style="background-image:url('{{ asset('img/engineers.jpg') }}')"><div><em class="orange">エンジニアのみなさま</em><b>🪑 合う案件が、届く</b>
-    <small>運営と一緒に、事実にもとづいたスキルシートを作り、面談の準備（Q&A）まで支えます。利用は無料です。</small></div></a>
+    <small>管理者と一緒に、事実にもとづいたスキルシートを作り、面談の準備（Q&A）まで支えます。利用は無料です。</small></div></a>
 </div>
 
 <div class="section-title"><h2>PARK のしくみ</h2><p>準備から成約まで、3つのステップで支えます。</p></div>
 <div class="grid3 steps">
-<x-card><h3><span class="num">1</span>準備</h3><p>SES がエンジニアの基本情報を登録。エンジニアは運営とやり取りしながら、事実にもとづいた理想のスキルシートを作ります。</p></x-card>
+<x-card><h3><span class="num">1</span>準備</h3><p>SES がエンジニアの基本情報を登録。エンジニアは管理者とやり取りしながら、事実にもとづいた理想のスキルシートを作ります。</p></x-card>
 <x-card><h3><span class="num">2</span>適材を判断して配信</h3><p>案件が届くと、条件に合うエンジニアを選んでメールで配信。SES にもお知らせします。二重応募はグループで一本化します。</p></x-card>
 <x-card><h3><span class="num">3</span>面談サポート</h3><p>面談が決まると、案件に合わせた想定質問と答え方（Q&A）を用意。結果と理由をためて、次に活かします。</p></x-card>
 </div>

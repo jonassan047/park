@@ -12,7 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
-// エンジニア：登録・プロフィール・スキル・経験票・スキルシート・運営とのやり取り
+// エンジニア：登録・プロフィール・スキル・経験票・スキルシート・管理者とのやり取り
 class EngineerController extends Controller
 {
     private function load(Request $r, int $id)
@@ -25,7 +25,7 @@ class EngineerController extends Controller
 
     public function create(Request $r)
     {
-        // 運営の登録画面は、先頭に「管理者の直属」を出す（直属の入れ物は、登録のときに作る）
+        // 管理者の登録画面は、先頭に「管理者の直属」を出す（直属の入れ物は、登録のときに作る）
         $sesList = $r->user()->role === 'admin'
             ? ['direct' => '管理者の直属（SES なし）'] + DB::table('ses_companies')->where('kind', 'ses')->where('status', 'active')->orderBy('name')->pluck('name', 'id')->all()
             : [];
@@ -37,7 +37,7 @@ class EngineerController extends Controller
         if ($r->user()->role === 'ses') $sesId = $r->user()->ses_id;
         elseif ($r->input('ses_id') === 'direct') $sesId = str_in($r->input('name')) ? W::directSesId() : 0;
         else {
-            // 運営が選べるのは、参加中の SES だけ
+            // 管理者が選べるのは、参加中の SES だけ
             $sesId = (int) $r->input('ses_id');
             if (!DB::table('ses_companies')->where('id', $sesId)->where('kind', 'ses')->where('status', 'active')->exists()) $sesId = 0;
         }
@@ -84,7 +84,7 @@ class EngineerController extends Controller
         return $this->go("/engineers/$id", '保存しました。');
     }
 
-    // 本人が、登録の内容（運営・SES が入れたものも含む）を確かめ、責任を持つ
+    // 本人が、登録の内容（管理者・SES が入れたものも含む）を確かめ、責任を持つ
     public function confirm(Request $r, int $id)
     {
         abort_unless($r->user()->role === 'eg' && (int) $r->user()->engineer_id === $id, 403);
@@ -193,7 +193,7 @@ class EngineerController extends Controller
         $isEg = $r->user()->role === 'eg';
         DB::table('messages')->insert(['engineer_id' => $id, 'from_user' => $r->user()->id, 'body' => $body, 'created_at' => now_str(), 'read_by_eg' => $isEg, 'read_by_admin' => !$isEg]);
         if ($isEg) N::toAdmins("{$e->name} さんからメッセージ", mb_substr($body, 0, 200), "/engineers/$id/messages", true, 'message');
-        else N::toEg($id, '運営からメッセージが届きました', mb_substr($body, 0, 400), "/engineers/$id/messages", true, 'message');
+        else N::toEg($id, '管理者からメッセージが届きました', mb_substr($body, 0, 400), "/engineers/$id/messages", true, 'message');
         return redirect("/engineers/$id/messages");
     }
 
