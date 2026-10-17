@@ -35,7 +35,7 @@ def setting(name, default=""):
     return os.environ.get(name) or CONF.get(name) or default
 
 
-PARK_URL = setting("PARK_URL", "http://localhost/park").rstrip("/")
+PARK_URL = setting("PARK_URL", "http://localhost/parks").rstrip("/")
 TOKEN = setting("PARK_AI_TOKEN")
 OLLAMA_URL = setting("OLLAMA_URL", "http://localhost:11434").rstrip("/")
 MODEL = setting("PARK_AI_MODEL", "qwen2.5:7b")

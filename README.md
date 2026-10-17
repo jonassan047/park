@@ -6,9 +6,9 @@ SES 企業どうしを1つのグループにまとめ、届いた案件に、グ
 
 ## 動かし方（XAMPP）
 
-- 場所：`D:\xampp\htdocs\park`、URL：http://localhost/park/
+- 場所：`D:\xampp\htdocs\park`、URL：http://localhost/parks/
 - DB：`jonassan_park`（MariaDB、utf8mb4）
-- Apache：`httpd-vhosts.conf` に `Alias /park "D:/xampp/htdocs/park/public"` と、`public` の `<Directory>` に `RewriteOptions MergeBase`・`RewriteBase /park/`（ほかの Laravel アプリと同じ形）。
+- Apache：`httpd-vhosts.conf` に `Alias /parks "D:/xampp/htdocs/parks/public"` と、`public` の `<Directory>` に `RewriteOptions MergeBase`・`RewriteBase /parks/`（ほかの Laravel アプリと同じ形）。
 
 新しい PC で用意するとき：
 
