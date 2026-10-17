@@ -101,11 +101,36 @@ class TwoFactorAuditTest extends TestCase
         $this->loginEg();
         $code = $this->lastCode();
         $this->travel(11)->minutes();
-        $this->followingRedirects()->post('/two-factor/challenge', ['code' => $code])->assertSee('コードの期限が切れたか');
+        $this->followingRedirects()->post('/two-factor/challenge', ['code' => $code])
+            ->assertSee('前のコードの期限が切れたので')
+            ->assertDontSee('コードの期限が切れたか')->assertDontSee('多すぎます。「コードを送り直す」を押してください');
         $d = $this->lastDetail('2fa-fail');
         $this->assertStringStartsWith('timeout', $d);
         $this->assertMatchesRegularExpression('/age=\d+/', $d);
-        $this->get('/eg')->assertRedirect(url('/two-factor/challenge'));
+        $sent = $this->details('2fa-sent');
+        $this->assertCount(2, $sent);
+        $this->assertStringContainsString('from=challenge-form-timeout', $sent[1]);
+        $this->post('/two-factor/challenge', ['code' => $this->lastCode()])->assertRedirect(url('/eg'));
+    }
+
+    public function test_timeout_direct_get_resends(): void
+    {
+        $this->loginEg();
+        $old = $this->lastCode();
+        $this->travel(11)->minutes();
+        $this->get('/two-factor/challenge')->assertOk()->assertSee('前のコードの期限が切れたので');
+        $this->assertCount(2, $this->details('2fa-sent'));
+        $this->post('/two-factor/challenge', ['code' => $this->lastCode()])->assertRedirect(url('/eg'));
+    }
+
+    public function test_live_pending_does_not_resend(): void
+    {
+        $this->loginEg();
+        $code = $this->lastCode();
+        $this->travel(5)->minutes();
+        $this->get('/two-factor/challenge')->assertOk();
+        $this->assertCount(1, $this->details('2fa-sent'));
+        $this->post('/two-factor/challenge', ['code' => $code])->assertRedirect(url('/eg'));
     }
 
     public function test_too_many_on_fifth_wrong_and_afterwards(): void
@@ -117,12 +142,13 @@ class TwoFactorAuditTest extends TestCase
             $this->post('/two-factor/challenge', ['code' => $wrong]);
             $this->assertStringStartsWith('wrong', $this->lastDetail('2fa-fail'));
         }
-        // 5回目のまちがいは too-many（期限切れの文）
-        $this->followingRedirects()->post('/two-factor/challenge', ['code' => $wrong])->assertSee('コードの期限が切れたか');
+        // 5回目のまちがいは too-many。60秒以内なので送らず、待つよう伝える
+        $this->followingRedirects()->post('/two-factor/challenge', ['code' => $wrong])->assertSee('1分ほど待ってから');
         $fails = $this->details('2fa-fail');
         $this->assertCount(5, $fails);
         $this->assertStringStartsWith('too-many', $fails[4]);
         $this->assertStringContainsString('tries=5', $fails[4]);
+        $this->assertCount(1, $this->details('2fa-sent'));
         // 6回目は正しいコードでも通らない
         $this->post('/two-factor/challenge', ['code' => $code])->assertRedirect(url('/two-factor/challenge'));
         $fails = $this->details('2fa-fail');
@@ -130,6 +156,53 @@ class TwoFactorAuditTest extends TestCase
         $this->assertStringStartsWith('too-many', $fails[5]);
         $this->get('/eg')->assertRedirect(url('/two-factor/challenge'));
         $this->assertSame([], $this->details('2fa-ok'));
+    }
+
+    public function test_too_many_after_wait_resends(): void
+    {
+        $this->loginEg();
+        $wrong = $this->wrongOf($this->lastCode());
+        for ($i = 1; $i <= 5; $i++) {
+            $this->post('/two-factor/challenge', ['code' => $wrong]);
+        }
+        $this->travel(2)->minutes();
+        $this->get('/two-factor/challenge')->assertOk()->assertSee('まちがえた回数が多すぎたので、新しいコードを送りました');
+        $sent = $this->details('2fa-sent');
+        $this->assertCount(2, $sent);
+        $this->assertStringContainsString('from=challenge-form-too-many', end($sent));
+        $this->post('/two-factor/challenge', ['code' => $this->lastCode()])->assertRedirect(url('/eg'));
+    }
+
+    public function test_no_pending_post_sends_new_code(): void
+    {
+        $u = User::where('email', self::EMAIL)->firstOrFail();
+        $this->actingAs($u)->followingRedirects()->post('/two-factor/challenge', ['code' => '123456'])->assertSee('確認コードを送りました');
+        $this->assertStringStartsWith('no-pending', $this->lastDetail('2fa-fail'));
+        $sent = $this->details('2fa-sent');
+        $this->assertCount(1, $sent);
+        $this->assertStringContainsString('from=challenge-form', $sent[0]);
+        $this->assertStringNotContainsString('challenge-form-', $sent[0]);
+    }
+
+    public function test_user_mismatch_post_sends_new_code(): void
+    {
+        $u = User::where('email', self::EMAIL)->firstOrFail();
+        $other = (int) User::where('id', '!=', $u->id)->value('id');
+        $this->actingAs($u)->withSession([TwoFactor::PENDING_KEY => [
+            'user' => $other, 'hash' => 'x', 'expires' => now()->getTimestamp() + 600, 'tries' => 0, 'sent' => now()->getTimestamp(),
+        ]])->followingRedirects()->post('/two-factor/challenge', ['code' => '123456'])->assertOk();
+        $sent = $this->details('2fa-sent');
+        $this->assertCount(1, $sent);
+        $this->assertStringContainsString('from=challenge-form-mismatch', $sent[0]);
+        $this->post('/two-factor/challenge', ['code' => $this->lastCode()])->assertRedirect(url('/eg'));
+    }
+
+    public function test_resend_button_is_outside_details(): void
+    {
+        $this->loginEg();
+        $html = $this->get('/two-factor/challenge')->assertOk()->assertSee('two-factor/resend', false)->getContent();
+        $this->assertSame(1, preg_match('#<details.*?</details>#s', $html, $m));
+        $this->assertStringNotContainsString('two-factor/resend', $m[0]);
     }
 
     public function test_challenge_form_without_pending_sends_code(): void

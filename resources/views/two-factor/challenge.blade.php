@@ -6,8 +6,8 @@
 <x-field label="確認コード" name="code" placeholder="123456" required autocomplete="one-time-code" />
 <button class="btn">ログイン</button>
 </form>
-<details><summary>メールが届かないとき</summary><p class="muted">迷惑メールのフォルダも見てください。それでも無いときは、コードを送り直せます。登録のメールアドレスが使えなくなったときは、運営にご連絡ください。</p>
-<form method="post" action="{{ url('/two-factor/resend') }}">@csrf<button class="btn ghost small">コードを送り直す</button></form></details>
+<form method="post" action="{{ url('/two-factor/resend') }}">@csrf<button class="btn ghost small">コードを送り直す</button></form>
+<details><summary>メールが届かないとき</summary><p class="muted">迷惑メールのフォルダも見てください。それでも無いときは、上の「コードを送り直す」を押してください。登録のメールアドレスが使えなくなったときは、運営にご連絡ください。</p></details>
 <form method="post" action="{{ url('/logout') }}">@csrf<button class="link">別のアカウントでログインする</button></form>
 </x-card>
 @endsection

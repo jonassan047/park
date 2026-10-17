@@ -75,6 +75,17 @@ class TwoFactor
         return !$p || now()->getTimestamp() - $p['sent'] >= self::RESEND_WAIT;
     }
 
+    // 今のコードの状態：'none'（無い）・'mismatch'（別の人のもの）・'timeout'（期限切れ）・'too-many'（まちがえすぎ）・'live'（使える）
+    public static function state(Request $r): string
+    {
+        $p = $r->session()->get(self::PENDING_KEY);
+        if (!$p) return 'none';
+        if ((int) $p['user'] !== (int) $r->user()->id) return 'mismatch';
+        if (now()->getTimestamp() > $p['expires']) return 'timeout';
+        if ($p['tries'] >= self::MAX_TRIES) return 'too-many';
+        return 'live';
+    }
+
     // 'ok'・'wrong'（違うコード）・'no-pending'（セッションにコードが無い）・'user-mismatch'（別の人のコード）
     // 'timeout'（期限切れ）・'too-many'（まちがえすぎ）。詳しい情報は self::$last に入れる
     public static function check(Request $r, string $code): string

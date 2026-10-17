@@ -14,8 +14,27 @@ class TwoFactorController extends Controller
     {
         $u = $r->user();
         if ((int) $r->session()->get(TF::SESSION_KEY) === (int) $u->id) return redirect($u->home());
-        // ログインの直後でなく途中から来たとき（コードが無い）は、ここで送る
-        if (!TF::pending($r)) TF::send($r, 'challenge-form');
+        // 使えるコードが無いとき（途中から来た・期限切れ・まちがえすぎ）は、ここで新しく送る
+        $st = TF::state($r);
+        $next = ' 新しいメールのコードを入れてください。';
+        $flash = null;
+        if ($st === 'none' || $st === 'mismatch') {
+            TF::send($r, $st === 'none' ? 'challenge-form' : 'challenge-form-mismatch');
+            $flash = ['msg' => '確認コードを送りました。メールのコードを入れてください。', 'type' => 'ok'];
+        } elseif ($st === 'timeout') {
+            TF::send($r, 'challenge-form-timeout');
+            $flash = ['msg' => '前のコードの期限が切れたので、新しいコードを送りました。'.trim($next), 'type' => 'ok'];
+        } elseif ($st === 'too-many') {
+            if (TF::canResend($r)) {
+                TF::send($r, 'challenge-form-too-many');
+                $flash = ['msg' => 'まちがえた回数が多すぎたので、新しいコードを送りました。'.trim($next), 'type' => 'ok'];
+            } else {
+                $flash = ['msg' => 'まちがえた回数が多すぎます。1分ほど待ってから「コードを送り直す」を押してください。', 'type' => 'bad'];
+            }
+        }
+        // 送ったときに確認済み・省略で通ったなら、画面を出さずに進む
+        if ((int) $r->session()->get(TF::SESSION_KEY) === (int) $u->id) return redirect($u->home());
+        if ($flash) $r->session()->now('flash', $flash);
         return view('two-factor.challenge', ['email' => TF::maskedEmail($u->email), 'devCode' => $r->session()->get(TF::DEV_KEY)]);
     }
 
@@ -33,8 +52,9 @@ class TwoFactorController extends Controller
                 default => '',
             };
             N::audit($u->id, '2fa-fail', trim("{$res} {$extra}")." s={$sid}");
-            $msg = $res === 'wrong' ? 'コードが違います。メールに書かれた6桁を入れてください。' : 'コードの期限が切れたか、まちがえた回数が多すぎます。「コードを送り直す」を押してください。';
-            return $this->go('/two-factor/challenge', $msg, 'bad');
+            if ($res === 'wrong') return $this->go('/two-factor/challenge', 'コードが違います。メールに書かれた6桁を入れてください。', 'bad');
+            // 期限切れ・まちがえすぎなどは、開いた画面（challengeForm）が新しいコードを送って文を出す
+            return redirect(url('/two-factor/challenge'));
         }
         N::audit($u->id, '2fa-ok', "s={$sid}");
         TF::pass($r);

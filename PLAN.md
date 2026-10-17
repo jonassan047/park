@@ -187,3 +187,95 @@ tezzo の要望：ログアウトしてログイン画面に戻ったとき、�
 
 - cookie に入れるのはメールアドレスだけ。パスワード・確認コードは入れない。
 - この件でデータの削除・メールの送信・`.env` の書き換えはしない。
+
+---
+
+# PLAN：期限切れの確認コードで行き詰まらないようにする（2026-10-17）
+
+## 背景
+
+`challengeForm` は pending があると送らない。期限切れ（TTL 600秒）や5回まちがえ済みの pending が残ると、開くたびに確認コード画面になるのに使えるコードが無く、「コードを送り直す」は `<details>` の中に隠れていて行き詰まる（tezzo が実際に詰まった）。tezzo の決定：a（自動で送り直す）も b（ボタンをいつも見せる）も直す。
+
+## 受け入れ条件
+
+1. GET `/two-factor/challenge` で、pending が「無い」「別の人のもの」「期限切れ」「5回まちがえ済み」のときは、新しいコードを自動で送る（`2fa-sent` が1件増え、新しいコードで通る）。
+2. 期限内でまだ使える pending があるときは送らない（`2fa-sent` は増えない。ログイン直後の画面も今のまま）。
+3. 期限切れで送ったときは「前のコードの期限が切れたので、新しいコードを送りました。新しいメールのコードを入れてください。」、5回まちがえで送ったときは「まちがえた回数が多すぎたので、新しいコードを送りました。新しいメールのコードを入れてください。」を出す。
+4. 送りすぎ防止：自動の送り直しも、前に送ってから `RESEND_WAIT`（60秒）たっていなければ送らない（起こりうるのは too-many だけ。timeout は必ず600秒を過ぎている）。そのときは「まちがえた回数が多すぎます。1分ほど待ってから「コードを送り直す」を押してください。」（bad）。
+5. POST `/two-factor/challenge` で `timeout`・`too-many`・`no-pending`・`user-mismatch` のときは、リダイレクト先の GET で 1・3・4 が効き、画面の文がそれと合う（古い「「コードを送り直す」を押してください」は出さない）。`wrong` は今のまま。
+6. 「コードを送り直す」ボタンを `<details>` の外に出し、いつも見せる。details の説明文は残す。
+7. マニュアルの確認コードの説明を合わせる。
+8. 上を tests/Feature で確かめる。
+
+仮定：
+- a. `send()` の `$from` は理由ごとに分ける：pending 無し `challenge-form`（今のまま）、期限切れ `challenge-form-timeout`、5回まちがえ `challenge-form-too-many`、別の人 `challenge-form-mismatch`（park:twofactor で原因を追いやすい）。
+- b. pending 無し・別の人で送ったときの文は「確認コードを送りました。メールのコードを入れてください。」（ok）。途中から来た人にも違和感がない文にする。
+- c. GET には throttle が無いが、送るのは pending が使えないときだけで、送れば新しい pending（600秒有効・tries 0）ができるので、開き直しの連打では送られない。too-many は 4 の60秒待ちと POST の `throttle:10,1` で抑える。新しい throttle は足さない。
+
+## 仕様
+
+### TwoFactor（app/Support/TwoFactor.php）
+
+- `state(Request $r): string` を足す。セッションの生の値を見て `'none'`（無い）・`'mismatch'`（user が違う）・`'timeout'`（`now > expires`）・`'too-many'`（`tries >= MAX_TRIES`）・`'live'`（使える）を返す。判定の順は `check()` と同じ。
+- `check()`・`send()`・`canResend()` は変えない（`canResend()` は mismatch のとき pending() が null なので true のまま）。
+
+### TwoFactorController::challengeForm
+
+- 確認済みのリダイレクトは今のまま。
+- `$st = TF::state($r)`。
+  - `live`：送らない。
+  - `none`／`mismatch`：`TF::send($r, $st === 'none' ? 'challenge-form' : 'challenge-form-mismatch')`、`$r->session()->now('flash', ['msg' => 仮定 b の文, 'type' => 'ok'])`。
+  - `timeout`：`TF::send($r, 'challenge-form-timeout')`、受け入れ条件 3 の期限切れの文（ok）。
+  - `too-many`：`TF::canResend($r)` なら `send($r, 'challenge-form-too-many')` と 3 の文（ok）、でなければ送らず 4 の文（bad）。
+- `send()` が確認済み・省略で `pass()` したときは、今と同じく画面を出す前に `redirect($u->home())`（send のあと `SESSION_KEY` を見直す）。
+- flash は `session()->now()` で上書きするので、POST から持ち越した flash より優先される。
+
+### TwoFactorController::challenge
+
+- audit（`2fa-fail` の detail）は今のまま。
+- `wrong`：今の文・リダイレクトのまま。
+- それ以外の4つ：flash を付けずに `redirect(url('/two-factor/challenge'))`（文は challengeForm が出す）。
+
+### resources/views/two-factor/challenge.blade.php
+
+- コード入力の form の `</form>` の後、`<details>` の前に、送り直しの form を独立して置く（form を入れ子にしない）：`<form method="post" action="{{ url('/two-factor/resend') }}">@csrf<button class="btn ghost small">コードを送り直す</button></form>`。
+- details は説明文だけにする。文の「それでも無いときは、コードを送り直せます。」を「それでも無いときは、上の「コードを送り直す」を押してください。」に直す。
+- 「別のアカウントでログインする」は今のまま。
+
+### マニュアル（resources/manuals）
+
+- `admin-steps.md` 22行目・`ses-steps.md` 22行目・`engineer-steps.md` 23行目：「無ければ「メールが届かないとき」→「コードを送り直す」」を「無ければ画面の「コードを送り直す」」に直す。
+- 同じ3つの表に1行足す：`| 10分すぎてしまった・まちがえすぎた | 確認コードの画面を開き直すと、新しいコードが自動で届きます。新しいメールの6桁を入れます |`。
+- `admin.md` 24行目・`ses.md` 28行目・`engineer.md` 23行目：末尾に「10分すぎてから画面を開くと、新しいコードが自動で届きます。」を足す（「コードを送り直す」の記述はそのままで合う）。
+- 写し（41_Park-Project の `04_Manuals`）は JOE が写し直す。
+
+## 作業手順
+
+1. `TwoFactor::state()` を足す。
+2. `challengeForm` と `challenge` を上のとおり直す。
+3. `challenge.blade.php` のボタンを details の外に出し、説明文を直す。
+4. 今のテストを直す（下）。tests 全体で「コードの期限が切れたか」を grep し、ParkTest にもあれば合わせる。
+5. 新しいテストを足し、`php artisan test` で全部通す。
+5. マニュアル6つを直す。
+6. （JOE）commit・push、公開版へ反映（常時了承の範囲）、マニュアルの写し。
+
+## テスト（tests/Feature/TwoFactorAuditTest.php に足す・直す）
+
+エンジニアは `eg1@park.example`。コードは `lastCode()` で取る。
+
+| 条件 | 手順 | 確かめること |
+|---|---|---|
+| 1・3・5 期限切れ（今の `test_timeout` を直す） | ログイン → `travel(11)->minutes()` → 古いコードで POST（followingRedirects） | 「前のコードの期限が切れたので」が出る。「「コードを送り直す」を押してください」は出ない。`2fa-sent` が2件で2件目に `from=challenge-form-timeout`。`lastCode()`（新しいコード）で POST すると `/eg` へ |
+| 1 期限切れを直接 GET | ログイン → `travel(11)->minutes()` → GET `/two-factor/challenge` | `2fa-sent` が1件増える。新しいコードで通る |
+| 2 期限内 | ログイン → `travel(5)->minutes()` → GET | `2fa-sent` は1件のまま。最初のコードで通る |
+| 4 too-many・60秒以内（今の `test_too_many...` を直す） | ログイン → 違うコード5回（followingRedirects） | 「1分ほど待ってから」が出る。`2fa-sent` は1件のまま。6回目は今のとおり `too-many` |
+| 1・3 too-many・60秒後 | ログイン → 違うコード5回 → `travel(2)->minutes()` → GET | 「まちがえた回数が多すぎたので、新しいコードを送りました」。`2fa-sent` の最後に `from=challenge-form-too-many`。新しいコードで通る |
+| 1・5 no-pending | `actingAs(eg1)` で POST（followingRedirects） | 「確認コードを送りました」。`2fa-sent` に `from=challenge-form` |
+| 1・5 user-mismatch | 今の `test_user_mismatch` の withSession で POST（followingRedirects） | `2fa-sent` に `from=challenge-form-mismatch`。新しいコードで通る |
+| 6 ボタン | ログイン → GET | 本文に `two-factor/resend` がある。`preg_match('#<details.*?</details>#s')` で取った部分に `two-factor/resend` が無い |
+| 今のテスト | `test_resend_records_from_resend` などその他 | そのまま通る |
+
+## 守ること
+
+- 送るメールは本人の確認コードだけ（今の仕組みの中）。一斉送信・データの削除・`.env` の書き換えはこの件に含まない。
+- audit にコード・ハッシュ・メールアドレスを入れない（前の件の決まりのまま）。
