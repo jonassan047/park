@@ -173,8 +173,15 @@ class ParkTest extends TestCase
         $this->post('/two-factor/challenge', ['code' => mb_convert_kana($code, 'N')])->assertRedirect(url('/eg'));
         $this->get('/eg')->assertOk();
 
-        // 使ったコードは、次のログインでは使えない
+        // 一度通った人は、次のログインから確認コードを聞かれない
+        $this->assertNotNull(DB::table('users')->where('email', 'eg1@park.example')->value('two_factor_confirmed_at'));
         $this->post('/logout');
+        $this->post('/login', ['email' => 'eg1@park.example', 'password' => 'park1234'])->assertRedirect(url('/two-factor/challenge'));
+        $this->get('/eg')->assertOk();
+
+        // 使ったコードは、次のログインでは使えない（まだ通っていない人として確かめる）
+        $this->post('/logout');
+        DB::table('users')->where('email', 'eg1@park.example')->update(['two_factor_confirmed_at' => null]);
         $this->post('/login', ['email' => 'eg1@park.example', 'password' => 'park1234']);
         $this->assertNotSame($code, $new = $this->lastCode('eg1@park.example'));
         // すぐの送り直しは断る。5回まちがえると、送り直すまで正しいコードも通らない
@@ -188,6 +195,7 @@ class ParkTest extends TestCase
         $this->post('/two-factor/challenge', ['code' => $this->lastCode('eg1@park.example')])->assertRedirect(url('/eg'));
         // 10分たったコードは使えない
         $this->post('/logout');
+        DB::table('users')->where('email', 'eg1@park.example')->update(['two_factor_confirmed_at' => null]);
         $this->post('/login', ['email' => 'eg1@park.example', 'password' => 'park1234']);
         $this->travel(11)->minutes();
         $this->post('/two-factor/challenge', ['code' => $this->lastCode('eg1@park.example')])->assertRedirect(url('/two-factor/challenge'));

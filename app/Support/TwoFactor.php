@@ -36,10 +36,16 @@ class TwoFactor
         return $d !== '' && $u && str_ends_with(strtolower((string) $u->email), '@'.$d);
     }
 
+    // 一度確認コードを通った人は、二度と聞かない（DB の two_factor_confirmed_at に日時を入れる。2026-10-17 tezzo）
+    public static function confirmed(object $u): bool
+    {
+        return (bool) \Illuminate\Support\Facades\DB::table('users')->where('id', $u->id)->value('two_factor_confirmed_at');
+    }
+
     public static function send(Request $r): void
     {
         $u = $r->user();
-        if (self::skipped($u)) { self::pass($r); return; }
+        if (self::skipped($u) || self::confirmed($u)) { self::pass($r); return; }
         $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
         $r->session()->put(self::PENDING_KEY, ['user' => $u->id, 'hash' => self::hash($code), 'expires' => now()->getTimestamp() + self::TTL, 'tries' => 0, 'sent' => now()->getTimestamp()]);
         N::queueMail($u->email, $u->name, "確認コード {$code}", user_label($u)." 様\n\nPARK にログインするための確認コードです。\n\n　{$code}\n\nログインの画面に入れてください（10分間有効）。\n\n心当たりがない場合は、このメールを無視してください。パスワードを知っている誰かがログインしようとしている可能性があるので、パスワードの変更をおすすめします。", '2fa');

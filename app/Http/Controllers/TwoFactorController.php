@@ -29,7 +29,7 @@ class TwoFactorController extends Controller
             return $this->go('/two-factor/challenge', $msg, 'bad');
         }
         TF::pass($r);
-        DB::table('users')->where('id', $u->id)->update(['last_login' => now_str()]);
+        DB::table('users')->where('id', $u->id)->update(['last_login' => now_str(), 'two_factor_confirmed_at' => now_str()]);
         return redirect()->intended(url($u->home()));
     }
 

@@ -103,6 +103,7 @@ class PublicController extends Controller
         Auth::loginUsingId($u->id);
         // 初めてのログインも、登録のメールアドレスとパスワードに加えて、確認コードで2段階認証を通ってもらう
         TwoFactor::send($r);
+        if (TwoFactor::confirmed($u)) return $this->go(Auth::user()->home(),'パスワードを設定しました。');
         return $this->go('/two-factor/challenge', 'パスワードを設定しました。メールで届いた確認コードを入れてください。');
     }
 
