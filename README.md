@@ -1,14 +1,14 @@
-# PARKS
+# PARK
 
 SES 企業どうしを1つのグループにまとめ、届いた案件に、グループ全体のエンジニアからいちばん合う人を出して、**エンジニアの成約率を上げる**ための Web アプリ。成約したときだけ成功報酬（初期費用・月額費用）をいただく仕組み。
 
-構想・企画は [41_Parks-Project](https://github.com/jonassan047/41_Parks-Project)。2026-10-15 に、Node.js の試作（41_Parks-Project の `81_PARKアプリ`）から PHP（Laravel 12）＋ MySQL（MariaDB）に移した。
+構想・企画は [41_Park-Project](https://github.com/jonassan047/41_Park-Project)。2026-10-15 に、Node.js の試作（41_Park-Project の `81_PARKアプリ`）から PHP（Laravel 12）＋ MySQL（MariaDB）に移した。
 
 ## 動かし方（XAMPP）
 
-- 場所：`D:\xampp\htdocs\parks`、URL：http://localhost/parks/
+- 場所：`D:\xampp\htdocs\park`、URL：http://localhost/park/
 - DB：`jonassan_park`（MariaDB、utf8mb4）
-- Apache：`httpd-vhosts.conf` に `Alias /parks "D:/xampp/htdocs/parks/public"` と、`public` の `<Directory>` に `RewriteOptions MergeBase`・`RewriteBase /parks/`（ほかの Laravel アプリと同じ形）。
+- Apache：`httpd-vhosts.conf` に `Alias /park "D:/xampp/htdocs/park/public"` と、`public` の `<Directory>` に `RewriteOptions MergeBase`・`RewriteBase /park/`（ほかの Laravel アプリと同じ形）。
 
 新しい PC で用意するとき：
 
@@ -37,14 +37,14 @@ php artisan migrate --seed
 - 共通：通知（ベル）とメール、パスワードの変更・再設定。
 - 同じ案件に、グループの中で同じ人が二重に応募することはできない。
 
-## 公開サーバー（https://www.jona.jp/parks/）
+## 公開サーバー（https://www.jona.jp/park/）
 
 2026-10-16 から公開。Xserver（jona.jp）に、muzzo と同じ形で置いている。
 
-- アプリ本体：`~/parks`（GitHub から clone）。`~/jona.jp/public_html/parks` は `~/parks/public` へのシンボリックリンク（設定ファイルなどは外から見えない）。 古い `public_html/park` は、`/parks/` へ転送する `.htaccess` だけを置いたフォルダ（2026-10-17 に /park から /parks に移した）。
+- アプリ本体：`~/park`（GitHub から clone）。`~/jona.jp/public_html/park` は `~/park/public` へのシンボリックリンク（設定ファイルなどは外から見えない）。
 - PHP：サイトは 8.3。コマンドは `/opt/php-8.3/bin/php` を使う（`php` だけだと 8.0 になる）。
 - DB：`jonassan_park`（サーバーパネルで作成。ユーザーは muzzo と同じ）。見本データは入れていない。
-- `.env`：本番用（`APP_DEBUG=false`、`APP_URL=https://www.jona.jp/parks`、メールは `sendmail` で送信元 park@jona.jp。2026-10-16 から実際に送っている）。Git には上げない。
+- `.env`：本番用（`APP_DEBUG=false`、`APP_URL=https://www.jona.jp/park`、メールは `sendmail` で送信元 park@jona.jp。2026-10-16 から実際に送っている）。Git には上げない。
 - **ルートのキャッシュ（`route:cache`）は使わない**（使うとトップの `/park/` が 405 になる）。
 - 最初の運営アカウントは、画面の「はじめの設定」ではなく、サーバーで `park:invite-admin` で作る（公開中に他人に先に使われないように）。
 
@@ -52,7 +52,7 @@ php artisan migrate --seed
 
 ```
 ssh -p 10022 jonassan@jonassan.xsrv.jp
-cd ~/parks
+cd ~/park
 git pull --ff-only
 /opt/php-8.3/bin/php /usr/bin/composer install --no-dev --optimize-autoloader
 /opt/php-8.3/bin/php artisan migrate --force
@@ -72,11 +72,11 @@ git pull --ff-only
 
 ## デザイン
 
-緑系・丸いフォント（M PLUS Rounded 1c、Google Fonts）の公園風。見本は 41_Parks-Project の `99_Data/index.html`（2026-10-16 に適用）。トップの写真（`public/img/`）は Unsplash のフリー画像を取り込んだもの（外部からは読み込まない）。
+緑系・丸いフォント（M PLUS Rounded 1c、Google Fonts）の公園風。見本は 41_Park-Project の `99_Data/index.html`（2026-10-16 に適用）。トップの写真（`public/img/`）は Unsplash のフリー画像を取り込んだもの（外部からは読み込まない）。
 
 ## マニュアル
 
-運営・SES 企業さま・エンジニアの3種類。正本は `resources/manuals/`（`admin.md`・`ses.md`・`engineer.md`）で、アプリの「使い方」（`/manual`）から読める。SES・エンジニア向けはログイン前でも読める。運営向けは運営だけ。画面や流れを変えたら、マニュアルも直す。マニュアルとこの README の写しを、41_Parks-Project の `04_Manuals` に置いている（WIZ から読むため）。直したら写し直す。
+運営・SES 企業さま・エンジニアの3種類。正本は `resources/manuals/`（`admin.md`・`ses.md`・`engineer.md`）で、アプリの「使い方」（`/manual`）から読める。SES・エンジニア向けはログイン前でも読める。運営向けは運営だけ。画面や流れを変えたら、マニュアルも直す。マニュアルとこの README の写しを、41_Park-Project の `04_Manuals` に置いている（WIZ から読むため）。直したら写し直す。
 
 ## ログイン（2要素認証）
 
@@ -89,8 +89,8 @@ SES が受けた案件メールから、エンジニアへの案内メールを�
 1. SES が案件を登録（案件メールの本文を貼って取り込む）
 2. 候補を絞る：得意分野（スキル・経験票）から点数順に提案し、SES がチェックで足す・外す。自社のエンジニア（名前あり）と、グループのほかの人（名前を伏せる。プラスα）で画面を分ける
 3. メールを作る：同じ内容／一人ずつ変える。差し込み（{呼び名} など）。呼び名は `engineers.nickname`（愛称）
-4. 送る前に提案を出す（点数・足りないスキル・単価や開始日のずれ・過去の見送り）→ 送る。自社の人へは返信先（Reply-To）を SES の担当者にする。グループの人へは PARKS から送り、その人の SES にも知らせる
-5. 返事：自社の人は SES に直接返信が届き、SES が画面で記録する。本人が PARKS の画面で応募・見送りをしたら自動で記録（`case_mails`）
+4. 送る前に提案を出す（点数・足りないスキル・単価や開始日のずれ・過去の見送り）→ 送る。自社の人へは返信先（Reply-To）を SES の担当者にする。グループの人へは PARK から送り、その人の SES にも知らせる
+5. 返事：自社の人は SES に直接返信が届き、SES が画面で記録する。本人が PARK の画面で応募・見送りをしたら自動で記録（`case_mails`）
 6. 書類：「応募したい」の人の最新の履歴書・業務経歴書を、その場で Excel にしてダウンロード（グループの人は名前を伏せた業務経歴書だけ）
 
 7. 書類を返したら「書類を返した（応募した）」で応募を作る → 面談依頼が来たら SES が記録（日時・場所・先方が確かめたいこと）→ 案件とスキルを突き合わせた面談スクリプトを作る（`Qa::generate`）→ 結果 → 成約。SES は自社の応募について、運営と同じ手続きができる
@@ -104,13 +104,13 @@ SES が受けた案件メールから、エンジニアへの案内メールを�
 
 ## 状態の点検（2026-10-16）
 
-`php artisan park:status` で、メール・AI の仕事・選考・確認待ちなどを数で出す（個人情報は出さない）。PARKS 担当のエージェント（41_Parks-Project の `.claude/agents/park-manager.md`）が点検に使う。公開サーバーでは `/opt/php-8.3/bin/php artisan park:status`。
+`php artisan park:status` で、メール・AI の仕事・選考・確認待ちなどを数で出す（個人情報は出さない）。PARK 担当のエージェント（41_Park-Project の `.claude/agents/park-manager.md`）が点検に使う。公開サーバーでは `/opt/php-8.3/bin/php artisan park:status`。
 
 ## AI の仕事の箱（2026-10-16）
 
 AI は手元の PC（FOCUS）で動かす。公開サーバー（Xserver）では AI を動かせないため。案件や個人の情報は、手元の PC の外に出さない。
 
-- PARKS は仕事（指示と材料）を `ai_jobs` に入れるだけ（`app/Services/AiJobs.php`）。手元の PC の `tools/ai-worker/park_ai_worker.py` が `/ai/worker/next` に取りに来て、Ollama（手元の AI）に渡し、`/ai/worker/{id}/result` に返す。合言葉は `.env` の `PARK_AI_TOKEN`（同じものを手元の PC にも設定する）。
+- PARK は仕事（指示と材料）を `ai_jobs` に入れるだけ（`app/Services/AiJobs.php`）。手元の PC の `tools/ai-worker/park_ai_worker.py` が `/ai/worker/next` に取りに来て、Ollama（手元の AI）に渡し、`/ai/worker/{id}/result` に返す。合言葉は `.env` の `PARK_AI_TOKEN`（同じものを手元の PC にも設定する）。
 - 仕事は2つ：面談スクリプトの言い回し（`script`）、経歴書（Excel・Word・テキスト）から経験票の下書き（`resume`）。
 - 結果は下書き。人が「採用する」「経験票に足す」を押したときだけ使う。JSON で返らなかったものは「失敗」。30分返ってこない仕事は順番待ちに戻す。
 - 手元の PC で動かす：
@@ -118,14 +118,14 @@ AI は手元の PC（FOCUS）で動かす。公開サーバー（Xserver）で�
 ```
 winget install Ollama.Ollama
 ollama pull qwen2.5:7b
-set PARK_URL=https://www.jona.jp/parks
+set PARK_URL=https://www.jona.jp/park
 set PARK_AI_TOKEN=（.env と同じ合言葉）
 python tools/ai-worker/park_ai_worker.py
 ```
 
 FOCUS では、Windows の起動で自動で動く（2026-10-16〜）。Ollama は自分のショートカットで、つなぎ役は「スタートアップ」の「PARK AI つなぎ役」（`pythonw.exe -I park_ai_worker.py --log`。窓は出ない）。公開版の URL と合言葉は `~/.park-ai/config.json`（この PC にだけ置く。Git には上げない）。記録は `~/.park-ai/worker.log`。止めるときは、タスクマネージャーで pythonw.exe を終わらせる。
 
-まだやっていないこと：返信を PARKS が受け取って AI に渡すこと（受信用のメールボックスと、手元の AI が要る）。
+まだやっていないこと：返信を PARK が受け取って AI に渡すこと（受信用のメールボックスと、手元の AI が要る）。
 
 ## 登録と、内容の責任（2026-10-16 tezzo）
 
@@ -147,7 +147,7 @@ MAIL_SCHEME=smtps
 MAIL_USERNAME=送信に使うアドレス
 MAIL_PASSWORD=アプリ パスワード
 MAIL_FROM_ADDRESS=送信に使うアドレス
-MAIL_FROM_NAME="PARKS 運営事務局"
+MAIL_FROM_NAME="PARK 運営事務局"
 ```
 
 設定したら `php artisan config:clear` をして、運営の「設定」→「テストメールを送る」で確かめる。

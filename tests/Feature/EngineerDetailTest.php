@@ -87,11 +87,11 @@ class EngineerDetailTest extends TestCase
             $this->assertStringContainsString(rawurlencode($f->filename), $res->headers->get('Content-Disposition')); // 日本語の名前は filename* で送る
         }
         // 中身：業務経歴書に経歴の案件が入り、名前を伏せた版には名前が出ない
-        $path = Storage::disk('local')->path($files->firstWhere('title', '業務経歴書（PARKS で書き出し）')->path);
+        $path = Storage::disk('local')->path($files->firstWhere('title', '業務経歴書（PARK で書き出し）')->path);
         $text = $this->sheetText($path);
         $this->assertStringContainsString('損害保険会社 契約管理システムの刷新', $text);
         $this->assertStringContainsString('山田 太郎', $text);
-        $anon = $this->sheetText(Storage::disk('local')->path($files->firstWhere('title', '業務経歴書（名前を伏せた版）（PARKS で書き出し）')->path));
+        $anon = $this->sheetText(Storage::disk('local')->path($files->firstWhere('title', '業務経歴書（名前を伏せた版）（PARK で書き出し）')->path));
         $this->assertStringNotContainsString('山田 太郎', $anon);
         $this->assertStringNotContainsString('東京都港区', $anon);
         $resume = $this->sheetText(Storage::disk('local')->path($files->firstWhere('kind', 'resume')->path));

@@ -1,4 +1,4 @@
-@extends('layouts.app', ['title' => 'PARKS', 'noTitle' => true, 'wide' => true])
+@extends('layouts.app', ['title' => 'PARK', 'noTitle' => true, 'wide' => true])
 @section('content')
 <section class="hero">
   <div>
@@ -10,7 +10,7 @@
   <div class="photo" style="background-image:url('{{ asset('img/hero.jpg') }}')"><span>🌱 成約したときだけ、成功報酬</span></div>
 </section>
 
-<div class="section-title"><h2>PARKS の歩き方</h2><p>あなたの立場に合わせて、公園の中のスポットを訪れてみてください。</p></div>
+<div class="section-title"><h2>PARK の歩き方</h2><p>あなたの立場に合わせて、公園の中のスポットを訪れてみてください。</p></div>
 <div class="spots">
   <a class="spot" href="{{ url('/manual/ses') }}" style="background-image:url('{{ asset('img/ses.jpg') }}')"><div><em>SES 企業さま</em><b>🏡 グループで、仕事を回す</b>
     <small>1社では受けきれない案件も、仲間のエンジニアで埋められます。自社のエンジニアとの相性もひと目でわかります。</small></div></a>
@@ -18,7 +18,7 @@
     <small>運営と一緒に、事実にもとづいたスキルシートを作り、面談の準備（Q&A）まで支えます。利用は無料です。</small></div></a>
 </div>
 
-<div class="section-title"><h2>PARKS のしくみ</h2><p>準備から成約まで、3つのステップで支えます。</p></div>
+<div class="section-title"><h2>PARK のしくみ</h2><p>準備から成約まで、3つのステップで支えます。</p></div>
 <div class="grid3 steps">
 <x-card><h3><span class="num">1</span>準備</h3><p>SES がエンジニアの基本情報を登録。エンジニアは運営とやり取りしながら、事実にもとづいた理想のスキルシートを作ります。</p></x-card>
 <x-card><h3><span class="num">2</span>適材を判断して配信</h3><p>案件が届くと、条件に合うエンジニアを選んでメールで配信。SES にもお知らせします。二重応募はグループで一本化します。</p></x-card>

@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 // AI の仕事の箱（2026-10-16）。
-// PARKS は仕事（AI への指示と材料）を箱に入れるだけ。手元の PC の AI（tools/ai-worker）が取りに来て、結果を返す。
+// PARK は仕事（AI への指示と材料）を箱に入れるだけ。手元の PC の AI（tools/ai-worker）が取りに来て、結果を返す。
 // 結果は下書きとして見せ、採用するかどうかは人が決める（AI は確定しない）。
 class AiJobs
 {

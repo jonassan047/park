@@ -19,7 +19,7 @@ class CaseMail
         return $u->role === 'admin' || ($u->role === 'ses' && (int) $c->source_ses_id === (int) $u->ses_id);
     }
 
-    // 候補：own＝自社のエンジニア（名前が見える。SES から直接送る）、group＝グループのほかの SES の人（名前は伏せる。PARKS から送る）
+    // 候補：own＝自社のエンジニア（名前が見える。SES から直接送る）、group＝グループのほかの SES の人（名前は伏せる。PARK から送る）
     public static function candidates($u, object $c, string $scope): array
     {
         $list = Matcher::forCase($c->id, true);
@@ -97,16 +97,16 @@ class CaseMail
             $own = $sesId === null || (int) $e->ses_id === $sesId;
             $score = Matcher::score($c, $e);
             $body = (string) $it['body'];
-            // 返事のリンク：押すだけで PARKS に記録され、送った人に知らせが届く（メールで返信してもよい）
+            // 返事のリンク：押すだけで PARK に記録され、送った人に知らせが届く（メールで返信してもよい）
             $token = bin2hex(random_bytes(16));
             $body .= "\n\n▼ご返事はこちらから（押すだけで担当者に届きます）\n"
                 ."応募したい：".url("/r/$token/interested")."\n質問がある：".url("/r/$token/question")."\n見送る　　：".url("/r/$token/declined")
-                .($own ? "\n※このメールに返信しても、担当者に届きます。" : "\n※PARKS のグループの案件です。このメールへの返信は担当者に届かないので、上のリンクからお願いします。");
+                .($own ? "\n※このメールに返信しても、担当者に届きます。" : "\n※PARK のグループの案件です。このメールへの返信は担当者に届かないので、上のリンクからお願いします。");
             $to = $e->email ?: DB::table('users')->where('engineer_id', $e->id)->value('email');
             $outbox = N::queueMail($to, $e->name, (string) $it['subject'], $body, 'case-mail', $own && $sesId ? $u->email : null);
             DB::table('case_mails')->insert(['case_id' => $c->id, 'engineer_id' => $e->id, 'ses_id' => $sesId, 'sent_by' => $u->id, 'route' => $own ? 'own' : 'group', 'mode' => $mode,
                 'subject' => (string) $it['subject'], 'body' => $body, 'score' => $score['score'], 'suggest' => implode(' / ', self::suggestions($c, $e, $score)), 'outbox_id' => $outbox, 'sent_at' => now_str(), 'token' => $token]);
-            // 本人が PARKS の画面からも見られるように（応募・見送りもできる）
+            // 本人が PARK の画面からも見られるように（応募・見送りもできる）
             if (!DB::table('case_offers')->where('case_id', $c->id)->where('engineer_id', $e->id)->exists()) {
                 DB::table('case_offers')->insert(['case_id' => $c->id, 'engineer_id' => $e->id, 'score' => $score['score'], 'reasons' => implode(' / ', $score['reasons']),
                     'missing' => implode(' / ', $score['missing']), 'sent_by' => $u->id, 'sent_at' => now_str()]);
@@ -118,7 +118,7 @@ class CaseMail
         return $n;
     }
 
-    // 返事を記録する（SES が受けた返信を入れる／本人が PARKS の画面で応募・見送り）
+    // 返事を記録する（SES が受けた返信を入れる／本人が PARK の画面で応募・見送り）
     public static function reply(int $caseId, int $engineerId, string $reply, ?string $note, string $via): void
     {
         if (!isset(self::REPLIES[$reply])) return;

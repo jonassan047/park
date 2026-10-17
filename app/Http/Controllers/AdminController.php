@@ -292,7 +292,7 @@ class AdminController extends Controller
 
     public function testMail(Request $r)
     {
-        $id = N::queueMail((string) $r->input('to'), $r->user()->name, 'テストメール', 'PARKS からのテストメールです。届いていれば、メールの設定は正しく動いています。', 'test');
+        $id = N::queueMail((string) $r->input('to'), $r->user()->name, 'テストメール', 'PARK からのテストメールです。届いていれば、メールの設定は正しく動いています。', 'test');
         if (!N::canSend()) return $this->go('/admin/mail', 'メールの送信が設定されていないため、保存だけしました。', 'warn');
         $ok = DB::table('mail_outbox')->where('id', $id)->value('status') === 'sent';
         return $this->go('/admin/settings', $ok ? '送りました。届いたか確認してください。' : '送れませんでした。メールの画面でエラーを確認してください。', $ok ? 'ok' : 'bad');

@@ -58,7 +58,7 @@ class EngineerDocs
     {
         $book = new Spreadsheet();
         $book->getDefaultStyle()->getFont()->setName('メイリオ')->setSize(9);
-        $book->getProperties()->setCreator('PARKS')->setTitle($title);
+        $book->getProperties()->setCreator('PARK')->setTitle($title);
         $ws = $book->getActiveSheet();
         $ws->setTitle($title);
         $ws->getPageSetup()->setPaperSize(PageSetup::PAPERSIZE_A4)->setFitToWidth(1)->setFitToHeight(0);
@@ -227,7 +227,7 @@ class EngineerDocs
         Storage::disk(self::DISK)->put($path, file_get_contents($tmp));
         $size = filesize($tmp);
         @unlink($tmp);
-        $id = DB::table('engineer_files')->insertGetId(['engineer_id' => $engineerId, 'kind' => $kind, 'title' => $label.'（PARKS で書き出し）', 'filename' => $filename,
+        $id = DB::table('engineer_files')->insertGetId(['engineer_id' => $engineerId, 'kind' => $kind, 'title' => $label.'（PARK で書き出し）', 'filename' => $filename,
             'path' => $path, 'size' => $size, 'generated' => true, 'uploaded_by' => $actor->id ?? null, 'created_at' => now_str()]);
         Notifier::audit($actor->id ?? null, 'doc-generate', "{$e->name}：{$label}");
         return $id;
