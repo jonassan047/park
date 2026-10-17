@@ -1,6 +1,6 @@
 @extends('layouts.app', ['title' => 'パスワードの設定'])
 @section('content')
-<p>{{ $u->name }} 様、PARK へようこそ。パスワードを設定してください。</p>
+<p>{{ user_label($u) }} 様、PARK へようこそ。パスワードを設定してください。</p>
 <x-card><form method="post" action="{{ url('/invite/'.$token) }}" class="narrow">@csrf
 <x-field label="パスワード（8文字以上）" name="password" type="password" required autocomplete="new-password" />
 <x-field label="パスワード（確認）" name="password_confirmation" type="password" required autocomplete="new-password" />

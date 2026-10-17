@@ -56,7 +56,7 @@ class Notifier
         DB::table('app_notifications')->insert(['user_id' => $userId, 'title' => $title, 'body' => $body, 'link' => $link, 'created_at' => now_str()]);
         if ($mail && $u->mail_opt_in) {
             $url = $link ? "\n\n▼詳しくはこちら\n".url($link) : '';
-            self::queueMail($u->email, $u->name, $title, "{$u->name} 様\n\n".($body ?: $title).$url, $kind);
+            self::queueMail($u->email, $u->name, $title, user_label($u)." 様\n\n".($body ?: $title).$url, $kind);
         }
     }
 

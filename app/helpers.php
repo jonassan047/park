@@ -45,6 +45,14 @@ function lbl(string $map, ?string $key): string
     return PARK_LABELS[$map][$key] ?? (string) $key;
 }
 
+// メールの宛名・差出人・画面の名前表示用：「SES名 氏名」（運営は運営事務局名 + 氏名）
+function user_label(?object $u): string
+{
+    if (!$u) return '';
+    $org = $u->role === 'admin' ? setting('operator_name') : (string) DB::table('ses_companies')->where('id', $u->ses_id)->value('name');
+    return trim($org.' '.$u->name);
+}
+
 function badge(string $map, ?string $key): HtmlString
 {
     return new HtmlString('<span class="badge '.(PARK_TONE[$key] ?? '').'">'.e(lbl($map, $key)).'</span>');

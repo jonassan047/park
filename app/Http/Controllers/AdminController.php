@@ -250,7 +250,7 @@ class AdminController extends Controller
         };
         $q->where(fn ($w) => $w->whereNull('ses_id')->orWhereIn('ses_id', DB::table('ses_companies')->where('status', 'active')->select('id')));
         $users = $q->get();
-        foreach ($users as $u) N::queueMail($u->email, $u->name, $subject, "{$u->name} 様\n\n$body", 'broadcast');
+        foreach ($users as $u) N::queueMail($u->email, $u->name, $subject, user_label($u)." 様\n\n$body", 'broadcast');
         N::audit($r->user()->id, 'broadcast', "{$t}：{$subject}（".count($users).'通）');
         return $this->go('/admin/mail', count($users).'通を配信しました。');
     }

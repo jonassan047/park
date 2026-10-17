@@ -39,7 +39,7 @@ class Workflow
         $t = self::issueToken($u->id);
         $what = ['eg' => 'エンジニアとして PARK に登録されました。', 'ses' => 'SES のご担当者として PARK にご招待します。', 'admin' => 'PARK の運営メンバーに招待されました。'][$d['role']];
         N::queueMail($email, $d['name'], 'ご招待：パスワードを設定してください',
-            "{$d['name']} 様\n\n{$what}".($note ? "\n$note" : '')."\n\n次のリンクから、パスワードを設定してください（7日間有効）。\n".url("/invite/$t")."\n\n"
+            user_label($u)." 様\n\n{$what}".($note ? "\n$note" : '')."\n\n次のリンクから、パスワードを設定してください（7日間有効）。\n".url("/invite/$t")."\n\n"
             .($d['role'] === 'eg' ? 'パスワードの設定のときに、個人情報の取り扱いへの同意をお願いしています。スキルシートは、事実にもとづいて一緒に作ります。' : ''), 'invite');
         N::audit($actor->id ?? null, 'invite', lbl('role', $d['role'])." {$d['name']} <$email>");
         return $u;

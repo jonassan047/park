@@ -113,7 +113,7 @@ class PublicController extends Controller
         $u = DB::table('users')->where('email', strtolower(trim((string) $r->input('email'))))->where('active', 1)->first();
         if ($u) {
             $t = W::issueToken($u->id, 1);
-            N::queueMail($u->email, $u->name, 'パスワードの再設定', "{$u->name} 様\n\n次のリンクから、新しいパスワードを設定してください（24時間有効）。\n".url("/invite/$t")."\n\n心当たりがない場合は、このメールを無視してください。", 'reset');
+            N::queueMail($u->email, $u->name, 'パスワードの再設定', user_label($u)." 様\n\n次のリンクから、新しいパスワードを設定してください（24時間有効）。\n".url("/invite/$t")."\n\n心当たりがない場合は、このメールを無視してください。", 'reset');
         }
         return view('public.message', ['title' => 'メールを送りました', 'text' => '登録があれば、再設定のリンクをメールで送りました。']);
     }

@@ -89,7 +89,7 @@ class CaseMail
     public static function send($u, object $c, array $items, string $mode): int
     {
         $sesId = $u->role === 'ses' ? (int) $u->ses_id : null;
-        $from = $sesId ? DB::table('ses_companies')->where('id', $sesId)->value('name').' '.$u->name : setting('operator_name');
+        $from = user_label($u);
         $n = 0;
         foreach ($items as $eid => $it) {
             $e = DB::table('engineers')->find((int) $eid);

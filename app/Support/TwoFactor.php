@@ -32,7 +32,7 @@ class TwoFactor
         $u = $r->user();
         $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
         $r->session()->put(self::PENDING_KEY, ['user' => $u->id, 'hash' => self::hash($code), 'expires' => now()->getTimestamp() + self::TTL, 'tries' => 0, 'sent' => now()->getTimestamp()]);
-        N::queueMail($u->email, $u->name, "確認コード {$code}", "{$u->name} 様\n\nPARK にログインするための確認コードです。\n\n　{$code}\n\nログインの画面に入れてください（10分間有効）。\n\n心当たりがない場合は、このメールを無視してください。パスワードを知っている誰かがログインしようとしている可能性があるので、パスワードの変更をおすすめします。", '2fa');
+        N::queueMail($u->email, $u->name, "確認コード {$code}", user_label($u)." 様\n\nPARK にログインするための確認コードです。\n\n　{$code}\n\nログインの画面に入れてください（10分間有効）。\n\n心当たりがない場合は、このメールを無視してください。パスワードを知っている誰かがログインしようとしている可能性があるので、パスワードの変更をおすすめします。", '2fa');
         // 手元（メールは保存のみ）で試すときだけ、画面にコードを出す
         if (app()->environment('local') && !N::canSend()) $r->session()->put(self::DEV_KEY, $code);
     }

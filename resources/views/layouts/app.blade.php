@@ -22,7 +22,7 @@
 <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{ asset('css/park.css') }}?v={{ filemtime(public_path('css/park.css')) }}">
 </head>
-<body class="{{ $print ? 'print' : '' }}">
+<body class="{{ $print ? 'print' : '' }} role-{{ $u->role ?? 'guest' }}">
 @unless($print)
 <header class="top"><div class="wrap">
   <a class="logo" href="{{ url('/') }}"><span class="mark">🌳</span><span class="name">{{ setting('app_name') }}<small>SES とエンジニアが集う庭</small></span></a>
@@ -30,7 +30,7 @@
     <nav>@foreach($nav as [$href, $label])<a href="{{ url($href) }}" class="{{ $path === $href || (strlen($href) > 4 && str_starts_with($path, $href.'/')) ? 'on' : '' }}">{{ $label }}</a>@endforeach</nav>
     <div class="me">
       <a href="{{ url('/notifications') }}" class="bell" title="通知">🔔@if($unread)<b>{{ $unread }}</b>@endif</a>
-      <a href="{{ url('/account') }}">{{ $u->name }}<small>{{ lbl('role', $u->role) }}</small></a>
+      <a href="{{ url('/account') }}"><span class="who">{{ user_label($u) }}</span><small><span class="rolepill">{{ lbl('role', $u->role) }}</span>のアカウント</small></a>
       <form method="post" action="{{ url('/logout') }}" class="inline">@csrf<button class="link">ログアウト</button></form>
     </div>
   @else
