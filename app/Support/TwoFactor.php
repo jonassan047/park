@@ -42,13 +42,29 @@ class TwoFactor
         return (bool) \Illuminate\Support\Facades\DB::table('users')->where('id', $u->id)->value('two_factor_confirmed_at');
     }
 
-    public static function send(Request $r): void
+    // 最後に check() で見た情報（記録の補足用。コード・ハッシュは入れない）
+    public static array $last = [];
+
+    // セッションが同じかどうかを見分ける印（セッション ID の sha256 の先頭8文字。ID そのものではない）
+    public static function sid(Request $r): string
+    {
+        return substr(hash('sha256', $r->session()->getId()), 0, 8);
+    }
+
+    // $from：どこから送ったか（login・challenge-form・resend・invite）
+    public static function send(Request $r, string $from = 'login'): void
     {
         $u = $r->user();
-        if (self::skipped($u) || self::confirmed($u)) { self::pass($r); return; }
+        $skip = self::skipped($u);
+        if ($skip || self::confirmed($u)) {
+            N::audit($u->id, '2fa-skip', "from={$from} ".($skip ? 'skipped' : 'confirmed'));
+            self::pass($r);
+            return;
+        }
         $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
         $r->session()->put(self::PENDING_KEY, ['user' => $u->id, 'hash' => self::hash($code), 'expires' => now()->getTimestamp() + self::TTL, 'tries' => 0, 'sent' => now()->getTimestamp()]);
-        N::queueMail($u->email, $u->name, "確認コード {$code}", user_label($u)." 様\n\nPARK にログインするための確認コードです。\n\n　{$code}\n\nログインの画面に入れてください（10分間有効）。\n\n心当たりがない場合は、このメールを無視してください。パスワードを知っている誰かがログインしようとしている可能性があるので、パスワードの変更をおすすめします。", '2fa');
+        $mailId = N::queueMail($u->email, $u->name, "確認コード {$code}", user_label($u)." 様\n\nPARK にログインするための確認コードです。\n\n　{$code}\n\nログインの画面に入れてください（10分間有効）。\n\n心当たりがない場合は、このメールを無視してください。パスワードを知っている誰かがログインしようとしている可能性があるので、パスワードの変更をおすすめします。", '2fa');
+        N::audit($u->id, '2fa-sent', "from={$from} mail=#{$mailId} s=".self::sid($r));
         // 手元（メールは保存のみ）で試すときだけ、画面にコードを出す
         if (app()->environment('local') && !N::canSend()) $r->session()->put(self::DEV_KEY, $code);
     }
@@ -59,16 +75,23 @@ class TwoFactor
         return !$p || now()->getTimestamp() - $p['sent'] >= self::RESEND_WAIT;
     }
 
-    // 'ok'・'bad'（違う）・'expired'（期限切れか、まちがえすぎ）
+    // 'ok'・'wrong'（違うコード）・'no-pending'（セッションにコードが無い）・'user-mismatch'（別の人のコード）
+    // 'timeout'（期限切れ）・'too-many'（まちがえすぎ）。詳しい情報は self::$last に入れる
     public static function check(Request $r, string $code): string
     {
-        $p = self::pending($r);
-        if (!$p || now()->getTimestamp() > $p['expires'] || $p['tries'] >= self::MAX_TRIES) return 'expired';
+        self::$last = [];
+        $p = $r->session()->get(self::PENDING_KEY);
+        if (!$p) return 'no-pending';
+        self::$last = ['tries' => (int) $p['tries'], 'age' => now()->getTimestamp() - (int) $p['sent'], 'pending_user' => (int) $p['user']];
+        if ((int) $p['user'] !== (int) $r->user()->id) return 'user-mismatch';
+        if (now()->getTimestamp() > $p['expires']) return 'timeout';
+        if ($p['tries'] >= self::MAX_TRIES) return 'too-many';
         $code = preg_replace('/\D/', '', mb_convert_kana($code, 'n'));
         if (strlen($code) === 6 && hash_equals($p['hash'], self::hash($code))) return 'ok';
         $p['tries']++;
         $r->session()->put(self::PENDING_KEY, $p);
-        return $p['tries'] >= self::MAX_TRIES ? 'expired' : 'bad';
+        self::$last['tries'] = $p['tries'];
+        return $p['tries'] >= self::MAX_TRIES ? 'too-many' : 'wrong';
     }
 
     // 2要素認証を通ったことにする（確認コードのほか、メールで届いた招待・再設定のリンクから来たとき）

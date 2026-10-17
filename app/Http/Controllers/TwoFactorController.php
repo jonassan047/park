@@ -15,7 +15,7 @@ class TwoFactorController extends Controller
         $u = $r->user();
         if ((int) $r->session()->get(TF::SESSION_KEY) === (int) $u->id) return redirect($u->home());
         // ログインの直後でなく途中から来たとき（コードが無い）は、ここで送る
-        if (!TF::pending($r)) TF::send($r);
+        if (!TF::pending($r)) TF::send($r, 'challenge-form');
         return view('two-factor.challenge', ['email' => TF::maskedEmail($u->email), 'devCode' => $r->session()->get(TF::DEV_KEY)]);
     }
 
@@ -23,11 +23,20 @@ class TwoFactorController extends Controller
     {
         $u = $r->user();
         $res = TF::check($r, (string) $r->input('code'));
+        $sid = TF::sid($r); // pass() でセッションが作り直されるので、先に取る
         if ($res !== 'ok') {
-            N::audit($u->id, '2fa-fail', $u->email);
-            $msg = $res === 'expired' ? 'コードの期限が切れたか、まちがえた回数が多すぎます。「コードを送り直す」を押してください。' : 'コードが違います。メールに書かれた6桁を入れてください。';
+            // 理由と補足（メールアドレス・コードは残さない）
+            $extra = match ($res) {
+                'wrong', 'too-many' => 'tries='.(TF::$last['tries'] ?? 0),
+                'timeout' => 'age='.(TF::$last['age'] ?? 0),
+                'user-mismatch' => 'pending_user='.(TF::$last['pending_user'] ?? 0),
+                default => '',
+            };
+            N::audit($u->id, '2fa-fail', trim("{$res} {$extra}")." s={$sid}");
+            $msg = $res === 'wrong' ? 'コードが違います。メールに書かれた6桁を入れてください。' : 'コードの期限が切れたか、まちがえた回数が多すぎます。「コードを送り直す」を押してください。';
             return $this->go('/two-factor/challenge', $msg, 'bad');
         }
+        N::audit($u->id, '2fa-ok', "s={$sid}");
         TF::pass($r);
         DB::table('users')->where('id', $u->id)->update(['last_login' => now_str(), 'two_factor_confirmed_at' => now_str()]);
         return redirect()->intended(url($u->home()));
@@ -36,7 +45,7 @@ class TwoFactorController extends Controller
     public function resend(Request $r)
     {
         if (!TF::canResend($r)) return $this->go('/two-factor/challenge', '1分ほど待ってから、もう一度押してください。', 'bad');
-        TF::send($r);
+        TF::send($r, 'resend');
         return $this->go('/two-factor/challenge', '確認コードを送り直しました。新しいメールのコードを入れてください。');
     }
 }

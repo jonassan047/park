@@ -105,6 +105,7 @@ SES が受けた案件メールから、エンジニアへの案内メールを�
 ## 状態の点検（2026-10-16）
 
 `php artisan park:status` で、メール・AI の仕事・選考・確認待ちなどを数で出す（個人情報は出さない）。PARK 担当のエージェント（41_Park-Project の `.claude/agents/park-manager.md`）が点検に使う。公開サーバーでは `/opt/php-8.3/bin/php artisan park:status`。
+`php artisan park:twofactor {メールアドレス}` で、その人の確認コードまわり（送った記録・失敗の理由・セッションの設定）を見られる（見るだけ。メールの件名・本文は出さない）。
 
 ## AI の仕事の箱（2026-10-16）
 

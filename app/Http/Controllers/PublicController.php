@@ -39,7 +39,8 @@ class PublicController extends Controller
         }
         $r->session()->regenerate();
         // パスワードの次は2要素認証（メールで確認コードを送る）。済むまでほかの画面は開けない
-        TwoFactor::send($r);
+        N::audit($u->id, 'login', '');
+        TwoFactor::send($r, 'login');
         return redirect('/two-factor/challenge');
     }
 
@@ -102,7 +103,7 @@ class PublicController extends Controller
         N::audit($u->id, 'password-set', $u->email);
         Auth::loginUsingId($u->id);
         // 初めてのログインも、登録のメールアドレスとパスワードに加えて、確認コードで2段階認証を通ってもらう
-        TwoFactor::send($r);
+        TwoFactor::send($r, 'invite');
         if (TwoFactor::confirmed($u)) return $this->go(Auth::user()->home(),'パスワードを設定しました。');
         return $this->go('/two-factor/challenge', 'パスワードを設定しました。メールで届いた確認コードを入れてください。');
     }
