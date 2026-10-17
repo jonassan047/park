@@ -76,7 +76,7 @@ git pull --ff-only
 
 ## マニュアル
 
-運営・SES 企業さま・エンジニアの3種類。正本は `resources/manuals/`（`admin.md`・`ses.md`・`engineer.md`）で、アプリの「使い方」（`/manual`）から読める。SES・エンジニア向けはログイン前でも読める。運営向けは運営だけ。画面や流れを変えたら、マニュアルも直す。マニュアルとこの README の写しを、41_Parks-Project の `04_Manual` に置いている（WIZ から読むため）。直したら写し直す。
+運営・SES 企業さま・エンジニアの3種類。正本は `resources/manuals/`（`admin.md`・`ses.md`・`engineer.md`）で、アプリの「使い方」（`/manual`）から読める。SES・エンジニア向けはログイン前でも読める。運営向けは運営だけ。画面や流れを変えたら、マニュアルも直す。マニュアルとこの README の写しを、41_Parks-Project の `04_Manuals` に置いている（WIZ から読むため）。直したら写し直す。
 
 ## ログイン（2要素認証）
 
