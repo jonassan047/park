@@ -4,7 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-// PARK の業務テーブル（SES・エンジニア・案件・配信・応募・面談・契約・請求・メール・記録）
+// PARKS の業務テーブル（SES・エンジニア・案件・配信・応募・面談・契約・請求・メール・記録）
 return new class extends Migration
 {
     public function up(): void

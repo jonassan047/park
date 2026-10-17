@@ -37,7 +37,7 @@ class Workflow
             $u = DB::table('users')->find($id);
         }
         $t = self::issueToken($u->id);
-        $what = ['eg' => 'エンジニアとして PARK に登録されました。', 'ses' => 'SES のご担当者として PARK にご招待します。', 'admin' => 'PARK の運営メンバーに招待されました。'][$d['role']];
+        $what = ['eg' => 'エンジニアとして PARKS に登録されました。', 'ses' => 'SES のご担当者として PARKS にご招待します。', 'admin' => 'PARKS の運営メンバーに招待されました。'][$d['role']];
         N::queueMail($email, $d['name'], 'ご招待：パスワードを設定してください',
             "{$d['name']} 様\n\n{$what}".($note ? "\n$note" : '')."\n\n次のリンクから、パスワードを設定してください（7日間有効）。\n".url("/invite/$t")."\n\n"
             .($d['role'] === 'eg' ? 'パスワードの設定のときに、個人情報の取り扱いへの同意をお願いしています。スキルシートは、事実にもとづいて一緒に作ります。' : ''), 'invite');
@@ -62,7 +62,7 @@ class Workflow
         ]);
         $name = str_in($d['name'] ?? ''); $contact = str_in($d['contact_name'] ?? '');
         N::toAdmins('SES から参加の申し込みがありました', "{$name}（{$contact} 様）から参加の申し込みがありました。内容を確認し、承認してください。", "/admin/ses/$id", true, 'ses-apply');
-        N::queueMail(str_in($d['email'] ?? ''), $contact, '参加のお申し込みを受け付けました', "{$contact} 様\n\nPARK への参加のお申し込みを受け付けました。運営で内容を確認のうえ、ご連絡します。\n\n会社名：{$name}", 'ses-apply');
+        N::queueMail(str_in($d['email'] ?? ''), $contact, '参加のお申し込みを受け付けました', "{$contact} 様\n\nPARKS への参加のお申し込みを受け付けました。運営で内容を確認のうえ、ご連絡します。\n\n会社名：{$name}", 'ses-apply');
         return $id;
     }
 
@@ -71,7 +71,7 @@ class Workflow
         $s = DB::table('ses_companies')->find($sesId);
         DB::table('ses_companies')->where('id', $sesId)->update(['status' => 'active', 'joined_at' => $s->joined_at ?: today_str(), 'updated_at' => now_str()]);
         N::audit($actor->id, 'ses-approve', $s->name);
-        if ($s->email) self::invite(['email' => $s->email, 'name' => $s->contact_name ?: ($s->rep_name ?: $s->name), 'role' => 'ses', 'ses_id' => $sesId], $actor, "{$s->name} の PARK への参加を承認しました。");
+        if ($s->email) self::invite(['email' => $s->email, 'name' => $s->contact_name ?: ($s->rep_name ?: $s->name), 'role' => 'ses', 'ses_id' => $sesId], $actor, "{$s->name} の PARKS への参加を承認しました。");
     }
 
     // ---------- エンジニア ----------
@@ -292,7 +292,7 @@ class Workflow
         if ($e->status === 'available') DB::table('engineers')->where('id', $engineerId)->update(['status' => 'proposing']);
         $who = ['eg' => 'ご本人', 'ses' => '所属の SES', 'admin' => '運営'][$actor->role];
         N::toAdmins("応募がありました：{$c->title}", "{$e->name} さんが「{$c->title}」に応募しました（{$who}から）。スキルシートを案件に合わせて整え、提出してください。", "/applications/$appId", true, 'apply');
-        N::toSes($e->ses_id, "貴社のエンジニアが応募しました：{$c->title}", "{$e->name} さんが「{$c->title}」に応募しました。選考の進み具合は PARK でご確認いただけます。", "/applications/$appId", true, 'apply');
+        N::toSes($e->ses_id, "貴社のエンジニアが応募しました：{$c->title}", "{$e->name} さんが「{$c->title}」に応募しました。選考の進み具合は PARKS でご確認いただけます。", "/applications/$appId", true, 'apply');
         if ($actor->role !== 'eg') N::toEg($engineerId, "案件に応募しました：{$c->title}", "「{$c->title}」に、{$who}からあなたの応募を出しました。条件に問題があれば、すぐにご連絡ください。", "/applications/$appId", true, 'apply');
         N::audit($actor->id, 'apply', "{$e->name} → {$c->title}");
         return $appId;
@@ -387,7 +387,7 @@ class Workflow
         DB::table('engineers')->where('id', $a->engineer_id)->update(['status' => 'working']);
         $won = DB::table('applications')->where('case_id', $a->case_id)->where('status', 'won')->count();
         if ($won >= ($a->headcount ?: 1)) DB::table('cases')->where('id', $a->case_id)->update(['status' => 'filled', 'updated_at' => now_str()]);
-        N::toEg($a->engineer_id, "成約おめでとうございます：{$a->title}", "「{$a->title}」に決まりました。開始は {$start} です。\n最初の1か月に、困りごとがないか短くお話を聞かせてください（PARK のホームから記入できます）。\nこの案件を、経験票にも追加してください（ホームの「経歴の更新」から）。", "/eg", true, 'won');
+        N::toEg($a->engineer_id, "成約おめでとうございます：{$a->title}", "「{$a->title}」に決まりました。開始は {$start} です。\n最初の1か月に、困りごとがないか短くお話を聞かせてください（PARKS のホームから記入できます）。\nこの案件を、経験票にも追加してください（ホームの「経歴の更新」から）。", "/eg", true, 'won');
         N::toSes($a->ses_id, "成約しました：{$a->title}", "{$a->eg_name} さんが「{$a->title}」に決まりました。\n契約：{$start}〜{$end}／".man($price)."\n成功報酬（初期費用）は、稼働開始の月の請求に含まれます。", "/contracts/$kid", true, 'won');
         N::audit($actor->id, 'contract', "{$a->eg_name} / {$a->title} ".man($price));
         return $kid;

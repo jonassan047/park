@@ -1,4 +1,4 @@
-/* PARK — 公園風のデザイン（41_Park-Project の 99_Data/index.html の見本に合わせた。緑系・丸いフォント） */
+/* PARKS — 公園風のデザイン（41_Park-Project の 99_Data/index.html の見本に合わせた。緑系・丸いフォント） */
 :root {
   /* --blue は昔の名前のまま、色は公園の緑（park-500）にした */
   --ink: #214e37; --sub: #5b7a68; --line: #d3e8dc; --bg: #f2f8f5; --card: #fff;
@@ -242,7 +242,7 @@ input:focus, select:focus, textarea:focus { outline-color: var(--blue2); }
 .manual h2 { border-bottom-color: var(--blue2); color: var(--ink); }
 .manual h3 { color: var(--blue-dark); }
 
-/* トップ（見本のヒーローと「PARK の歩き方」） */
+/* トップ（見本のヒーローと「PARKS の歩き方」） */
 .hero { display: grid; grid-template-columns: 1.15fr .85fr; gap: 36px; align-items: center; background: linear-gradient(135deg, var(--blue2), var(--bg) 55%, #fff); border: 1px solid var(--blue3); border-radius: 28px; padding: 46px 52px; margin: 26px 0 40px; box-shadow: var(--shadow); }
 .hero .pill { display: inline-flex; align-items: center; gap: 8px; background: rgba(255, 255, 255, .85); border: 1px solid var(--blue3); border-radius: 999px; padding: 5px 14px; font-size: 13px; font-weight: 700; color: var(--blue-dark); }
 .hero .pill i { width: 8px; height: 8px; border-radius: 50%; background: var(--blue); display: inline-block; }

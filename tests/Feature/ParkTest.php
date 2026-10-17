@@ -218,7 +218,7 @@ class ParkTest extends TestCase
         $kid = DB::table('contracts')->where('application_id', 1)->value('id');
         $eg = $this->as('eg1@park.example');
         $eg->get('/eg')->assertSee('経歴の更新');
-        $eg->get("/engineers/1/projects/new?contract=$kid")->assertOk()->assertSee('PARK で決まった案件');
+        $eg->get("/engineers/1/projects/new?contract=$kid")->assertOk()->assertSee('PARKS で決まった案件');
         $eg->post('/engineers/1/projects', ['title' => '決まった案件', 'contract' => $kid])->assertRedirect();
         $this->assertNotNull(DB::table('contracts')->where('id', $kid)->value('history_updated_at'));
         $eg->get('/eg')->assertDontSee('経歴の更新');
@@ -259,14 +259,14 @@ class ParkTest extends TestCase
         $this->get("/case-mails/{$m->id}/doc/careersheet")->assertOk();
         $this->get("/cases/$cid")->assertSee('案内メール')->assertSee('単価は相談したい');
 
-        // グループのほかの人（プラスα）：PARK から送り、名前を伏せた書類は「応募したい」のあとだけ
+        // グループのほかの人（プラスα）：PARKS から送り、名前を伏せた書類は「応募したい」のあとだけ
         $this->post("/cases/$cid/mail/send", ['scope' => 'group', 'mode' => 'each', 'to' => [2 => ['send' => 1, 'subject' => '件名', 'body' => '本文']]])->assertRedirect();
         $g = DB::table('case_mails')->where('case_id', $cid)->where('engineer_id', 2)->first();
         $this->assertSame('group', $g->route);
         $this->assertNull(DB::table('mail_outbox')->where('id', $g->outbox_id)->value('reply_to'));
         $this->get("/case-mails/{$g->id}/doc/careersheet-anon")->assertForbidden();
         $this->get("/case-mails/{$g->id}/doc/resume")->assertForbidden();
-        // 本人が PARK の画面で見送ると、返事が記録される
+        // 本人が PARKS の画面で見送ると、返事が記録される
         $this->as('eg2@park.example')->post("/cases/$cid/decline", ['reason' => '時期が合わない']);
         $this->assertDatabaseHas('case_mails', ['id' => $g->id, 'reply' => 'declined', 'reply_via' => 'app']);
         // 案件を持ち込んでいない SES は、案内できない
@@ -371,7 +371,13 @@ class ParkTest extends TestCase
         $this->get('/manual/engineer')->assertOk()->assertSee('経験票');
         $this->get('/manual/admin')->assertForbidden();
         $this->get('/manual/xxx')->assertNotFound();
+        // 操作手順書：ログイン前は SES・エンジニアのもの、運営のものは運営だけ。ログインすると自分の立場のものだけ並ぶ
+        $this->get('/manual')->assertSee('エンジニア 操作手順書')->assertDontSee('運営 操作手順書');
+        $this->get('/manual/ses-steps')->assertOk()->assertSee('案件メール');
+        $this->get('/manual/engineer-steps')->assertOk()->assertSee('確認コード');
+        $this->get('/manual/admin-steps')->assertForbidden();
         $this->as('admin@park.example')->get('/manual/admin')->assertOk()->assertSee('マッチングと配信');
-        $this->as('eg1@park.example')->get('/manual')->assertRedirect(url('/manual/engineer'));
+        $this->as('admin@park.example')->get('/manual/admin-steps')->assertOk()->assertSee('今やること');
+        $this->as('eg1@park.example')->get('/manual')->assertOk()->assertSee('エンジニア 操作手順書')->assertDontSee('SES 企業さま');
     }
 }

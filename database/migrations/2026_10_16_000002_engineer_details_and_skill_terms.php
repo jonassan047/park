@@ -78,7 +78,7 @@ return new class extends Migration
             $t->string('filename');           // ダウンロードのときの名前
             $t->string('path');               // storage の中の場所（公開されない）
             $t->integer('size')->default(0);
-            $t->boolean('generated')->default(false); // PARK で書き出したもの
+            $t->boolean('generated')->default(false); // PARKS で書き出したもの
             $t->unsignedBigInteger('uploaded_by')->nullable();
             $t->dateTime('created_at');
         });

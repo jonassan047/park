@@ -1,9 +1,9 @@
-"""PARK の AI の仕事の箱から仕事を取ってきて、手元の AI（Ollama）に渡し、結果を返す。
+"""PARKS の AI の仕事の箱から仕事を取ってきて、手元の AI（Ollama）に渡し、結果を返す。
 
-案件や個人の情報は、この PC と PARK の間だけでやり取りし、ほかの外部のサービスには送らない。
+案件や個人の情報は、この PC と PARKS の間だけでやり取りし、ほかの外部のサービスには送らない。
 PC がついていて、これが動いている間だけ、AI の仕事が進む。
 
-使い方（環境変数で設定する。合言葉は PARK の .env の PARK_AI_TOKEN と同じもの）:
+使い方（環境変数で設定する。合言葉は PARKS の .env の PARK_AI_TOKEN と同じもの）:
     set PARK_URL=https://www.jona.jp/park
     set PARK_AI_TOKEN=（合言葉）
     set PARK_AI_MODEL=qwen2.5:7b        （省略可。Ollama に入れたモデルの名前）
@@ -80,7 +80,7 @@ def work_once():
         out = ask_ai(job["prompt"])
         park(f"/ai/worker/{job['id']}/result", {"output": out, "engine": f"ollama:{MODEL}"})
         print(f"[{time.strftime('%H:%M:%S')}] 仕事 #{job['id']} を返しました", flush=True)
-    except Exception as e:  # AI が止まっていても、PARK には失敗として返す
+    except Exception as e:  # AI が止まっていても、PARKS には失敗として返す
         park(f"/ai/worker/{job['id']}/result", {"error": str(e)[:500], "engine": f"ollama:{MODEL}"})
         print(f"[{time.strftime('%H:%M:%S')}] 仕事 #{job['id']} は失敗しました：{e}", flush=True)
     return True
@@ -88,14 +88,14 @@ def work_once():
 
 def main():
     if not TOKEN:
-        sys.exit("PARK_AI_TOKEN が設定されていません（PARK の .env と同じ合言葉を入れてください）")
+        sys.exit("PARK_AI_TOKEN が設定されていません（PARKS の .env と同じ合言葉を入れてください）")
     once = "--once" in sys.argv
-    print(f"PARK の AI の仕事の箱（{PARK_URL}）を見ています。AI：{MODEL}（{OLLAMA_URL}）", flush=True)
+    print(f"PARKS の AI の仕事の箱（{PARK_URL}）を見ています。AI：{MODEL}（{OLLAMA_URL}）", flush=True)
     while True:
         try:
             did = work_once()
         except urllib.error.HTTPError as e:
-            print(f"PARK につながりません（{e.code}）。合言葉と URL を確かめてください", flush=True)
+            print(f"PARKS につながりません（{e.code}）。合言葉と URL を確かめてください", flush=True)
             did = False
         except urllib.error.URLError as e:
             print(f"つながりません：{e.reason}", flush=True)

@@ -31,13 +31,13 @@ const PARK_TONE = [
 
 // 設定（運営の「設定」画面で変えられる。率は仮）
 const PARK_DEFAULT_SETTINGS = [
-    'app_name' => 'PARK',
+    'app_name' => 'PARKS',
     'fee_initial_rate' => '7',
     'fee_monthly_rate' => '3',
     'monthly_from' => '2',
     'tax_rate' => '10',
     'match_threshold' => '40',
-    'operator_name' => 'PARK 運営事務局',
+    'operator_name' => 'PARKS 運営事務局',
 ];
 
 function lbl(string $map, ?string $key): string

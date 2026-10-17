@@ -11,7 +11,7 @@ return new class extends Migration
     {
         // メールの「応募したい／質問がある／見送る」のリンクに使う合言葉
         Schema::table('case_mails', fn (Blueprint $t) => $t->string('token', 40)->nullable()->unique());
-        // AI の仕事の箱：PARK が仕事を入れ、手元の PC の AI が取りに来て、結果を返す。採用するのは人
+        // AI の仕事の箱：PARKS が仕事を入れ、手元の PC の AI が取りに来て、結果を返す。採用するのは人
         Schema::create('ai_jobs', function (Blueprint $t) {
             $t->id();
             $t->string('kind', 30);                 // script 面談スクリプトの言い回し / resume 経歴書から経験票の下書き

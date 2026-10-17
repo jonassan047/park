@@ -5,13 +5,13 @@ namespace App\Console\Commands;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
-// PARK の状態をまとめて出す（PARK 担当のエージェントが点検に使う）。
+// PARKS の状態をまとめて出す（PARKS 担当のエージェントが点検に使う）。
 // 名前・メールアドレスなどの個人情報は出さず、数と日時だけを出す。
 // 使い方：php artisan park:status   （--json で JSON）
 class Status extends Command
 {
     protected $signature = 'park:status {--json}';
-    protected $description = 'PARK の状態（メール・AI の仕事・選考・確認待ちなど）を数で出す';
+    protected $description = 'PARKS の状態（メール・AI の仕事・選考・確認待ちなど）を数で出す';
 
     public function handle(): int
     {

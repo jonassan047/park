@@ -7,22 +7,29 @@ use Illuminate\Support\Str;
 use League\CommonMark\Extension\Table\TableExtension;
 
 // マニュアル（正本は resources/manuals/*.md）。SES・エンジニア向けはログイン前でも読める。運営向けは運営だけ
+// 操作手順書（*-steps）：ログイン・設定・メールの処理だけを、立場ごとに順に書いたもの
 class ManualController extends Controller
 {
-    const KINDS = ['admin' => '運営マニュアル', 'ses' => 'SES 企業さま向けマニュアル', 'engineer' => 'エンジニア向けマニュアル'];
+    const KINDS = [
+        'admin-steps' => '運営 操作手順書', 'admin' => '運営マニュアル',
+        'ses-steps' => 'SES 企業さま 操作手順書', 'ses' => 'SES 企業さま向けマニュアル',
+        'engineer-steps' => 'エンジニア 操作手順書', 'engineer' => 'エンジニア向けマニュアル',
+    ];
 
     public function index(Request $r)
     {
         $u = $r->user();
-        if ($u && $u->role !== 'admin') return redirect('/manual/'.($u->role === 'ses' ? 'ses' : 'engineer'));
-        return view('manual.index', ['kinds' => $u ? self::KINDS : array_slice(self::KINDS, 1, null, true)]);
+        $role = $u ? ['admin' => 'admin', 'ses' => 'ses', 'eg' => 'engineer'][$u->role] ?? 'engineer' : null;
+        // 運営はすべて。SES・エンジニアは自分の立場の2つ。ログイン前は運営向け以外
+        $kinds = array_filter(self::KINDS, fn ($k) => $role === 'admin' || ($role ? str_starts_with($k, $role) : !str_starts_with($k, 'admin')), ARRAY_FILTER_USE_KEY);
+        return view('manual.index', ['kinds' => $kinds]);
     }
 
     public function show(Request $r, string $kind)
     {
         abort_unless(isset(self::KINDS[$kind]), 404);
         // 運営向けは、2要素認証まで済ませた運営だけ
-        if ($kind === 'admin') abort_unless($r->user() && $r->user()->role === 'admin' && (int) $r->session()->get(\App\Support\TwoFactor::SESSION_KEY) === (int) $r->user()->id, 403);
+        if (str_starts_with($kind, 'admin')) abort_unless($r->user() && $r->user()->role === 'admin' && (int) $r->session()->get(\App\Support\TwoFactor::SESSION_KEY) === (int) $r->user()->id, 403);
         $md = file_get_contents(resource_path("manuals/$kind.md"));
         // 見出しに飛べるよう id を付け、目次を作る
         $html = Str::markdown($md, ['html_input' => 'escape', 'allow_unsafe_links' => false], [new TableExtension()]);

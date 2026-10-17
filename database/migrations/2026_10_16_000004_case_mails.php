@@ -20,7 +20,7 @@ return new class extends Migration
             $t->foreignId('engineer_id')->constrained()->cascadeOnDelete();
             $t->unsignedBigInteger('ses_id')->nullable();   // 送った SES（運営なら空）
             $t->unsignedBigInteger('sent_by')->nullable();
-            $t->string('route', 10);                        // own 自社のエンジニア（SES から直接）/ group グループの人（PARK から）
+            $t->string('route', 10);                        // own 自社のエンジニア（SES から直接）/ group グループの人（PARKS から）
             $t->string('mode', 10);                         // same 同じ内容 / each 個別
             $t->string('subject');
             $t->text('body');

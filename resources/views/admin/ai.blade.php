@@ -1,6 +1,6 @@
 @extends('layouts.app', ['title' => 'AI の仕事の箱', 'wide' => true])
 @section('content')
-<x-card title="しくみ"><p>PARK は、AI への仕事を箱に入れるだけです。手元の PC で動く AI（<code>tools/ai-worker</code>）が取りに来て、下書きを返します。採用するかどうかは、人が画面で決めます。案件や個人の情報は、手元の PC の外には出ません。</p>
+<x-card title="しくみ"><p>PARKS は、AI への仕事を箱に入れるだけです。手元の PC で動く AI（<code>tools/ai-worker</code>）が取りに来て、下書きを返します。採用するかどうかは、人が画面で決めます。案件や個人の情報は、手元の PC の外には出ません。</p>
 <dl class="dl"><dt>合言葉</dt><dd>{{ $hasToken ? '設定済み' : 'まだ（.env の PARK_AI_TOKEN）。AI は動きません' }}</dd>
 <dt>AI が最後に取りに来た</dt><dd>{{ $lastPick ? fmt_dt($lastPick) : 'まだ一度も来ていません' }}</dd></dl></x-card>
 <x-card title="仕事の一覧"><x-table :head="['#', '仕事', '頼んだ人', '頼んだ日時', '状態', 'AI']" :count="$list->count()" empty="まだありません。">
