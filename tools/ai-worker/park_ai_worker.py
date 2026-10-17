@@ -4,7 +4,7 @@
 PC がついていて、これが動いている間だけ、AI の仕事が進む。
 
 使い方（環境変数で設定する。合言葉は PARKS の .env の PARK_AI_TOKEN と同じもの）:
-    set PARK_URL=https://www.jona.jp/park
+    set PARK_URL=https://www.jona.jp/parks
     set PARK_AI_TOKEN=（合言葉）
     set PARK_AI_MODEL=qwen2.5:7b        （省略可。Ollama に入れたモデルの名前）
     python park_ai_worker.py           （ずっと動く。止めるときは Ctrl+C）

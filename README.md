@@ -37,14 +37,14 @@ php artisan migrate --seed
 - 共通：通知（ベル）とメール、パスワードの変更・再設定。
 - 同じ案件に、グループの中で同じ人が二重に応募することはできない。
 
-## 公開サーバー（https://www.jona.jp/park/）
+## 公開サーバー（https://www.jona.jp/parks/）
 
 2026-10-16 から公開。Xserver（jona.jp）に、muzzo と同じ形で置いている。
 
-- アプリ本体：`~/park`（GitHub から clone）。`~/jona.jp/public_html/park` は `~/park/public` へのシンボリックリンク（設定ファイルなどは外から見えない）。
+- アプリ本体：`~/parks`（GitHub から clone）。`~/jona.jp/public_html/parks` は `~/parks/public` へのシンボリックリンク（設定ファイルなどは外から見えない）。 古い `public_html/park` は、`/parks/` へ転送する `.htaccess` だけを置いたフォルダ（2026-10-17 に /park から /parks に移した）。
 - PHP：サイトは 8.3。コマンドは `/opt/php-8.3/bin/php` を使う（`php` だけだと 8.0 になる）。
 - DB：`jonassan_park`（サーバーパネルで作成。ユーザーは muzzo と同じ）。見本データは入れていない。
-- `.env`：本番用（`APP_DEBUG=false`、`APP_URL=https://www.jona.jp/park`、メールは `sendmail` で送信元 park@jona.jp。2026-10-16 から実際に送っている）。Git には上げない。
+- `.env`：本番用（`APP_DEBUG=false`、`APP_URL=https://www.jona.jp/parks`、メールは `sendmail` で送信元 park@jona.jp。2026-10-16 から実際に送っている）。Git には上げない。
 - **ルートのキャッシュ（`route:cache`）は使わない**（使うとトップの `/park/` が 405 になる）。
 - 最初の運営アカウントは、画面の「はじめの設定」ではなく、サーバーで `park:invite-admin` で作る（公開中に他人に先に使われないように）。
 
@@ -52,7 +52,7 @@ php artisan migrate --seed
 
 ```
 ssh -p 10022 jonassan@jonassan.xsrv.jp
-cd ~/park
+cd ~/parks
 git pull --ff-only
 /opt/php-8.3/bin/php /usr/bin/composer install --no-dev --optimize-autoloader
 /opt/php-8.3/bin/php artisan migrate --force
@@ -118,7 +118,7 @@ AI は手元の PC（FOCUS）で動かす。公開サーバー（Xserver）で�
 ```
 winget install Ollama.Ollama
 ollama pull qwen2.5:7b
-set PARK_URL=https://www.jona.jp/park
+set PARK_URL=https://www.jona.jp/parks
 set PARK_AI_TOKEN=（.env と同じ合言葉）
 python tools/ai-worker/park_ai_worker.py
 ```
