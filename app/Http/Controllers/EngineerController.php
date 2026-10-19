@@ -32,19 +32,42 @@ class EngineerController extends Controller
         return view('engineers.form', ['e' => (object) ['ses_id' => $r->query('ses')], 'action' => '/engineers', 'isNew' => true, 'sesList' => $sesList]);
     }
 
+    // 氏名・ふりがなの姓・名を整える（前後の空白は全角も取る）。姓・名の欄が無く name だけ来たら、空白で分ける。
+    // 戻り値は [整えた入力, 姓・名の欄で送られたか, 長さのエラー（なければ null）]
+    private function cleanNames(array $body): array
+    {
+        $split = !array_key_exists('name_sei', $body) && !array_key_exists('name_mei', $body);
+        foreach (['name' => 'name', 'kana' => 'kana'] as $full => $base) {
+            if (!array_key_exists($base.'_sei', $body) && !array_key_exists($base.'_mei', $body)) {
+                if (!array_key_exists($full, $body)) continue;
+                [$body[$base.'_sei'], $body[$base.'_mei']] = split_name(is_string($body[$full]) ? $body[$full] : null);
+            }
+            $body[$base.'_sei'] = clean_name($body[$base.'_sei'] ?? null);
+            $body[$base.'_mei'] = clean_name($body[$base.'_mei'] ?? null);
+            $body[$full] = join_name($body[$base.'_sei'], $body[$base.'_mei']);
+        }
+        $label = ['name_sei' => '氏名（姓）', 'name_mei' => '氏名（名）', 'kana_sei' => 'ふりがな（姓）', 'kana_mei' => 'ふりがな（名）'];
+        $err = null;
+        foreach ($label as $k => $t) if (mb_strlen((string) ($body[$k] ?? '')) > 50) { $err = "{$t}は50文字までにしてください。"; break; }
+        return [$body, !$split, $err];
+    }
+
     public function store(Request $r)
     {
+        [$body, $byParts, $lenErr] = $this->cleanNames($r->except('_token', 'ses_id'));
+        $hasName = $byParts ? ($body['name_sei'] ?? null) && ($body['name_mei'] ?? null) : ($body['name'] ?? null);
         if ($r->user()->role === 'ses') $sesId = $r->user()->ses_id;
-        elseif ($r->input('ses_id') === 'direct') $sesId = str_in($r->input('name')) ? W::directSesId() : 0;
+        elseif ($r->input('ses_id') === 'direct') $sesId = $hasName ? W::directSesId() : 0;
         else {
             // 管理者が選べるのは、参加中の SES だけ
             $sesId = (int) $r->input('ses_id');
             if (!DB::table('ses_companies')->where('id', $sesId)->where('kind', 'ses')->where('status', 'active')->exists()) $sesId = 0;
         }
-        if (!$sesId || !str_in($r->input('name'))) return back()->withInput()->with('flash', ['msg' => '所属と氏名を入れてください。', 'type' => 'bad']);
+        if (!$sesId || !$hasName) return back()->withInput()->with('flash', ['msg' => '所属と氏名を入れてください。', 'type' => 'bad']);
+        if ($lenErr) return back()->withInput()->with('flash', ['msg' => $lenErr, 'type' => 'bad']);
         $email = strtolower((string) str_in($r->input('email')));
         if ($email && DB::table('users')->where('email', $email)->exists()) return back()->withInput()->with('flash', ['msg' => 'このメールアドレスはすでに使われています。', 'type' => 'bad']);
-        $id = W::createEngineer($sesId, $r->except('_token', 'ses_id'), $r->user());
+        $id = W::createEngineer($sesId, $body, $r->user());
         return $this->go("/engineers/$id", $email ? '登録し、ご本人に招待メールを送りました。' : '登録しました。');
     }
 
@@ -72,7 +95,17 @@ class EngineerController extends Controller
     public function update(Request $r, int $id)
     {
         $e = $this->load($r, $id);
-        $body = $r->except('_token', 'ses_id');
+        $in = $r->except('_token', 'ses_id');
+        // 姓・名の片方だけ送られたときは、もう片方は今の値のまま
+        foreach (['name', 'kana'] as $base) {
+            foreach (['sei' => 'mei', 'mei' => 'sei'] as $a => $b) {
+                if (array_key_exists("{$base}_$a", $in) && !array_key_exists("{$base}_$b", $in)) $in["{$base}_$b"] = $e->{"{$base}_$b"};
+            }
+        }
+        [$body, , $lenErr] = $this->cleanNames($in);
+        // 姓は必須、名は空でもよい（名のない人もいるため）
+        if (array_key_exists('name_sei', $body) && empty($body['name_sei'])) return back()->withInput()->with('flash', ['msg' => '氏名（姓）を入れてください。', 'type' => 'bad']);
+        if ($lenErr) return back()->withInput()->with('flash', ['msg' => $lenErr, 'type' => 'bad']);
         if ($r->user()->role === 'eg') {
             unset($body['email']);
             if (!in_array($body['status'] ?? '', ['available', 'unavailable'])) unset($body['status']);
@@ -209,7 +242,7 @@ class EngineerController extends Controller
     public function saveProfile(Request $r, int $id)
     {
         $this->load($r, $id);
-        W::updateEngineer($id, $r->only(array_slice(W::ENG_FIELDS, 15)), $r->user());
+        W::updateEngineer($id, $r->only(W::ENG_PROFILE_FIELDS), $r->user());
         W::saveHistories($id, $r->all());
         W::editedBy($id, $r->user());
         return $this->go("/engineers/$id", '詳しいプロフィールを保存しました。');

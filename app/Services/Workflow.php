@@ -25,6 +25,32 @@ class Workflow
         return DB::table('users')->where('token', $t)->where('token_expires', '>', now_str())->first();
     }
 
+    // 1つの欄の氏名を、name と姓・名の列にして返す（1欄の入口：初めの設定・招待・担当者の追加など）
+    public static function nameCols(string $full): array
+    {
+        [$sei, $mei] = split_name($full);
+        return ['name' => $full, 'name_sei' => self::cut50($sei), 'name_mei' => self::cut50($mei)];
+    }
+
+    private static function cut50(?string $s): ?string
+    {
+        return $s === null ? null : mb_substr($s, 0, 50);
+    }
+
+    // 登録済みの全員の name・kana を姓・名に分けて入れる（マイグレーション用。name・kana は書き換えない）
+    public static function splitExistingNames(): void
+    {
+        foreach (['users', 'engineers'] as $table) {
+            DB::table($table)->orderBy('id')->chunkById(200, function ($rows) use ($table) {
+                foreach ($rows as $row) {
+                    [$ns, $nm] = split_name($row->name);
+                    [$ks, $km] = split_name($row->kana);
+                    DB::table($table)->where('id', $row->id)->update(['name_sei' => self::cut50($ns), 'name_mei' => self::cut50($nm), 'kana_sei' => self::cut50($ks), 'kana_mei' => self::cut50($km)]);
+                }
+            });
+        }
+    }
+
     public static function invite(array $d, $actor, string $note = ''): ?object
     {
         $email = strtolower(trim((string) ($d['email'] ?? '')));
@@ -34,7 +60,7 @@ class Workflow
         // 未設定の人でも、立場（役割・SES・エンジニア）が依頼と違うなら招待しない（別の立場のリンクを渡さないため）
         if ($u && ($u->role !== $d['role'] || (int) $u->ses_id !== (int) ($d['ses_id'] ?? 0) || (int) $u->engineer_id !== (int) ($d['engineer_id'] ?? 0))) return null;
         if (!$u) {
-            $id = DB::table('users')->insertGetId(['email' => $email, 'name' => $d['name'], 'role' => $d['role'], 'ses_id' => $d['ses_id'] ?? null,
+            $id = DB::table('users')->insertGetId(['email' => $email] + self::nameCols((string) $d['name']) + ['role' => $d['role'], 'ses_id' => $d['ses_id'] ?? null,
                 'engineer_id' => $d['engineer_id'] ?? null, 'created_at' => now_str(), 'updated_at' => now_str()]);
             $u = DB::table('users')->find($id);
         }
@@ -49,7 +75,7 @@ class Workflow
 
     public static function createUser(string $email, string $name, string $role, string $password, array $extra = []): int
     {
-        return DB::table('users')->insertGetId(['email' => strtolower($email), 'name' => $name, 'role' => $role, 'password' => Hash::make($password),
+        return DB::table('users')->insertGetId(['email' => strtolower($email)] + self::nameCols($name) + ['role' => $role, 'password' => Hash::make($password),
             'ses_id' => $extra['ses_id'] ?? null, 'engineer_id' => $extra['engineer_id'] ?? null, 'created_at' => now_str(), 'updated_at' => now_str()]);
     }
 
@@ -58,8 +84,11 @@ class Workflow
     // 管理者は企業名、SES は SES名（ses_companies.name）も保存する。戻り値は、画面に出す注意（なければ null）
     public static function saveProfile($user, array $d): ?string
     {
-        $upd = ['kana' => str_in($d['kana'] ?? ''), 'phone' => str_in($d['phone'] ?? ''), 'updated_at' => now_str()];
-        $upd['name'] = str_in($d['name'] ?? '') ?? $user->name;
+        $ks = clean_name($d['kana_sei'] ?? null); $km = clean_name($d['kana_mei'] ?? null);
+        $upd = ['kana_sei' => $ks, 'kana_mei' => $km, 'kana' => join_name($ks, $km), 'phone' => str_in($d['phone'] ?? ''), 'updated_at' => now_str()];
+        // 姓・名がどちらも空なら、今の氏名のまま
+        $ns = clean_name($d['name_sei'] ?? null); $nm = clean_name($d['name_mei'] ?? null);
+        if ($ns !== null || $nm !== null) $upd += ['name_sei' => $ns, 'name_mei' => $nm, 'name' => join_name($ns, $nm)];
         if ($user->role !== 'eg') $upd['position'] = str_in($d['position'] ?? '');
         if ($user->role === 'admin' && ($c = str_in($d['company_name'] ?? '')) !== null) $upd['company_name'] = $c;
         if (!DB::table('users')->where('id', $user->id)->value('profile_completed_at')) $upd['profile_completed_at'] = now_str();
@@ -143,10 +172,26 @@ class Workflow
     // ---------- エンジニア ----------
     const ENG_FIELDS = ['name', 'kana', 'initials', 'email', 'birth_year', 'nearest_station', 'years_exp', 'summary', 'strengths', 'desired_price', 'min_price', 'available_from', 'work_style', 'days_per_week', 'status',
         // 履歴書・業務経歴書の項目（2026-10-16）
-        'gender', 'phone', 'postal_code', 'address', 'address_kana', 'nearest_line', 'walk_minutes', 'education', 'graduated_ym', 'career_summary', 'desired_roles', 'english_level', 'appeal', 'wishes', 'birth_date', 'nickname'];
+        'gender', 'phone', 'postal_code', 'address', 'address_kana', 'nearest_line', 'walk_minutes', 'education', 'graduated_ym', 'career_summary', 'desired_roles', 'english_level', 'appeal', 'wishes', 'birth_date', 'nickname',
+        // 氏名・ふりがなの姓・名（2026-10-19。末尾に足した）
+        'name_sei', 'name_mei', 'kana_sei', 'kana_mei'];
+
+    // 詳しいプロフィールの画面で保存する項目（gender から nickname まで。姓・名は含めない）
+    const ENG_PROFILE_FIELDS = ['gender', 'phone', 'postal_code', 'address', 'address_kana', 'nearest_line', 'walk_minutes', 'education', 'graduated_ym', 'career_summary',
+        'desired_roles', 'english_level', 'appeal', 'wishes', 'birth_date', 'nickname'];
 
     private static function engValues(array $d, ?object $old = null): array
     {
+        // 姓・名の欄があればそれをつなぐ。無くて name・kana だけなら分ける（見本・AI・古い画面のため）
+        foreach (['name' => 'name', 'kana' => 'kana'] as $full => $base) {
+            if (array_key_exists($base.'_sei', $d) || array_key_exists($base.'_mei', $d)) {
+                $d[$base.'_sei'] = clean_name($d[$base.'_sei'] ?? null);
+                $d[$base.'_mei'] = clean_name($d[$base.'_mei'] ?? null);
+                $d[$full] = join_name($d[$base.'_sei'], $d[$base.'_mei']);
+            } elseif (array_key_exists($full, $d)) {
+                [$d[$base.'_sei'], $d[$base.'_mei']] = array_map([self::class, 'cut50'], split_name(is_string($d[$full]) ? $d[$full] : null));
+            }
+        }
         $v = [];
         foreach (self::ENG_FIELDS as $f) {
             if (!array_key_exists($f, $d)) { $v[$f] = $old->$f ?? null; continue; }

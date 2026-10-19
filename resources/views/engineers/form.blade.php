@@ -1,11 +1,18 @@
-@php $isEg = auth()->user()->role === 'eg'; @endphp
+@php
+    $isEg = auth()->user()->role === 'eg';
+    // 姓・名の列がまだ空の人は、つないだ name・kana から分けて出す
+    [$nameSei, $nameMei] = (($e->name_sei ?? null) || ($e->name_mei ?? null)) ? [$e->name_sei ?? null, $e->name_mei ?? null] : split_name($e->name ?? null);
+    [$kanaSei, $kanaMei] = (($e->kana_sei ?? null) || ($e->kana_mei ?? null)) ? [$e->kana_sei ?? null, $e->kana_mei ?? null] : split_name($e->kana ?? null);
+@endphp
 @extends('layouts.app', ['title' => $isNew ? 'エンジニアの登録' : 'プロフィールの編集'])
 @section('content')
 @if($isNew)<p class="muted">基本情報を登録します。メールアドレスを入れると、ご本人に招待が届き、経験票（これまでの案件）をご本人が入れられます。</p>@endif
 <x-card><form method="post" action="{{ url($action) }}">@csrf<div class="grid2">
+<x-field label="氏名（姓）" name="name_sei" :value="$nameSei" required />
+<x-field label="氏名（名）" name="name_mei" :value="$nameMei" :required="$isNew" />
+<x-field label="ふりがな（姓）" name="kana_sei" :value="$kanaSei" placeholder="やまだ" />
+<x-field label="ふりがな（名）" name="kana_mei" :value="$kanaMei" placeholder="たろう" hint="スキルシートのイニシャル（T.Y）に使います" />
 @if($sesList)<x-field label="所属" name="ses_id" type="select" :options="$sesList" blank="選んでください" :value="$e->ses_id ?? null" hint="SES に属さない人は「管理者の直属」を選びます" required />@endif
-<x-field label="氏名" name="name" :value="$e->name ?? null" required />
-<x-field label="ふりがな" name="kana" :value="$e->kana ?? null" placeholder="やまだ たろう" hint="スキルシートのイニシャル（T.Y）に使います" />
 <x-field label="メールで呼ぶ名前（愛称など）" name="nickname" :value="$e->nickname ?? null" placeholder="たろうさん" hint="案件の案内メールの宛名に使います。空なら氏名" />
 @unless($isEg)<x-field label="メールアドレス" name="email" type="email" :value="$e->email ?? null" :hint="$isNew ? '入れると、ご本人に招待メールが届きます' : null" />@endunless
 <x-field label="生まれた年" name="birth_year" type="number" :value="$e->birth_year ?? null" placeholder="1985" />

@@ -10,6 +10,8 @@
     $passed = $u && (int) session(\App\Support\TwoFactor::SESSION_KEY) === (int) $u->id;
     if ($u && !$passed) $nav = [];
     $path = '/'.trim(request()->path(), '/');
+    // ダッシュボード（/admin・/ses・/eg）は、配下の画面を開いても「選択中」にしない（そのページ自身のときだけ）
+    $homes = ['/admin', '/ses', '/eg'];
     $unread = $u ? DB::table('app_notifications')->where('user_id', $u->id)->whereNull('read_at')->count() : 0;
     $flash = session('flash');
     $print = $print ?? false;
@@ -28,7 +30,7 @@
 <header class="top"><div class="wrap">
   <a class="logo" href="{{ url('/') }}"><span class="mark">🌳</span><span class="name">{{ setting('app_name') }}<small>SES とエンジニアが集う庭</small></span></a>
   @if($u)
-    <nav>@foreach($nav as [$href, $label])<a href="{{ url($href) }}" class="{{ $path === $href || (strlen($href) > 4 && str_starts_with($path, $href.'/')) ? 'on' : '' }}">{{ $label }}</a>@endforeach</nav>
+    <nav>@foreach($nav as [$href, $label])<a href="{{ url($href) }}" class="{{ $path === $href || (!in_array($href, $homes, true) && str_starts_with($path, $href.'/')) ? 'on' : '' }}">{{ $label }}</a>@endforeach</nav>
     <div class="me">
       <a href="{{ url('/notifications') }}" class="bell" title="通知">🔔@if($unread)<b>{{ $unread }}</b>@endif</a>
       <a href="{{ url('/account') }}"><span class="who">{{ user_label($u) }}</span><small><span class="rolepill">{{ lbl('role', $u->role) }}</span>のアカウント</small></a>

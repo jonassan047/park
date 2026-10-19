@@ -24,6 +24,7 @@ class EgController extends Controller
                 ->where('a.engineer_id', $eid)->where('iv.result', 'pending')->select('iv.*', 'c.title')->orderBy('iv.scheduled_at')->get(),
             'needFollow' => $contract && !DB::table('follow_ups')->where('contract_id', $contract->id)->exists(),
             'historyTodo' => W::historyTodo($eid),
+            'projectCount' => DB::table('engineer_projects')->where('engineer_id', $eid)->count(),
             'unread' => DB::table('messages')->where('engineer_id', $eid)->where('read_by_eg', false)->count(),
         ]);
     }

@@ -58,6 +58,7 @@ Route::middleware('role')->group(function () {
     Route::post('/welcome', [Acc::class, 'welcome']);
     Route::get('/account', [Acc::class, 'show']);
     Route::post('/account', [Acc::class, 'update']);
+    Route::get('/account/profile', [Acc::class, 'profile']);
     Route::post('/account/password', [Acc::class, 'password']);
 
     Route::get('/cases/{id}', [Cas::class, 'show']);

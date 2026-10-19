@@ -182,6 +182,24 @@ function clean_name($v): ?string
     return $v === '' ? null : $v;
 }
 
+// 氏名を最初の空白（半角・全角。続く空白は1つ）で姓と名に分ける。空白が無ければ全体が姓。空なら [null, null]
+function split_name(?string $full): array
+{
+    $s = clean_name($full);
+    if ($s === null) return [null, null];
+    $p = preg_split('/[\s　]+/u', $s, 2);
+    return [$p[0], isset($p[1]) && $p[1] !== '' ? $p[1] : null];
+}
+
+// 姓と名を半角の空白でつなぐ。片方だけならそれ、両方なければ null
+function join_name(?string $sei, ?string $mei): ?string
+{
+    $sei = clean_name($sei);
+    $mei = clean_name($mei);
+    if ($sei !== null && $mei !== null) return $sei.' '.$mei;
+    return $sei ?? $mei;
+}
+
 function int_or_null($v): ?int { return is_numeric($v) ? (int) $v : null; }
 function num_or_null($v): ?float { return is_numeric($v) ? (float) $v : null; }
 function str_in($v): ?string

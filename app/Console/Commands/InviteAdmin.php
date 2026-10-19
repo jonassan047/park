@@ -22,7 +22,7 @@ class InviteAdmin extends Command
             return 1;
         }
         if (!DB::table('users')->where('email', $email)->exists()) {
-            DB::table('users')->insert(['email' => $email, 'name' => $this->argument('name'), 'role' => 'admin', 'created_at' => now_str(), 'updated_at' => now_str()]);
+            DB::table('users')->insert(['email' => $email] + Workflow::nameCols((string) $this->argument('name')) + ['role' => 'admin', 'created_at' => now_str(), 'updated_at' => now_str()]);
         }
         $id = DB::table('users')->where('email', $email)->value('id');
         $token = Workflow::issueToken($id);

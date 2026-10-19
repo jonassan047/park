@@ -37,15 +37,56 @@ class AdminController extends Controller
         return $out;
     }
 
+    // 「招待の状況」の行：管理者と SES の担当者、担当者がまだいない SES
+    private function inviteRows(): array
+    {
+        $rows = [];
+        $sesNames = DB::table('ses_companies')->where('kind', 'ses')->pluck('name', 'id');
+        foreach (DB::table('users')->whereIn('role', ['admin', 'ses'])->orderBy('role')->orderBy('id')->get() as $u) {
+            if (!$u->active) { $state = '停止'; $until = null; }
+            elseif ($u->password) { $state = '使用中'; $until = null; }
+            elseif ($u->token_expires && $u->token_expires > now_str()) { $state = '招待中'; $until = date('n/j', strtotime($u->token_expires)); }
+            else { $state = '期限切れ'; $until = null; }
+            $isAdmin = $u->role === 'admin';
+            $rows[] = ['role' => lbl('role', $u->role), 'name' => $u->name, 'org' => $isAdmin ? $u->company_name : ($sesNames[$u->ses_id] ?? null),
+                'state' => $state, 'until' => $until, 'last_login' => $u->last_login,
+                'reinvite' => $isAdmin && $u->active && !$u->password ? $u->id : null, 'open' => $isAdmin ? null : $u->ses_id];
+        }
+        $noUser = DB::table('ses_companies as s')->where('s.kind', 'ses')->whereIn('s.status', ['active', 'pending'])
+            ->whereNotExists(fn ($q) => $q->select(DB::raw(1))->from('users')->whereColumn('users.ses_id', 's.id')->where('users.role', 'ses'))->orderBy('s.id')->get(['s.id', 's.name']);
+        foreach ($noUser as $s) {
+            $rows[] = ['role' => 'SES', 'name' => '—', 'org' => $s->name, 'state' => '担当者が未登録', 'until' => null, 'last_login' => null, 'reinvite' => null, 'open' => $s->id];
+        }
+        return $rows;
+    }
+
     public function dashboard()
     {
         $limit = date('Y-m-d', strtotime('+31 days'));
+        $ses = fn () => DB::table('ses_companies')->where('kind', 'ses');
+        $sesCount = $ses()->whereIn('status', ['active', 'pending'])->count();
+        $engCount = DB::table('engineers')->count();
+        $caseCount = DB::table('cases')->count();
+        $adminCount = DB::table('users')->where('role', 'admin')->count();
+        $invites = $this->inviteRows();
         return view('admin.dashboard', [
+            'start' => $sesCount === 0 && $engCount === 0 && $caseCount === 0 ? [
+                ['ほかの管理者を招待する（任意）', '/admin/settings', $adminCount >= 2, '管理者を招待する'],
+                ['SES を登録して、ご担当者を招待する', '/admin/ses/new', $sesCount >= 1, 'SES を登録する'],
+                ['エンジニアを登録する（直属・SES の人）', '/engineers/new', $engCount >= 1, 'エンジニアを登録する'],
+                ['案件を登録する', '/cases/new', $caseCount >= 1, '案件を登録する'],
+            ] : null,
+            'invites' => $invites,
+            'onlyMe' => count($invites) <= 1,
             'pendingSes' => DB::table('ses_companies')->where('kind', 'ses')->where('status', 'pending')->orderBy('id')->get(),
             'counts' => [
-                'ses' => DB::table('ses_companies')->where('kind', 'ses')->where('status', 'active')->count(),
-                'eng' => DB::table('engineers')->count(), 'engAvail' => DB::table('engineers')->where('status', 'available')->count(),
-                'cases' => DB::table('cases')->where('status', 'open')->count(),
+                'ses' => $ses()->where('status', 'active')->count(),
+                'sesPending' => $ses()->where('status', 'pending')->count(),
+                'sesInvited' => DB::table('users')->where('role', 'ses')->where('active', 1)->whereNull('password')->count(),
+                'eng' => $engCount, 'engAvail' => DB::table('engineers')->where('status', 'available')->count(),
+                'cases' => DB::table('cases')->where('status', 'open')->count(), 'casesAll' => $caseCount,
+                'invUnpaid' => DB::table('invoices')->where('status', 'issued')->count(),
+                'invited' => DB::table('users')->whereIn('role', ['admin', 'ses', 'eg'])->where('active', 1)->whereNull('password')->count(),
                 'apps' => DB::table('applications')->whereIn('status', ['applied', 'submitted', 'doc_passed', 'interview', 'interviewed'])->count(),
                 'contracts' => DB::table('contracts')->where('status', 'active')->count(),
             ],
