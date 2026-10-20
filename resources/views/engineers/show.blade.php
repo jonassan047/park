@@ -1,5 +1,5 @@
 @php $u = auth()->user(); $mine = $u->role === 'eg'; @endphp
-@extends('layouts.app', ['title' => $mine ? 'プロフィール・経験票' : $e->name, 'wide' => true])
+@extends('layouts.app', ['title' => $e->name, 'wide' => true])
 @section('content')
 <div class="cols"><div>
 <x-card title="エンジニア情報">
@@ -22,12 +22,12 @@
 <dt>稼働できる日</dt><dd>{{ fmt_date($e->available_from) }}</dd>
 <dt>働き方</dt><dd>{{ lbl('workStyle', $e->work_style) }}・週{{ $e->days_per_week ?: 5 }}日</dd>
 <dt>強み</dt><dd>{{ $e->strengths ?: '—' }}</dd><dt>自己PR</dt><dd>{!! nl2br(e($e->summary)) ?: '—' !!}</dd>
-<dt>本人の確認</dt><dd>@if($e->self_confirmed_at)済み（{{ fmt_dt($e->self_confirmed_at) }}）@else<b>まだ</b>@if(!$mine)<span class="muted">（ご本人が確かめるまで、応募できません。管理者・SES が書き換えると、もう一度確認が必要になります）</span>@endif @endif</dd>
-@unless($mine)<dt>アカウント</dt><dd>{{ $eu ? (user_state($eu) === '使用中' ? '使用中（最終ログイン '.fmt_dt($eu->last_login).'）' : (user_state($eu) === '招待中' ? '招待中（未設定）' : user_state($eu))) : 'なし' }}@if($eu && $u->role === 'admin' && in_array($eu->role, ['ses', 'admin'], true)) <span class="badge info">{{ $eu->role === 'ses' ? 'SES 担当者と兼任' : '管理者と兼任' }}</span>@endif</dd>@endunless
+<dt>本人の確認</dt><dd>@if($e->self_confirmed_at)済み（{{ fmt_dt($e->self_confirmed_at) }}）@else<b>まだ</b><span class="muted">（ご本人が確かめるまで、応募できません。管理者・SES が書き換えると、もう一度確認が必要になります）</span> @endif</dd>
+<dt>アカウント</dt><dd>{{ $eu ? (user_state($eu) === '使用中' ? '使用中（最終ログイン '.fmt_dt($eu->last_login).'）' : (user_state($eu) === '招待中' ? '招待中（未設定）' : user_state($eu))) : 'なし' }}@if($eu && $u->role === 'admin' && in_array($eu->role, ['ses', 'admin'], true)) <span class="badge info">{{ $eu->role === 'ses' ? 'SES 担当者と兼任' : '管理者と兼任' }}</span>@endif</dd>
 
 <dt>個人情報の同意</dt><dd>@if($e->consent_at){{ fmt_date($e->consent_at) }}@else<span class="bad-text">未</span>@endif</dd>
 </dl>
-@unless($mine)<p><a class="btn ghost" href="{{ list_url('engineers') }}">エンジニアの一覧に戻る</a></p>@endunless</x-card>
+@if($mine)<p><a class="btn ghost" href="{{ url('/eg') }}">ホームに戻る</a></p>@else<p><a class="btn ghost" href="{{ list_url('engineers') }}">エンジニアの一覧に戻る</a></p>@endif</x-card>
 
 <x-card title="詳しいプロフィール（履歴書・業務経歴書の項目）"><x-slot:actions><a class="btn small" href="{{ url('/engineers/'.$e->id.'/profile') }}">編集</a></x-slot:actions>
 <dl class="dl">
