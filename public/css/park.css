@@ -294,3 +294,4 @@ body.role-admin .logo .mark, body.role-eg .logo .mark { box-shadow: 0 3px 8px rg
 .loginbar { background: var(--blue); color: #fff; font-weight: 700; font-size: 13px; padding: 4px 0; }
 .temp-login { background: #fff8e1; border: 1px dashed #e0a800; border-radius: 12px; padding: 10px 14px; margin: 14px 0; font-size: 13px; }
 .temp-login table { border-collapse: collapse; margin-top: 6px; } .temp-login td, .temp-login th { padding: 2px 12px 2px 0; text-align: left; }
+.right { text-align: right; }

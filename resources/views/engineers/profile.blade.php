@@ -49,6 +49,6 @@
 <p><button type="button" class="btn ghost small" onclick="addRow('certs','certrow')">行を足す</button></p>
 </x-card>
 </div></div>
-<p><button class="btn">保存する</button> <a class="btn ghost" href="{{ url('/engineers/'.$e->id) }}">戻る</a></p>
+<p><a class="btn ghost" href="{{ url('/engineers/'.$e->id) }}">戻る</a> <button class="btn">保存する</button></p>
 </form>
 @endsection

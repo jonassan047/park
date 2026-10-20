@@ -2,7 +2,7 @@
 @extends('layouts.app', ['title' => $mine ? 'プロフィール・経験票' : $e->name, 'wide' => true])
 @section('content')
 <div class="cols"><div>
-<x-card title="基本情報">
+<x-card title="エンジニア情報">
 <x-slot:actions>@if(!$mine && $u->role !== 'eg' && $e->status !== 'left')
 @if($e->suspended_at)<x-post :action="'/engineers/'.$e->id.'/resume'" label="再開" cls="small" confirm="このエンジニアを再開します。ログインでき、案件の配信の候補にも出るようになります。" />
 @else @php
@@ -11,10 +11,10 @@ $stopMsg = 'このエンジニアを停止します。ログインできなく�
     .($inSelection ? "選考中の応募 {$inSelection} 件はそのまま残ります。" : '');
 @endphp<x-post :action="'/engineers/'.$e->id.'/suspend'" label="停止" cls="ghost small" :confirm="$stopMsg" />@endif
 <x-post :action="'/engineers/'.$e->id.'/delete'" label="退会" cls="danger small" confirm="このエンジニアを退会済にします。ログインできなくなり、元に戻せません（記録は残ります）。よろしいですか？" />@endif
-<a class="btn small" href="{{ url('/engineers/'.$e->id.'/edit') }}">編集</a>
 @if(!$mine && $e->email && !($eu && $eu->password) && !$e->suspended_at && $e->status !== 'left')
-<x-post :action="'/engineers/'.$e->id.'/invite'" label="招待を送る" cls="small" />
+<x-post :action="'/engineers/'.$e->id.'/invite'" label="招待を送る" cls="ghost small" />
 @endif
+<a class="btn small" href="{{ url('/engineers/'.$e->id.'/edit') }}">編集</a>
 </x-slot:actions>
 <dl class="dl">
 <dt>氏名</dt><dd>{{ $e->name }} <span class="muted">{{ $e->kana }}（{{ $e->initials ?: '—' }}）</span></dd>

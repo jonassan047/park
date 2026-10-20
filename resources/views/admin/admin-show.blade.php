@@ -3,9 +3,9 @@
 @php
     $state = !$u->active ? '停止' : ($u->password ? '使用中' : '招待中');
 @endphp
-<x-card title="基本情報">
-<x-slot:actions><a class="btn small" href="{{ url('/admin/admins/'.$u->id.'/edit') }}">編集</a>
-@if($u->active && !$u->password)<x-post :action="'/admin/admins/'.$u->id.'/reinvite'" label="招待を送り直す" cls="ghost small" />@endif
+<x-card title="管理者情報">
+<x-slot:actions>@if($u->active && !$u->password)<x-post :action="'/admin/admins/'.$u->id.'/reinvite'" label="招待を送り直す" cls="ghost small" />@endif
+<a class="btn small" href="{{ url('/admin/admins/'.$u->id.'/edit') }}">編集</a>
 </x-slot:actions>
 <dl class="dl">
 <dt>状態</dt><dd>{{ $state }}</dd>

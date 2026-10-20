@@ -27,6 +27,6 @@
 @else
 <x-field label="メールアドレス" name="email" type="email" :value="$u->email" required hint="変えると、新しいアドレスに招待を送り直します。" />
 @endif
-<button class="btn">保存する</button> <a class="btn ghost" href="{{ url('/admin/admins/'.$u->id) }}">戻る</a></form>
+<a class="btn ghost" href="{{ url('/admin/admins/'.$u->id) }}">戻る</a> <button class="btn">保存する</button></form>
 </x-card>
 @endsection

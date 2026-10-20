@@ -1,6 +1,6 @@
 @extends('layouts.app', ['title' => '管理者', 'wide' => true])
 @section('content')
-<p><a class="btn small" href="{{ url('/admin/admins/new') }}">管理者を登録</a></p>
+<p class="right"><a class="btn small" href="{{ url('/admin/admins/new') }}">管理者を登録</a></p>
 <x-table :head="['名前', '企業名', 'メール', '状態', '最終ログイン', '']" :count="$admins->count()">
 @foreach($admins as $u)<tr><td>{{ $u->name }}</td><td>{{ $u->company_name ?: '—' }}</td><td>{{ $u->email }}</td><td>{{ !$u->active ? '停止' : ($u->password ? '使用中' : '招待中') }}</td><td>{{ fmt_dt($u->last_login) }}</td>
 <td><a class="btn small" href="{{ url('/admin/admins/'.$u->id) }}">詳細</a>

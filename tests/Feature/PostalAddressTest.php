@@ -122,7 +122,7 @@ class PostalAddressTest extends TestCase
     {
         $other = $this->otherAdmin(['postal_code' => '100-0001', 'address' => '東京都千代田区', 'position' => '営業部 部長', 'phone' => '03-0000-0000']);
         $self = (int) DB::table('users')->where('email', 'admin@park.example')->value('id');
-        $this->admin()->get("/admin/admins/$other")->assertOk()->assertSee('別 管理者')->assertSee('基本情報')
+        $this->admin()->get("/admin/admins/$other")->assertOk()->assertSee('別 管理者')->assertSee('管理者情報')
             ->assertSee('href="'.url("/admin/admins/$other/edit").'"', false)->assertSee('〒100-0001 東京都千代田区')->assertSee('営業部 部長')->assertSee('使用中')
             ->assertDontSee('招待を送り直す');
         $this->get("/admin/admins/$self")->assertOk();

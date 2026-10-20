@@ -18,5 +18,5 @@
 <p class="muted">スキル名は、候補（技術マスタ）から選ぶと、案件とのマッチングが正確になります。候補に無いものも入れられます（管理者が分類を確かめます）。</p>
 <template id="skillrow">{!! $row() !!}</template>
 <p><button type="button" class="btn ghost small" onclick="addRow('skills','skillrow')">行を足す</button></p>
-<button class="btn">保存する</button> <a class="btn ghost" href="{{ url('/engineers/'.$e->id) }}">戻る</a></form></x-card>
+<a class="btn ghost" href="{{ url('/engineers/'.$e->id) }}">戻る</a> <button class="btn">保存する</button></form></x-card>
 @endsection

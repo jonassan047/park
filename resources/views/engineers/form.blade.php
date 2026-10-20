@@ -39,5 +39,5 @@
 </div>
 <x-field label="強み（ひとこと）" name="strengths" :value="$e->strengths ?? null" placeholder="例：業務系 Java の設計〜テストを1人で回せる" />
 <x-field label="自己PR" name="summary" type="textarea" rows="5" :value="$e->summary ?? null" hint="得意分野と、どんな現場で力を出せるか。事実だけを書きます。" />
-<button class="btn">{{ $isNew ? '登録して招待メールを送る' : '保存する' }}</button> <a class="btn ghost" href="{{ $isNew ? ($sesFixed ? url('/admin/ses/'.$sesFixed['id']) : list_url('engineers')) : url('/engineers/'.$e->id) }}">戻る</a></form></x-card>
+<a class="btn ghost" href="{{ $isNew ? ($sesFixed ? url('/admin/ses/'.$sesFixed['id']) : list_url('engineers')) : url('/engineers/'.$e->id) }}">戻る</a> <button class="btn">{{ $isNew ? '登録して招待メールを送る' : '保存する' }}</button></form></x-card>
 @endsection

@@ -9,5 +9,5 @@
 <x-field label="電話番号" name="phone" />
 <x-field label="郵便番号" name="postal_code" placeholder="123-4567" />
 <x-field label="住所" name="address" />
-<button class="btn">登録して招待メールを送る</button> <a class="btn ghost" href="{{ url('/admin/admins') }}">管理者の一覧に戻る</a></form></x-card>
+<a class="btn ghost" href="{{ url('/admin/admins') }}">管理者の一覧に戻る</a> <button class="btn">登録して招待メールを送る</button></form></x-card>
 @endsection
