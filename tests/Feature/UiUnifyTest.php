@@ -272,7 +272,7 @@ class UiUnifyTest extends TestCase
         $this->assertStringContainsString(url('/admin/ses/1/edit'), $show);
         $this->get('/admin/ses/1/edit')->assertOk()->assertSee('戻る');
         $this->get('/admin/ses/1/users/new')->assertOk()->assertSee('戻る');
-        $this->get('/engineers/1')->assertOk()->assertSee('エンジニアの一覧に戻る')->assertSee('退会にする');
+        $this->get('/engineers/1')->assertOk()->assertSee('エンジニアの一覧に戻る')->assertSee('>退会<', false);
         $this->get('/cases/1')->assertOk()->assertSee('案件の一覧に戻る');
     }
 
