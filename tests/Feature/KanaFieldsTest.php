@@ -33,6 +33,16 @@ class KanaFieldsTest extends TestCase
         $this->get("/admin/admins/{$u->id}")->assertSee('やまた たろう');
     }
 
+    public function test_ses_company_form_kana_goes_to_invited_contact(): void
+    {
+        $this->admin()->get('/admin/ses/new')->assertOk()->assertSee('担当者のふりがな（姓）');
+        $this->post('/admin/ses', ['name' => 'かな社', 'contact_sei' => '田中', 'contact_mei' => '一郎', 'contact_kana_sei' => 'たなか', 'contact_kana_mei' => 'いちろう', 'email' => 'kana-co@park.example']);
+        $s = DB::table('ses_companies')->where('name', 'かな社')->first();
+        $this->assertSame(['たなか', 'いちろう'], [$s->contact_kana_sei, $s->contact_kana_mei]);
+        $this->assertSame('たなか いちろう', DB::table('users')->where('email', 'kana-co@park.example')->value('kana'));
+        $this->get("/admin/ses/{$s->id}/edit")->assertOk()->assertSee('value="たなか"', false);
+    }
+
     public function test_ses_contact_new_has_kana(): void
     {
         $sid = (int) DB::table('ses_companies')->where('kind', 'ses')->value('id');

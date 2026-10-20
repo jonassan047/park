@@ -143,7 +143,12 @@ class Workflow
     {
         [$rep, $rs, $rm] = name_parts($d, 'rep', 'rep_name');
         [$con, $cs, $cm] = name_parts($d, 'contact', 'contact_name');
-        return ['rep_name' => $rep, 'rep_sei' => self::cut50($rs), 'rep_mei' => self::cut50($rm), 'contact_name' => $con, 'contact_sei' => self::cut50($cs), 'contact_mei' => self::cut50($cm)];
+        $cols = ['rep_name' => $rep, 'rep_sei' => self::cut50($rs), 'rep_mei' => self::cut50($rm), 'contact_name' => $con, 'contact_sei' => self::cut50($cs), 'contact_mei' => self::cut50($cm)];
+        // 担当者のふりがな。この欄を送らない画面（申し込み・SES の会社情報）では、今の値を消さない
+        if (array_key_exists('contact_kana_sei', $d) || array_key_exists('contact_kana_mei', $d)) {
+            $cols += ['contact_kana_sei' => self::cut50(clean_name($d['contact_kana_sei'] ?? null)), 'contact_kana_mei' => self::cut50(clean_name($d['contact_kana_mei'] ?? null))];
+        }
+        return $cols;
     }
 
     // 郵便番号・住所の検査とそろえ。$d に postal_code・address のキーがあるものだけ返す（無ければ今の値のまま）。
@@ -394,7 +399,7 @@ class Workflow
         DB::table('ses_companies')->where('id', $sesId)->update(['status' => 'active', 'joined_at' => $s->joined_at ?: today_str(), 'updated_at' => now_str()]);
         N::audit($actor->id, 'ses-approve', $s->name);
         if (!$s->email) return false;
-        $u = self::invite(['email' => $s->email, 'name' => $s->contact_name ?: ($s->rep_name ?: $s->name), 'name_sei' => $s->contact_name ? $s->contact_sei : ($s->rep_name ? $s->rep_sei : null), 'name_mei' => $s->contact_name ? $s->contact_mei : ($s->rep_name ? $s->rep_mei : null), 'role' => 'ses', 'ses_id' => $sesId], $actor, $note ?? "{$s->name} の PARK への参加を承認しました。");
+        $u = self::invite(['email' => $s->email, 'name' => $s->contact_name ?: ($s->rep_name ?: $s->name), 'name_sei' => $s->contact_name ? $s->contact_sei : ($s->rep_name ? $s->rep_sei : null), 'name_mei' => $s->contact_name ? $s->contact_mei : ($s->rep_name ? $s->rep_mei : null), 'kana_sei' => $s->contact_kana_sei, 'kana_mei' => $s->contact_kana_mei, 'role' => 'ses', 'ses_id' => $sesId], $actor, $note ?? "{$s->name} の PARK への参加を承認しました。");
         return $u && !$u->password;
     }
 
