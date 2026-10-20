@@ -71,7 +71,7 @@ class AdminController extends Controller
         $invites = $this->inviteRows();
         return view('admin.dashboard', [
             'start' => $sesCount === 0 && $engCount === 0 && $caseCount === 0 ? [
-                ['ほかの管理者を招待する（任意）', '/admin/settings', $adminCount >= 2, '管理者を招待する'],
+                ['ほかの管理者を招待する（任意）', '/admin/admins', $adminCount >= 2, '管理者を招待する'],
                 ['SES を登録して、ご担当者を招待する', '/admin/ses/new', $sesCount >= 1, 'SES を登録する'],
                 ['エンジニアを登録する（直属・SES の人）', '/engineers/new', $engCount >= 1, 'エンジニアを登録する'],
                 ['案件を登録する', '/cases/new', $caseCount >= 1, '案件を登録する'],
@@ -346,7 +346,13 @@ class AdminController extends Controller
     // ---------- 設定・記録 ----------
     public function settings()
     {
-        return view('admin.settings', ['admins' => DB::table('users')->where('role', 'admin')->orderBy('id')->get(), 'canSend' => N::canSend()]);
+        return view('admin.settings', ['canSend' => N::canSend()]);
+    }
+
+    // 管理者の一覧と登録
+    public function adminsIndex()
+    {
+        return view('admin.admins', ['admins' => DB::table('users')->where('role', 'admin')->orderBy('id')->get()]);
     }
 
     public function saveSettings(Request $r)
@@ -376,7 +382,7 @@ class AdminController extends Controller
         if (mb_strlen($company) > 100) return $bad('企業名は100文字までです。');
         if (DB::table('users')->where('email', $email)->exists()) return $bad('このメールアドレスはすでに使われています。');
         W::invite(['email' => $email, 'name' => $name, 'name_sei' => $sei, 'name_mei' => $mei, 'role' => 'admin', 'company_name' => $company], $r->user());
-        return $this->go('/admin/settings', '登録し、招待メールを送りました。');
+        return $this->go('/admin/admins', '登録し、招待メールを送りました。');
     }
 
     // 管理者の情報を直す画面
@@ -392,16 +398,16 @@ class AdminController extends Controller
         abort_unless(DB::table('users')->where('id', $id)->where('role', 'admin')->exists(), 404);
         $res = W::updateAdmin($id, $r->only(['name_sei', 'name_mei', 'company_name', 'email']), $r->user());
         if ($res['type'] === 'bad') return back()->withInput()->with('flash', ['msg' => $res['msg'], 'type' => 'bad']);
-        return $this->go("/admin/settings/admins/$id", $res['msg'], $res['type']);
+        return $this->go("/admin/admins/$id", $res['msg'], $res['type']);
     }
 
     // まだパスワードを設定していない管理者に、招待を送り直す（リンクは新しくなり、7日に戻る）
     public function reinviteAdmin(Request $r, int $id)
     {
         $u = DB::table('users')->where('id', $id)->where('role', 'admin')->where('active', 1)->whereNull('password')->first();
-        if (!$u) return $this->go('/admin/settings', 'この人には送り直せません。', 'bad');
+        if (!$u) return $this->go('/admin/admins', 'この人には送り直せません。', 'bad');
         W::invite(['email' => $u->email, 'name' => $u->name, 'role' => 'admin'], $r->user());
-        return $this->go('/admin/settings', '招待を送り直しました。');
+        return $this->go('/admin/admins', '招待を送り直しました。');
     }
 
     public function audit()

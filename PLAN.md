@@ -12,7 +12,7 @@ tezzo の要求（管理者でログインしたあとの点検から）：
 
 今のつくり（調べた結果）：
 
-- 管理者の招待：`/admin/settings` の「管理者を招待」（名前・メールだけ）→ `POST /admin/settings/admins`（`AdminController::admins` → `W::invite`）。送り直しは `reinviteAdmin`。会社名（`users.company_name`）を入れる欄が無い。
+- 管理者の招待（2026-10-20 に設定から「管理者」メニューへ移した。下の「追記」）：`/admin/admins` の「管理者を招待」（名前・メールだけ）→ `POST /admin/admins`（`AdminController::admins` → `W::invite`）。送り直しは `reinviteAdmin`。会社名（`users.company_name`）を入れる欄が無い。
 - 登録済みの管理者を直す画面・処理が無い（自分の分は `/account` で直せるが、メールは直せない。マニュアルは「メールアドレスは、ほかの管理者にご連絡ください」と書いてあるのに、その手段が無い）。
 - SES の登録：`/admin/ses/new` → `POST /admin/ses`（`sesStore`。会社名だけ必須。メールがあれば `W::applySes` → `W::approveSes` → `W::invite` で招待メール。無ければ warn の案内）。テストは `ProfileAndDirectTest` の D 群・`EmptyStateTest` にある。
 - 招待メールの宛名は `user_label($u)`（管理者は「企業名 氏名」）。招待のときに `company_name` が入っていれば、宛名にも出る。
@@ -33,8 +33,8 @@ tezzo の要求（管理者でログインしたあとの点検から）：
 
 ### P. 管理者の招待（企業名・担当者名・メール）
 
-- P1. `/admin/settings` の「管理者を招待」の欄は、**担当者名・企業名・メールアドレス**の3つ（どれも `required`）。ボタンは「登録して招待メールを送る」。
-- P2. 3つを入れて送ると、`users` に `role=admin`・`company_name`（入れた企業名）・`name`（と `name_sei`・`name_mei`。`nameCols`）・`email`（小文字）・`password=null` の行ができ、`mail_outbox` に `kind=invite`・宛先がそのメールの行が1つ増える。本文の宛名は「企業名 担当者名 様」。差出人は今のまま（`admin_sender($actor)`）。画面は `/admin/settings` に戻り「登録し、招待メールを送りました。」（ok）。監査ログ `invite` が残る（今のまま）。
+- P1. `/admin/admins` の「管理者を招待」の欄は、**担当者名・企業名・メールアドレス**の3つ（どれも `required`）。ボタンは「登録して招待メールを送る」。
+- P2. 3つを入れて送ると、`users` に `role=admin`・`company_name`（入れた企業名）・`name`（と `name_sei`・`name_mei`。`nameCols`）・`email`（小文字）・`password=null` の行ができ、`mail_outbox` に `kind=invite`・宛先がそのメールの行が1つ増える。本文の宛名は「企業名 担当者名 様」。差出人は今のまま（`admin_sender($actor)`）。画面は `/admin/admins` に戻り「登録し、招待メールを送りました。」（ok）。監査ログ `invite` が残る（今のまま）。
 - P3. 担当者名が空 →「担当者名を入れてください。」、企業名が空 →「企業名を入れてください。」、メールが空・形が正しくない →「メールアドレスを正しく入れてください。」（どれも bad。入れた値は残す `withInput`）。どの場合も `users`・`mail_outbox` は増えない。
 - P4. メールが既に使われている（使用中・招待中・停止中・SES・エンジニアのだれでも）→「このメールアドレスはすでに使われています。」（bad）。大文字小文字だけ違うもの（`New-Admin@Park.Example` と `new-admin@park.example`）も同じとみなす。増えない。
 - P5. 企業名・担当者名は前後の空白（全角も）を取る（`clean_name`）。各 100 文字・50 文字×姓名を超えたら bad（企業名は 100 文字まで、担当者名は 100 文字まで）。
@@ -43,9 +43,9 @@ tezzo の要求（管理者でログインしたあとの点検から）：
 
 ### Q. 管理者の情報を直す
 
-- Q1. 設定の「管理者」の表の各行に「直す」のリンク（`/admin/settings/admins/{id}`）。自分の行にも出る。
-- Q2. `GET /admin/settings/admins/{id}`（管理者だけ）で「管理者の情報を直す」の画面。欄は 氏名（姓）・氏名（名）・企業名・メールアドレス。今の値が入っている。状態（使用中・招待中・停止）を上に出す。
-- Q3. 保存 `POST /admin/settings/admins/{id}`：氏名（姓・名）・企業名を、自分・他人・停止中のだれの分でも直せる。`name = join_name(姓, 名)`。姓は必須（名は空でもよい）、企業名は必須。長さは姓・名 各 50 文字、企業名 100 文字まで。保存したら同じ画面に「保存しました。」。
+- Q1. 「管理者」の表（`/admin/admins`）の各行に「直す」のリンク（`/admin/admins/{id}`）。自分の行にも出る。
+- Q2. `GET /admin/admins/{id}`（管理者だけ）で「管理者の情報を直す」の画面。欄は 氏名（姓）・氏名（名）・企業名・メールアドレス。今の値が入っている。状態（使用中・招待中・停止）を上に出す。
+- Q3. 保存 `POST /admin/admins/{id}`：氏名（姓・名）・企業名を、自分・他人・停止中のだれの分でも直せる。`name = join_name(姓, 名)`。姓は必須（名は空でもよい）、企業名は必須。長さは姓・名 各 50 文字、企業名 100 文字まで。保存したら同じ画面に「保存しました。」。
 - Q4. メールの欄：
   - 自分の行 → 欄は読むだけ（disabled）で「ご自分のメールは、ほかの管理者に頼んで変えてもらいます。」。サーバーでも、自分のメール変更は受け付けない（送られてきても無視ではなく bad「ご自分のメールアドレスは変えられません。」、ほかの項目も保存しない）。
   - 停止中の人 → 読むだけ。サーバーでも bad「停止中の人のメールアドレスは変えられません。」。
@@ -75,11 +75,11 @@ tezzo の要求（管理者でログインしたあとの点検から）：
 ### ルート（`routes/web.php` の admin 群に足す）
 
 ```
-Route::get('/settings/admins/{id}', [Adm::class, 'adminEdit']);
-Route::post('/settings/admins/{id}', [Adm::class, 'adminUpdate']);
+Route::get('/admins/{id}', [Adm::class, 'adminEdit']);
+Route::post('/admins/{id}', [Adm::class, 'adminUpdate']);
 ```
 
-`/settings/admins/{id}/reinvite` より後ろでも前でもよい（POST の URL が違うので重ならない）。
+`/admins/{id}/reinvite` より後ろでも前でもよい（POST の URL が違うので重ならない）。
 
 ### 手続き（`app/Services/Workflow.php`）
 
@@ -96,13 +96,13 @@ Route::post('/settings/admins/{id}', [Adm::class, 'adminUpdate']);
 
 - `admins()`：P3〜P5 を見てから `W::invite([... 'company_name' => …, 'role' => 'admin'])`。メッセージは P2・P3・P4 の文。
 - `adminEdit(int $id)`：対象の管理者を取り、無ければ 404。`view('admin.admin-edit', ['u' => $u, 'self' => $u->id === auth()->id()])`。
-- `adminUpdate(Request $r, int $id)`：対象が無ければ 404 → `W::updateAdmin` → bad なら `back()->withInput()`、ほかは `go("/admin/settings/admins/$id", msg, type)`。
+- `adminUpdate(Request $r, int $id)`：対象が無ければ 404 → `W::updateAdmin` → bad なら `back()->withInput()`、ほかは `go("/admin/admins/$id", msg, type)`。
 - `sesStore()`：メールがあって `contact_name` が空なら R4 の bad（`withInput`）。ほかは今のまま。
 
 ### 画面
 
-- `resources/views/admin/settings.blade.php`：表の最後の列に「直す」（`btn ghost small` のリンク）と、今の「招待を送り直す」。招待フォームは `grid2` に 担当者名（`name`）・企業名（`company_name`）・メールアドレス（`email`）。ボタン「登録して招待メールを送る」。フォームの上に一言「登録すると、招待メール（7日間有効のリンク）が届きます。」。
-- `resources/views/admin/admin-edit.blade.php`（新規）：`layouts.app`（title「管理者の情報を直す」）。状態の表示、氏名（姓）・氏名（名）は `grid2`、企業名、メールアドレス（自分・停止中は disabled と案内、招待中は hint「変えると、新しいアドレスに招待を送り直します。」、使用中は hint「変えると、古いアドレスと新しいアドレスにお知らせが届きます。」）。「保存する」と「設定に戻る」。
+- `resources/views/admin/admins.blade.php`（もとは settings.blade.php。下の「追記」で移した）：表の最後の列に「直す」（`btn ghost small` のリンク）と、今の「招待を送り直す」。招待フォームは `grid2` に 担当者名（`name`）・企業名（`company_name`）・メールアドレス（`email`）。ボタン「登録して招待メールを送る」。フォームの上に一言「登録すると、招待メール（7日間有効のリンク）が届きます。」。
+- `resources/views/admin/admin-edit.blade.php`（新規）：`layouts.app`（title「管理者の情報を直す」）。状態の表示、氏名（姓）・氏名（名）は `grid2`、企業名、メールアドレス（自分・停止中は disabled と案内、招待中は hint「変えると、新しいアドレスに招待を送り直します。」、使用中は hint「変えると、古いアドレスと新しいアドレスにお知らせが届きます。」）。「保存する」と「管理者の一覧に戻る」（`/admin/admins`）。
 - `resources/views/admin/ses-form.blade.php`：R1 の並びとラベル・hint。`sesShow` の編集でも同じ部品を使うが、サーバーの必須は `sesStore` だけ。
 
 ## 作業の手順
@@ -122,13 +122,13 @@ Route::post('/settings/admins/{id}', [Adm::class, 'adminUpdate']);
 
 | 条件 | 手順 | 確かめること |
 |---|---|---|
-| P1 | 管理者で `GET /admin/settings` | 「担当者名」「企業名」「メールアドレス」「登録して招待メールを送る」が出る |
-| P2 | `POST /admin/settings/admins` に `name=招待 一郎`・`company_name=テスト企業`・`email=inv-a@park.example` | `users` に role=admin・company_name=テスト企業・password=null・name_sei=招待。`mail_outbox` invite が +1、本文に「テスト企業 招待 一郎 様」。flash ok |
+| P1 | 管理者で `GET /admin/admins` | 「担当者名」「企業名」「メールアドレス」「登録して招待メールを送る」が出る |
+| P2 | `POST /admin/admins` に `name=招待 一郎`・`company_name=テスト企業`・`email=inv-a@park.example` | `users` に role=admin・company_name=テスト企業・password=null・name_sei=招待。`mail_outbox` invite が +1、本文に「テスト企業 招待 一郎 様」。flash ok |
 | P3 | 担当者名だけ空／企業名だけ空／メール空／`email=abc` を1回ずつ | どれも flash bad、`users`・`mail_outbox` の数が変わらない |
 | P4 | 既存の `ses1@park.example`、招待中の人のメール、`INV-A@Park.Example`（P2 の後） | どれも bad、数が変わらない |
 | P6 | `POST /admin/ses/{id}/users` で担当者を招待 | その行の company_name は null |
 | P7 | P2 の人に reinvite | company_name が残る、token が変わる |
-| Q1・Q2 | `GET /admin/settings` → 「直す」の URL を `GET` | 200、今の姓・名・企業名・メールが入っている |
+| Q1・Q2 | `GET /admin/admins` → 「直す」の URL を `GET` | 200、今の姓・名・企業名・メールが入っている |
 | Q3 | 他人（使用中）の姓・名・企業名を変えて POST | `users.name`=姓＋半角空白＋名、company_name が新しい値。flash ok。`audit_log` admin-edit +1 |
 | Q3 自分 | 自分の企業名だけ変えて POST | 保存される。設定の表と `user_label` に新しい企業名 |
 | Q3 必須 | 姓を空／企業名を空／姓 51 文字 | bad、何も変わらない |
@@ -144,3 +144,10 @@ Route::post('/settings/admins/{id}', [Adm::class, 'adminUpdate']);
 | R3 | メール空で登録 | users・invite が増えない、flash warn |
 | R4 | メールあり・担当者名空 | bad、`ses_companies`・`users`・`mail_outbox` が増えない |
 | R5 | `SES1@Park.Example` で登録 | bad、増えない |
+
+## 追記（2026-10-20）：管理者を設定から「管理者」メニューへ
+
+- 管理者メニューの「ダッシュボード」と「SES」の間に「管理者」（`/admin/admins`）を足した。一覧・登録・直す・招待の送り直しはここ。設定画面の「管理者」カードは削除。
+- ルートは `/admin/admins`（GET 一覧・POST 登録）、`/admin/admins/{id}`（GET 直す・POST 更新）、`/admin/admins/{id}/reinvite`。`AdminController::adminsIndex()` を足した。登録・送り直しの戻り先は `/admin/admins`、更新の戻り先は `/admin/admins/{id}`。
+- ダッシュボードの開始カード「ほかの管理者を招待する」のリンクも `/admin/admins`。
+- テストの `/admin/settings/admins` は `/admin/admins` に置き換えた。設定画面に管理者カードが出ないこと・ナビの順は `AdminAccountTest` で確かめる。

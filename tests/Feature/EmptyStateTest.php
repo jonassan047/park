@@ -56,7 +56,7 @@ class EmptyStateTest extends TestCase
         $a = $this->admin();
         $r = $this->as($a)->get('/admin')->assertOk();
         $r->assertSee('PARK をはじめましょう');
-        $r->assertSeeInOrder(['href="'.url('/admin/settings').'"', 'href="'.url('/admin/ses/new').'"', 'href="'.url('/engineers/new').'"', 'href="'.url('/cases/new').'"'], false);
+        $r->assertSeeInOrder(['href="'.url('/admin/admins').'"', 'href="'.url('/admin/ses/new').'"', 'href="'.url('/engineers/new').'"', 'href="'.url('/cases/new').'"'], false);
         $r->assertSee('ほかの管理者を招待する')->assertSee('SES を登録して、ご担当者を招待する')->assertSee('エンジニアを登録する')->assertSee('案件を登録する');
         $r->assertDontSee('<span class="badge ok">済み</span>', false);
     }
@@ -89,7 +89,7 @@ class EmptyStateTest extends TestCase
     public function test_p3_states_pending_expired_stopped_and_unregistered_ses(): void
     {
         $a = $this->admin();
-        $this->as($a)->post('/admin/settings/admins', ['name' => '招待 一郎', 'company_name' => 'テスト企業', 'email' => 'inv1@example.com'])->assertRedirect();
+        $this->as($a)->post('/admin/admins', ['name' => '招待 一郎', 'company_name' => 'テスト企業', 'email' => 'inv1@example.com'])->assertRedirect();
         $exp = W::createUser('exp@example.com', '期限 切れ', 'admin', 'x');
         DB::table('users')->where('id', $exp)->update(['password' => null, 'token' => 'abc', 'token_expires' => now()->subDay()->format('Y-m-d H:i:s')]);
         $stop = W::createUser('stop@example.com', '停止 中', 'admin', 'x');
@@ -121,7 +121,7 @@ class EmptyStateTest extends TestCase
         $a = $this->admin();
         $this->as($a);
         $tabs = ['/admin/ses', '/admin/engineers', '/admin/cases', '/admin/applications', '/admin/contracts', '/admin/invoices', '/admin/messages',
-            '/admin/mail', '/admin/reports', '/admin/ai', '/admin/settings', '/admin/audit', '/admin/skills', '/manual', '/notifications', '/account', '/account/profile',
+            '/admin/mail', '/admin/reports', '/admin/ai', '/admin/settings', '/admin/admins', '/admin/audit', '/admin/skills', '/manual', '/notifications', '/account', '/account/profile',
             '/engineers/new', '/cases/new', '/admin/ses/new'];
         foreach ($tabs as $t) $this->get($t)->assertOk();
         foreach (['/admin/ses', '/admin/engineers', '/admin/cases', '/admin/contracts', '/admin/invoices', '/admin/messages'] as $t) {

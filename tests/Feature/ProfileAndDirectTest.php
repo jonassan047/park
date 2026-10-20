@@ -207,19 +207,19 @@ class ProfileAndDirectTest extends TestCase
     public function test_c_admin_invite_and_reinvite(): void
     {
         $this->as('admin@park.example');
-        $this->post('/admin/settings/admins', ['name' => '新任 管理', 'company_name' => 'テスト企業', 'email' => 'new-admin@park.example'])->assertRedirect();
+        $this->post('/admin/admins', ['name' => '新任 管理', 'company_name' => 'テスト企業', 'email' => 'new-admin@park.example'])->assertRedirect();
         $nu = DB::table('users')->where('email', 'new-admin@park.example')->first();
         $this->assertSame('admin', $nu->role);
         $this->assertNull($nu->password);
-        $this->get('/admin/settings')->assertOk()->assertSee('登録して招待メールを送る')->assertSee('招待中')->assertSee('使用中')->assertSee('招待を送り直す');
+        $this->get('/admin/admins')->assertOk()->assertSee('登録して招待メールを送る')->assertSee('招待中')->assertSee('使用中')->assertSee('招待を送り直す');
         // 送り直しは毎回 token が新しくなる
         $mails = DB::table('mail_outbox')->where('kind', 'invite')->count();
         $t0 = $nu->token;
-        $this->post("/admin/settings/admins/{$nu->id}/reinvite")->assertRedirect(url('/admin/settings'));
+        $this->post("/admin/admins/{$nu->id}/reinvite")->assertRedirect(url('/admin/admins'));
         $t1 = DB::table('users')->where('id', $nu->id)->value('token');
         $this->assertNotSame($t0, $t1);
         $this->assertSame($mails + 1, DB::table('mail_outbox')->where('kind', 'invite')->count());
-        $this->post("/admin/settings/admins/{$nu->id}/reinvite");
+        $this->post("/admin/admins/{$nu->id}/reinvite");
         $this->assertNotSame($t1, DB::table('users')->where('id', $nu->id)->value('token'));
         $this->assertSame($mails + 2, DB::table('mail_outbox')->where('kind', 'invite')->count());
     }
@@ -231,7 +231,7 @@ class ProfileAndDirectTest extends TestCase
         $ses = User::where('email', 'ses1@park.example')->first();
         $mails = DB::table('mail_outbox')->count();
         foreach ([$me->id, $ses->id, 99999] as $id) {
-            $this->post("/admin/settings/admins/$id/reinvite")->assertRedirect(url('/admin/settings'))->assertSessionHas('flash.type', 'bad');
+            $this->post("/admin/admins/$id/reinvite")->assertRedirect(url('/admin/admins'))->assertSessionHas('flash.type', 'bad');
         }
         $this->assertSame($mails, DB::table('mail_outbox')->count());
         $this->assertSame($me->token, DB::table('users')->where('id', $me->id)->value('token'));
@@ -241,23 +241,23 @@ class ProfileAndDirectTest extends TestCase
     public function test_c_reinvite_refused_for_stopped_admin(): void
     {
         $this->as('admin@park.example');
-        $this->post('/admin/settings/admins', ['name' => '止める 人', 'company_name' => 'テスト企業', 'email' => 'stop-admin@park.example'])->assertRedirect();
+        $this->post('/admin/admins', ['name' => '止める 人', 'company_name' => 'テスト企業', 'email' => 'stop-admin@park.example'])->assertRedirect();
         $id = DB::table('users')->where('email', 'stop-admin@park.example')->value('id');
         DB::table('users')->where('id', $id)->update(['active' => 0]);
         $token = DB::table('users')->where('id', $id)->value('token');
         $mails = DB::table('mail_outbox')->count();
-        $this->post("/admin/settings/admins/$id/reinvite")->assertRedirect(url('/admin/settings'))->assertSessionHas('flash.type', 'bad');
+        $this->post("/admin/admins/$id/reinvite")->assertRedirect(url('/admin/admins'))->assertSessionHas('flash.type', 'bad');
         $this->assertSame($token, DB::table('users')->where('id', $id)->value('token'));
         $this->assertSame($mails, DB::table('mail_outbox')->count());
-        $this->get('/admin/settings')->assertSee('停止');
+        $this->get('/admin/admins')->assertSee('停止');
     }
 
     public function test_c5_others_cannot_use_settings(): void
     {
         $this->as('ses1@park.example');
         $this->get('/admin/settings')->assertForbidden();
-        $this->post('/admin/settings/admins/1/reinvite')->assertForbidden();
-        $this->as('eg1@park.example')->post('/admin/settings/admins/1/reinvite')->assertForbidden();
+        $this->post('/admin/admins/1/reinvite')->assertForbidden();
+        $this->as('eg1@park.example')->post('/admin/admins/1/reinvite')->assertForbidden();
     }
 
     // ---------- D. SES の登録 ----------
@@ -291,7 +291,7 @@ class ProfileAndDirectTest extends TestCase
     {
         $this->as('admin@park.example');
         // 招待中（パスワード未設定）の別の立場の人と同じメール
-        $this->post('/admin/settings/admins', ['name' => '招待中 管理', 'company_name' => 'テスト企業', 'email' => 'pending-admin@park.example'])->assertRedirect();
+        $this->post('/admin/admins', ['name' => '招待中 管理', 'company_name' => 'テスト企業', 'email' => 'pending-admin@park.example'])->assertRedirect();
         $ses = DB::table('ses_companies')->count();
         $mails = DB::table('mail_outbox')->count();
         $this->post('/admin/ses', ['name' => '重なる SES', 'contact_name' => '誰か', 'email' => 'pending-admin@park.example'])->assertRedirect()->assertSessionHas('flash.type', 'bad');
@@ -623,7 +623,7 @@ class ProfileAndDirectTest extends TestCase
     public function test_h8_settings_lists_company(): void
     {
         DB::table('users')->where('email', 'admin@park.example')->update(['company_name' => '見本運営株式会社']);
-        $this->as('admin@park.example')->get('/admin/settings')->assertOk()->assertSee('企業名')->assertSee('見本運営株式会社');
+        $this->as('admin@park.example')->get('/admin/admins')->assertOk()->assertSee('企業名')->assertSee('<td>見本運営株式会社</td>', false);
     }
 
     public function test_i1_welcome_shows_ses_name(): void

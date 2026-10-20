@@ -9,7 +9,7 @@
 @endphp
 <x-card title="管理者の情報を直す">
 <p>状態：{{ $state }}</p>
-<form method="post" action="{{ url('/admin/settings/admins/'.$u->id) }}">@csrf
+<form method="post" action="{{ url('/admin/admins/'.$u->id) }}">@csrf
 <div class="grid2">
 <x-field label="氏名（姓）" name="name_sei" :value="$nameSei" required />
 <x-field label="氏名（名）" name="name_mei" :value="$nameMei" />
@@ -21,6 +21,6 @@
 @else
 <x-field label="メールアドレス" name="email" type="email" :value="$u->email" required hint="変えると、新しいアドレスに招待を送り直します。" />
 @endif
-<button class="btn">保存する</button> <a class="btn ghost" href="{{ url('/admin/settings') }}">設定に戻る</a></form>
+<button class="btn">保存する</button> <a class="btn ghost" href="{{ url('/admin/admins') }}">管理者の一覧に戻る</a></form>
 </x-card>
 @endsection

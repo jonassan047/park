@@ -33,7 +33,7 @@
 <x-table :head="['立場', '名前', '所属', '状態', '最後のログイン', '']" :count="count($invites)">
 @foreach($invites as $v)<tr><td>{{ $v['role'] }}</td><td>{{ $v['name'] }}</td><td>{{ $v['org'] ?: '—' }}</td>
 <td>{{ $v['state'] }}@if($v['until'])<span class="muted">（{{ $v['until'] }} まで）</span>@endif</td><td>{{ fmt_dt($v['last_login']) }}</td>
-<td>@if($v['reinvite'])<x-post :action="'/admin/settings/admins/'.$v['reinvite'].'/reinvite'" label="招待を送り直す" cls="ghost small" />@endif
+<td>@if($v['reinvite'])<x-post :action="'/admin/admins/'.$v['reinvite'].'/reinvite'" label="招待を送り直す" cls="ghost small" />@endif
 @if($v['open'])<a href="{{ url('/admin/ses/'.$v['open']) }}">開く</a>@endif</td></tr>@endforeach
 </x-table></x-card>
 <x-card title="応募 → 成約（全体）">@if(($funnel[0][1] ?? 0) === 0)<p class="empty">まだ応募はありません。</p>@else<x-funnel :rows="$funnel" />@endif</x-card>

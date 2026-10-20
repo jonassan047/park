@@ -266,7 +266,7 @@ class NameSplitTest extends TestCase
     public function test_m10_single_field_entrances_split_on_save(): void
     {
         $this->as('admin@park.example');
-        $this->post('/admin/settings/admins', ['name' => '見本 花子', 'company_name' => 'テスト企業', 'email' => 'new-admin@park.example'])->assertRedirect();
+        $this->post('/admin/admins', ['name' => '見本 花子', 'company_name' => 'テスト企業', 'email' => 'new-admin@park.example'])->assertRedirect();
         $u = $this->user('new-admin@park.example');
         $this->assertSame(['見本', '花子', '見本 花子'], [$u->name_sei, $u->name_mei, $u->name]);
 
@@ -319,7 +319,7 @@ class NameSplitTest extends TestCase
     public function test_m11_person_names_use_sei_mei_fields(): void
     {
         $this->as('admin@park.example');
-        $this->post('/admin/settings/admins', ['name_sei' => '招待', 'name_mei' => '次郎', 'company_name' => '企業', 'email' => 'm11a@park.example'])->assertSessionHas('flash.type', 'ok');
+        $this->post('/admin/admins', ['name_sei' => '招待', 'name_mei' => '次郎', 'company_name' => '企業', 'email' => 'm11a@park.example'])->assertSessionHas('flash.type', 'ok');
         $this->assertSame(['招待', '次郎', '招待 次郎'], [($u = $this->user('m11a@park.example'))->name_sei, $u->name_mei, $u->name]);
 
         $this->post('/admin/ses', ['name' => '分割 SES', 'rep_sei' => '代表', 'rep_mei' => '一', 'contact_sei' => '担当', 'contact_mei' => '二', 'email' => 'm11b@park.example'])->assertSessionHas('flash.type', 'ok');

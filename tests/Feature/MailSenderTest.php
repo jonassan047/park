@@ -77,7 +77,7 @@ class MailSenderTest extends TestCase
             $this->assertSame(self::CO, $m->from_name);
             $this->assertSame(self::CO, $this->signature($m));
         }
-        $this->post('/admin/settings/admins', ['name' => '新任 管理', 'company_name' => 'テスト企業', 'email' => 'new-admin@park.example'])->assertRedirect();
+        $this->post('/admin/admins', ['name' => '新任 管理', 'company_name' => 'テスト企業', 'email' => 'new-admin@park.example'])->assertRedirect();
         $inv = $this->last('invite');
         $this->assertSame('new-admin@park.example', $inv->to_email);
         $this->assertSame(self::CO, $inv->from_name);

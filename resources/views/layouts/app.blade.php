@@ -1,7 +1,7 @@
 @php
     $u = auth()->user();
     $nav = [
-        'admin' => [['/admin', 'ダッシュボード'], ['/admin/ses', 'SES'], ['/admin/engineers', 'エンジニア'], ['/admin/cases', '案件'], ['/admin/applications', '応募・選考'],
+        'admin' => [['/admin', 'ダッシュボード'], ['/admin/admins', '管理者'], ['/admin/ses', 'SES'], ['/admin/engineers', 'エンジニア'], ['/admin/cases', '案件'], ['/admin/applications', '応募・選考'],
             ['/admin/contracts', '契約'], ['/admin/invoices', '請求'], ['/admin/messages', 'やり取り'], ['/admin/mail', 'メール'], ['/admin/reports', '分析'], ['/admin/ai', 'AI'], ['/admin/settings', '設定'], ['/manual', '使い方']],
         'ses' => [['/ses', 'ダッシュボード'], ['/ses/engineers', 'エンジニア'], ['/ses/cases', '案件'], ['/ses/applications', '応募・選考'], ['/ses/contracts', '契約'], ['/ses/invoices', '請求'], ['/ses/company', '会社情報'], ['/manual', '使い方']],
         'eg' => [['/eg', 'ホーム'], ['/eg/offers', '届いた案件'], ['/eg/applications', '応募・面談'], ['/eg/profile', 'プロフィール'], ['/eg/sheet', 'スキルシート'], ['/eg/messages', 'やり取り'], ['/manual', '使い方']],
