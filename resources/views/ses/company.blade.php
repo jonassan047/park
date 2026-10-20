@@ -11,6 +11,13 @@
 <div>@if(!$s->self_confirmed_at)<x-card title="会社の情報の確認"><p>会社の情報は、管理者が入れたものも含めて、<b>御社が責任を持つもの</b>です。左の内容を確かめ、違うところは直して保存してから、「確認しました」を押してください。</p>
 <x-post action="/ses/company/confirm" label="内容を確認しました" cls="small" :confirm="'会社の情報が正しいことを確認しましたか？'" /></x-card>@endif
 <x-card title="参加の状況"><dl class="dl"><dt>状態</dt><dd>{{ badge('sesStatus', $s->status) }}</dd><dt>参加日</dt><dd>{{ fmt_date($s->joined_at) }}</dd><dt>守秘義務への同意</dt><dd>{{ fmt_dt($s->agreed_at) }}</dd><dt>会社の情報の確認</dt><dd>{{ $s->self_confirmed_at ? fmt_dt($s->self_confirmed_at) : 'まだ' }}</dd></dl></x-card>
-<x-card title="担当者"><x-table :head="['名前', 'メール', '最終ログイン']" :count="$users->count()">
-@foreach($users as $u)<tr><td>{{ $u->name }}</td><td>{{ $u->email }}</td><td>{{ fmt_dt($u->last_login) }}</td></tr>@endforeach</x-table></x-card></div></div>
+<x-card title="担当者"><x-table :head="['名前', 'メール', '状態', '最終ログイン', '']" :count="$users->count()">
+@foreach($users as $u)@php
+$state = user_state($u);
+$base = '/admin/ses/'.$s->id.'/users/'.$u->id;
+$self = (int) $u->id === (int) auth()->id(); // ご自身の行には操作を出さない
+@endphp<tr><td>{{ $u->name }}</td><td>{{ $u->email }}</td><td>{{ $state }}</td><td>{{ fmt_dt($u->last_login) }}</td>
+<td>@if(!$self && $state !== '退会済')@if($state === '停止')<x-post :action="$base.'/resume'" label="再開" cls="small" :confirm="$u->name.' さんを再開します。'" />
+@else<x-post :action="$base.'/suspend'" label="停止" cls="ghost small" :confirm="$u->name.' さんを停止します。ログインできなくなります（再開できます）。'" />@endif
+<x-post :action="$base.'/delete'" label="退会" cls="danger small" :confirm="$u->name.' さんを退会済にします。ログインできなくなり、元に戻せません（記録は残ります）。よろしいですか？'" />@endif</td></tr>@endforeach</x-table></x-card></div></div>
 @endsection

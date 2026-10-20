@@ -3,15 +3,22 @@
 @section('content')
 <div class="cols"><div>
 <x-card title="基本情報">
-<x-slot:actions>@if(!$mine && $u->role !== 'eg' && $e->status !== 'left')<x-post :action="'/engineers/'.$e->id.'/delete'" label="退会" cls="danger small" confirm="このエンジニアを退会済にします。ログインできなくなります（記録は残ります）。よろしいですか？" />@endif
+<x-slot:actions>@if(!$mine && $u->role !== 'eg' && $e->status !== 'left')
+@if($e->suspended_at)<x-post :action="'/engineers/'.$e->id.'/resume'" label="再開" cls="small" confirm="このエンジニアを再開します。ログインでき、案件の配信の候補にも出るようになります。" />
+@else @php
+$stopMsg = 'このエンジニアを停止します。ログインできなくなり、案件の配信の候補に出なくなります（再開できます）。'
+    .($working ? '稼働中の契約があります。契約・請求はそのまま続きます。' : '')
+    .($inSelection ? "選考中の応募 {$inSelection} 件はそのまま残ります。" : '');
+@endphp<x-post :action="'/engineers/'.$e->id.'/suspend'" label="停止" cls="ghost small" :confirm="$stopMsg" />@endif
+<x-post :action="'/engineers/'.$e->id.'/delete'" label="退会" cls="danger small" confirm="このエンジニアを退会済にします。ログインできなくなり、元に戻せません（記録は残ります）。よろしいですか？" />@endif
 <a class="btn small" href="{{ url('/engineers/'.$e->id.'/edit') }}">編集</a>
-@if(!$mine && $e->email && !($eu && $eu->password))
+@if(!$mine && $e->email && !($eu && $eu->password) && !$e->suspended_at && $e->status !== 'left')
 <x-post :action="'/engineers/'.$e->id.'/invite'" label="招待を送る" cls="small" />
 @endif
 </x-slot:actions>
 <dl class="dl">
 <dt>氏名</dt><dd>{{ $e->name }} <span class="muted">{{ $e->kana }}（{{ $e->initials ?: '—' }}）</span></dd>
-<dt>所属 SES</dt><dd>{{ $e->ses_name }}</dd><dt>状態</dt><dd>{{ badge('engStatus', $e->status) }}</dd>
+<dt>所属 SES</dt><dd>{{ $e->ses_name }}</dd><dt>状態</dt><dd>{{ badge('engStatus', $e->status) }}@if($e->suspended_at) <span class="badge mute">停止中</span>@endif</dd>
 <dt>年齢</dt><dd>{{ age_text($e->birth_year) ?: '—' }}</dd><dt>最寄り駅</dt><dd>{{ trim($e->nearest_line.' '.$e->nearest_station) ?: '—' }}{{ $e->walk_minutes ? '（徒歩'.$e->walk_minutes.'分）' : '' }}</dd>
 <dt>経験年数</dt><dd>{{ $e->years_exp ? num_disp($e->years_exp).'年' : '—' }}</dd>
 <dt>希望単価</dt><dd>{{ man($e->desired_price) }}</dd><dt>下限</dt><dd>{{ man($e->min_price) }}</dd>
@@ -19,7 +26,7 @@
 <dt>働き方</dt><dd>{{ lbl('workStyle', $e->work_style) }}・週{{ $e->days_per_week ?: 5 }}日</dd>
 <dt>強み</dt><dd>{{ $e->strengths ?: '—' }}</dd><dt>自己PR</dt><dd>{!! nl2br(e($e->summary)) ?: '—' !!}</dd>
 <dt>本人の確認</dt><dd>@if($e->self_confirmed_at)済み（{{ fmt_dt($e->self_confirmed_at) }}）@else<b>まだ</b>@if(!$mine)<span class="muted">（ご本人が確かめるまで、応募できません。管理者・SES が書き換えると、もう一度確認が必要になります）</span>@endif @endif</dd>
-@unless($mine)<dt>アカウント</dt><dd>{{ $eu ? ($eu->password ? '使用中（最終ログイン '.fmt_dt($eu->last_login).'）' : '招待中（未設定）') : 'なし' }}</dd>@endunless
+@unless($mine)<dt>アカウント</dt><dd>{{ $eu ? (user_state($eu) === '使用中' ? '使用中（最終ログイン '.fmt_dt($eu->last_login).'）' : (user_state($eu) === '招待中' ? '招待中（未設定）' : user_state($eu))) : 'なし' }}</dd>@endunless
 
 <dt>個人情報の同意</dt><dd>@if($e->consent_at){{ fmt_date($e->consent_at) }}@else<span class="bad-text">未</span>@endif</dd>
 </dl>

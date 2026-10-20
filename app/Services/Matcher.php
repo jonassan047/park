@@ -85,7 +85,7 @@ class Matcher
     {
         $c = DB::table('cases')->find($caseId);
         if (!$c) return [];
-        $q = DB::table('engineers as e')->join('ses_companies as s', 's.id', '=', 'e.ses_id')->where('s.status', 'active')->select('e.*', 's.name as ses_name');
+        $q = DB::table('engineers as e')->join('ses_companies as s', 's.id', '=', 'e.ses_id')->where('s.status', 'active')->whereNull('e.suspended_at')->where('e.status', '!=', 'left')->select('e.*', 's.name as ses_name'); // 停止中・退会済は常に除く
         if (!$includeBusy) $q->whereIn('e.status', ['available', 'proposing']);
         $applied = DB::table('applications')->where('case_id', $caseId)->pluck('engineer_id')->all();
         $offered = DB::table('case_offers')->where('case_id', $caseId)->pluck('status', 'engineer_id')->all();

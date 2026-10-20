@@ -80,7 +80,7 @@ class CaseController extends Controller
                 'offers' => DB::table('case_offers as o')->join('engineers as e', 'e.id', '=', 'o.engineer_id')->where('o.case_id', $id)->select('o.*', 'e.name')->orderByDesc('o.score')->get(),
             ];
         } elseif ($u->role === 'ses') {
-            $engs = DB::table('engineers')->where('ses_id', $u->ses_id)->where('status', '!=', 'unavailable')->orderBy('name')->get();
+            $engs = DB::table('engineers')->where('ses_id', $u->ses_id)->whereNotIn('status', ['unavailable', 'left'])->whereNull('suspended_at')->orderBy('name')->get();
             $rows = $engs->map(fn ($e) => ['e' => $e] + Matcher::score($c, $e))->sortByDesc('score')->values()->all();
             $data += ['rows' => $rows, 'applied' => DB::table('applications')->where('case_id', $id)->pluck('engineer_id')->all(),
                 'offered' => DB::table('case_offers')->where('case_id', $id)->pluck('status', 'engineer_id')->all()];
@@ -113,6 +113,7 @@ class CaseController extends Controller
         $e = DB::table('engineers')->where('id', (int) $r->input('engineer_id'))->where('ses_id', $u->ses_id)->first();
         abort_unless($e, 403);
         if ($c->status !== 'open') return $this->go("/cases/$id", '募集を終えた案件です。', 'bad');
+        if ($e->status === 'left' || $e->suspended_at) return $this->go("/cases/$id", 'このエンジニアは停止中か退会済のため、推薦できません。', 'bad');
         $key = "case {$id} engineer {$e->id}";
         if (DB::table('audit_log')->where('action', 'recommend')->where('detail', $key)->exists()) return $this->go("/cases/$id", 'すでに推薦しています。');
         $ses = DB::table('ses_companies')->where('id', $u->ses_id)->value('name');

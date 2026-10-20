@@ -43,17 +43,19 @@ class AdminController extends Controller
         $rows = [];
         $sesNames = DB::table('ses_companies')->where('kind', 'ses')->pluck('name', 'id');
         foreach (DB::table('users')->whereIn('role', ['admin', 'ses'])->orderBy('role')->orderBy('id')->get() as $u) {
-            if (!$u->active) { $state = '停止'; $until = null; }
-            elseif ($u->password) { $state = '使用中'; $until = null; }
-            elseif ($u->token_expires && $u->token_expires > now_str()) { $state = '招待中'; $until = date('n/j', strtotime($u->token_expires)); }
-            else { $state = '期限切れ'; $until = null; }
+            if ($u->left_at) continue; // 退会済の人は出さない
+            $state = user_state($u); $until = null;
+            if ($state === '招待中') {
+                if ($u->token_expires && $u->token_expires > now_str()) $until = date('n/j', strtotime($u->token_expires));
+                else $state = '期限切れ';
+            }
             $isAdmin = $u->role === 'admin';
             $rows[] = ['role' => lbl('role', $u->role), 'name' => $u->name, 'org' => $isAdmin ? $u->company_name : ($sesNames[$u->ses_id] ?? null),
                 'state' => $state, 'until' => $until, 'last_login' => $u->last_login,
                 'reinvite' => $isAdmin && $u->active && !$u->password ? $u->id : null, 'open' => $isAdmin ? null : $u->ses_id];
         }
         $noUser = DB::table('ses_companies as s')->where('s.kind', 'ses')->whereIn('s.status', ['active', 'pending'])
-            ->whereNotExists(fn ($q) => $q->select(DB::raw(1))->from('users')->whereColumn('users.ses_id', 's.id')->where('users.role', 'ses'))->orderBy('s.id')->get(['s.id', 's.name']);
+            ->whereNotExists(fn ($q) => $q->select(DB::raw(1))->from('users')->whereColumn('users.ses_id', 's.id')->where('users.role', 'ses')->whereNull('users.left_at'))->orderBy('s.id')->get(['s.id', 's.name']);
         foreach ($noUser as $s) {
             $rows[] = ['role' => 'SES', 'name' => '—', 'org' => $s->name, 'state' => '担当者が未登録', 'until' => null, 'last_login' => null, 'reinvite' => null, 'open' => $s->id];
         }
@@ -149,10 +151,14 @@ class AdminController extends Controller
     public function sesShow(int $id)
     {
         $s = $this->sesOrFail($id);
+        $users = DB::table('users')->where('ses_id', $id)->where('role', 'ses')->get();
+        // 会社が参加中なのに、使える担当者がいないとき注意を出す。止めている人がいれば「再開」、いなければ「登録」を勧める
+        $usable = $users->where('active', 1)->count();
+        $noUsable = $s->status === 'active' && $usable === 0 && $users->count() > 0 ? ($users->whereNull('left_at')->count() > 0 ? 'stopped' : 'left') : null;
         return view('admin.ses-show', [
             's' => $s,
             'engs' => DB::table('engineers')->where('ses_id', $id)->orderBy('name')->get(),
-            'users' => DB::table('users')->where('ses_id', $id)->where('role', 'ses')->get(),
+            'users' => $users, 'noUsable' => $noUsable,
             'invs' => DB::table('invoices')->where('ses_id', $id)->orderByDesc('period')->get(),
         ]);
     }
@@ -176,7 +182,7 @@ class AdminController extends Controller
         DB::transaction(function () use ($id) {
             $egIds = DB::table('engineers')->where('ses_id', $id)->pluck('id');
             DB::table('engineers')->where('ses_id', $id)->update(['status' => 'left']);
-            DB::table('users')->where(fn ($q) => $q->where('ses_id', $id)->orWhereIn('engineer_id', $egIds))->whereIn('role', ['ses', 'eg'])->update(['active' => 0]);
+            DB::table('users')->where(fn ($q) => $q->where('ses_id', $id)->orWhereIn('engineer_id', $egIds))->whereIn('role', ['ses', 'eg'])->update(['active' => 0, 'left_at' => DB::raw("coalesce(left_at, '".now_str()."')")]);
             DB::table('ses_companies')->where('id', $id)->update(['status' => 'left']);
         });
         N::audit($r->user()->id, 'ses-leave', $s->name);
@@ -200,7 +206,7 @@ class AdminController extends Controller
     public function sesApprove(Request $r, int $id)
     {
         $this->sesOrFail($id);
-        W::approveSes($id, $r->user());
+        if (!W::approveSes($id, $r->user())) return $this->go("/admin/ses/$id", '承認しました。ただし、招待メールは送っていません（メールアドレスがない、担当者がすでに使っている、または停止中・退会済です）。', 'warn');
         return $this->go("/admin/ses/$id", '承認し、招待メールを送りました。');
     }
 
@@ -216,11 +222,36 @@ class AdminController extends Controller
     {
         $this->sesOrFail($id);
         $email = strtolower((string) str_in($r->input('email')));
+        if ($email && DB::table('users')->where('email', $email)->where('active', 0)->exists()) return $this->go("/admin/ses/$id", 'このメールアドレスは使えません（停止中か退会済です）。', 'bad');
         if (!$email || DB::table('users')->where('email', $email)->whereNotNull('password')->exists()) return $this->go("/admin/ses/$id", 'このメールアドレスは使えません（空か、すでに使われています）。', 'bad');
         [$full, $sei, $mei] = name_parts($r->all(), 'name', 'name');
-        W::invite(['email' => $email, 'name' => (string) $full, 'name_sei' => $sei, 'name_mei' => $mei, 'role' => 'ses', 'ses_id' => $id], $r->user());
+        if (!W::invite(['email' => $email, 'name' => (string) $full, 'name_sei' => $sei, 'name_mei' => $mei, 'role' => 'ses', 'ses_id' => $id], $r->user())) {
+            return $this->go("/admin/ses/$id", 'このメールアドレスには招待を出せません（ほかの立場の人が使っています）。', 'bad');
+        }
         return $this->go("/admin/ses/$id", '担当者を登録し、招待メールを送りました。');
     }
+
+    // 担当者の停止・再開・退会（手続きは Workflow）。管理者はどの会社でも、SES は自社の担当者だけ（ご自身は不可）。
+    // 戻り先は、管理者なら SES の詳細、SES なら会社情報
+    private function sesUserDo(Request $r, int $id, int $uid, string $method)
+    {
+        $u = $r->user();
+        $isSes = $u->role === 'ses';
+        abort_unless($u->role === 'admin' || $isSes, 403);
+        abort_if($isSes && (int) $u->ses_id !== $id, 404); // 他社の会社は見つからない扱い
+        $this->sesOrFail($id);
+        $back = $isSes ? '/ses/company' : "/admin/ses/$id";
+        if ($isSes && $uid === (int) $u->id && DB::table('users')->where('id', $uid)->where('ses_id', $id)->where('role', 'ses')->exists()) {
+            return $this->go($back, 'ご自身は、停止・再開・退会にできません。別の担当者か管理者にお願いしてください。', 'bad');
+        }
+        $res = W::$method($id, $uid, $u);
+        abort_unless($res, 404);
+        return $this->go($back, $res['msg'], $res['type']);
+    }
+
+    public function sesUserSuspend(Request $r, int $id, int $uid) { return $this->sesUserDo($r, $id, $uid, 'suspendSesUser'); }
+    public function sesUserResume(Request $r, int $id, int $uid) { return $this->sesUserDo($r, $id, $uid, 'resumeSesUser'); }
+    public function sesUserDelete(Request $r, int $id, int $uid) { return $this->sesUserDo($r, $id, $uid, 'leaveSesUser'); }
 
     // ---------- エンジニア ----------
     public function engineers(Request $r)

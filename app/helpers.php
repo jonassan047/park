@@ -63,6 +63,15 @@ function user_label(?object $u): string
     return trim(($s->name ?? '').' '.$u->name);
 }
 
+// 担当者・本人のアカウントの状態：退会済・停止・使用中・招待中（1か所で決める）
+function user_state(?object $u): string
+{
+    if (!$u) return 'なし';
+    if (!empty($u->left_at)) return '退会済';
+    if (!$u->active) return '停止';
+    return $u->password ? '使用中' : '招待中';
+}
+
 function badge(string $map, ?string $key): HtmlString
 {
     return new HtmlString('<span class="badge '.(PARK_TONE[$key] ?? '').'">'.e(lbl($map, $key)).'</span>');

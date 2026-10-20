@@ -108,6 +108,12 @@ Route::middleware('role:admin,ses')->group(function () {
     Route::post('/engineers', [Eng::class, 'store']);
     Route::post('/engineers/{id}/invite', [Eng::class, 'invite']);
     Route::post('/engineers/{id}/delete', [Eng::class, 'destroy']);
+    Route::post('/engineers/{id}/suspend', [Eng::class, 'suspend']);
+    Route::post('/engineers/{id}/resume', [Eng::class, 'resume']);
+    // 担当者の停止・再開・退会（管理者はどの会社でも、SES は自社の担当者だけ。中で確かめる）
+    Route::post('/admin/ses/{id}/users/{uid}/suspend', [Adm::class, 'sesUserSuspend'])->where('uid', '[0-9]+');
+    Route::post('/admin/ses/{id}/users/{uid}/resume', [Adm::class, 'sesUserResume'])->where('uid', '[0-9]+');
+    Route::post('/admin/ses/{id}/users/{uid}/delete', [Adm::class, 'sesUserDelete'])->where('uid', '[0-9]+');
     Route::get('/invoices/{id}', [Pip::class, 'invoice']);
     // 選考（面談依頼の報告・面談スクリプト・結果・成約）。SES は自社の応募だけ
     Route::post('/applications/{id}/status', [Pip::class, 'status']);

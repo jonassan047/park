@@ -22,7 +22,106 @@ class Workflow
     public static function userByToken(?string $t): ?object
     {
         if (!$t) return null;
-        return DB::table('users')->where('token', $t)->where('token_expires', '>', now_str())->first();
+        // 停止・退会の人は、古い招待リンクも使えない
+        return DB::table('users')->where('token', $t)->where('token_expires', '>', now_str())->where('active', 1)->first();
+    }
+
+    // ---------- 担当者の停止・再開・退会（管理者と、自社の SES）と、エンジニアの停止・再開 ----------
+    // 戻り値は ['type' => 'ok'|'bad', 'msg' => 文]。対象がその SES の担当者でなければ null（呼ぶ側で 404）
+    private static function sesUserOf(int $sesId, int $uid): ?object
+    {
+        return DB::table('users')->where('id', $uid)->where('role', 'ses')->where('ses_id', $sesId)->first() ?: null;
+    }
+
+    private static function sesCompanyName(int $sesId): string
+    {
+        return (string) DB::table('ses_companies')->where('id', $sesId)->value('name');
+    }
+
+    // その人が、会社で使える（active で退会していない）担当者の最後の1人なら、断りの結果を返す（会社ごと止めるなら会社の停止・退会を使う）
+    private static function onlyUsableUser(int $sesId, object $u): ?array
+    {
+        if (!$u->active) return null;
+        $usable = DB::table('users')->where('ses_id', $sesId)->where('role', 'ses')->where('active', 1)->whereNull('left_at')->count();
+        if ($usable > 1) return null;
+        return ['type' => 'bad', 'msg' => 'この会社で使える担当者が、この人だけです。停止・退会にはできません。会社ごと止めるときは、SES の「停止」か「退会」を使ってください。'];
+    }
+
+    public static function suspendSesUser(int $sesId, int $uid, $actor): ?array
+    {
+        if (!($u = self::sesUserOf($sesId, $uid))) return null;
+        if ($u->left_at) return ['type' => 'bad', 'msg' => '退会済の人は操作できません。'];
+        if (!$u->active) return ['type' => 'ok', 'msg' => 'すでに停止中です。'];
+        if ($only = self::onlyUsableUser($sesId, $u)) return $only;
+        // 招待リンクも使えなくする
+        DB::table('users')->where('id', $uid)->update(['active' => 0, 'token' => null, 'token_expires' => null, 'updated_at' => now_str()]);
+        N::audit($actor->id ?? null, 'ses-user-suspend', self::sesCompanyName($sesId).' '.$u->name);
+        return ['type' => 'ok', 'msg' => "{$u->name} さんを停止しました。"];
+    }
+
+    public static function resumeSesUser(int $sesId, int $uid, $actor): ?array
+    {
+        if (!($u = self::sesUserOf($sesId, $uid))) return null;
+        if ($u->left_at) return ['type' => 'bad', 'msg' => '退会済の人は操作できません。'];
+        if ($u->active) return ['type' => 'ok', 'msg' => 'すでに使えます。'];
+        DB::table('users')->where('id', $uid)->update(['active' => 1, 'updated_at' => now_str()]);
+        N::audit($actor->id ?? null, 'ses-user-resume', self::sesCompanyName($sesId).' '.$u->name);
+        $msg = "{$u->name} さんを再開しました。";
+        // パスワードを決めていなかった人は、招待のリンクが無いので、送り直す方法を添える
+        if (!$u->password) $msg .= '招待を送り直すには、『担当者を登録』で同じメールアドレスを入れてください。';
+        return ['type' => 'ok', 'msg' => $msg];
+    }
+
+    public static function leaveSesUser(int $sesId, int $uid, $actor): ?array
+    {
+        if (!($u = self::sesUserOf($sesId, $uid))) return null;
+        if ($u->left_at) return ['type' => 'bad', 'msg' => '退会済の人は操作できません。'];
+        if ($only = self::onlyUsableUser($sesId, $u)) return $only;
+        DB::table('users')->where('id', $uid)->update(['active' => 0, 'left_at' => now_str(), 'token' => null, 'token_expires' => null, 'updated_at' => now_str()]);
+        N::audit($actor->id ?? null, 'ses-user-leave', self::sesCompanyName($sesId).' '.$u->name);
+        return ['type' => 'ok', 'msg' => "{$u->name} さんを退会済にしました。"];
+    }
+
+    // エンジニアの停止：ログインできなくし、配信の候補から外す（status は変えない）。相手側にアプリ内のお知らせだけ出す
+    public static function suspendEngineer(int $id, $actor): array
+    {
+        $e = DB::table('engineers')->find($id);
+        if ($e->status === 'left') return ['type' => 'bad', 'msg' => '退会済のエンジニアは操作できません。'];
+        if ($e->suspended_at) return ['type' => 'ok', 'msg' => 'すでに停止中です。'];
+        DB::transaction(function () use ($id) {
+            DB::table('engineers')->where('id', $id)->update(['suspended_at' => now_str(), 'updated_at' => now_str()]);
+            DB::table('users')->where('engineer_id', $id)->where('role', 'eg')->update(['active' => 0, 'token' => null, 'token_expires' => null]);
+        });
+        N::audit($actor->id ?? null, 'engineer-suspend', $e->name);
+        self::tellEngineerChange($e, $actor, '停止');
+        return ['type' => 'ok', 'msg' => 'エンジニア「'.$e->name.'」を停止しました。'];
+    }
+
+    public static function resumeEngineer(int $id, $actor): array
+    {
+        $e = DB::table('engineers')->find($id);
+        if ($e->status === 'left') return ['type' => 'bad', 'msg' => '退会済のエンジニアは操作できません。'];
+        if (!$e->suspended_at) return ['type' => 'ok', 'msg' => '停止していません。'];
+        // 停止のとき active=0 にした本人のアカウントを戻す。退会の記録（left_at）がある人は戻さない
+        DB::transaction(function () use ($id) {
+            DB::table('engineers')->where('id', $id)->update(['suspended_at' => null, 'updated_at' => now_str()]);
+            DB::table('users')->where('engineer_id', $id)->where('role', 'eg')->whereNull('left_at')->update(['active' => 1]);
+        });
+        N::audit($actor->id ?? null, 'engineer-resume', $e->name);
+        self::tellEngineerChange($e, $actor, '再開');
+        return ['type' => 'ok', 'msg' => 'エンジニア「'.$e->name.'」を再開しました。'];
+    }
+
+    // 管理者が押したら所属の SES へ、SES が押したら管理者へ（メールは送らない。本人には何も送らない）
+    private static function tellEngineerChange(object $e, $actor, string $what): void
+    {
+        $title = "エンジニアを{$what}しました";
+        $body = "{$e->name} さんを{$what}しました。";
+        if (($actor->role ?? '') === 'admin') {
+            if (!self::isDirect((int) $e->ses_id)) N::toSes($e->ses_id, $title, $body, "/engineers/{$e->id}", false, 'engineer-'.($what === '停止' ? 'suspend' : 'resume'));
+        } else {
+            N::toAdmins($title, $body, "/engineers/{$e->id}", false, 'engineer-'.($what === '停止' ? 'suspend' : 'resume'));
+        }
     }
 
     // 1つの欄の氏名を、name と姓・名の列にして返す（1欄の入口：初めの設定・招待・担当者の追加など）
@@ -82,6 +181,7 @@ class Workflow
         $email = strtolower(trim((string) ($d['email'] ?? '')));
         if (!$email) return null;
         $u = DB::table('users')->where('email', $email)->first();
+        if ($u && !$u->active) return null; // 停止中・退会済の人は招待しない
         if ($u && $u->password) return $u; // すでに使っている人は招待しない
         // 未設定の人でも、立場（役割・SES・エンジニア）が依頼と違うなら招待しない（別の立場のリンクを渡さないため）
         if ($u && ($u->role !== $d['role'] || (int) $u->ses_id !== (int) ($d['ses_id'] ?? 0) || (int) $u->engineer_id !== (int) ($d['engineer_id'] ?? 0))) return null;
@@ -274,12 +374,15 @@ class Workflow
         return $id;
     }
 
-    public static function approveSes(int $sesId, $actor, ?string $note = null): void
+    // 承認して、担当者に招待を出す。戻り値は、招待メールを実際に出したか（すでに使っている人・停止中・退会済・メールなしは false）
+    public static function approveSes(int $sesId, $actor, ?string $note = null): bool
     {
         $s = DB::table('ses_companies')->find($sesId);
         DB::table('ses_companies')->where('id', $sesId)->update(['status' => 'active', 'joined_at' => $s->joined_at ?: today_str(), 'updated_at' => now_str()]);
         N::audit($actor->id, 'ses-approve', $s->name);
-        if ($s->email) self::invite(['email' => $s->email, 'name' => $s->contact_name ?: ($s->rep_name ?: $s->name), 'name_sei' => $s->contact_name ? $s->contact_sei : ($s->rep_name ? $s->rep_sei : null), 'name_mei' => $s->contact_name ? $s->contact_mei : ($s->rep_name ? $s->rep_mei : null), 'role' => 'ses', 'ses_id' => $sesId], $actor, $note ?? "{$s->name} の PARK への参加を承認しました。");
+        if (!$s->email) return false;
+        $u = self::invite(['email' => $s->email, 'name' => $s->contact_name ?: ($s->rep_name ?: $s->name), 'name_sei' => $s->contact_name ? $s->contact_sei : ($s->rep_name ? $s->rep_sei : null), 'name_mei' => $s->contact_name ? $s->contact_mei : ($s->rep_name ? $s->rep_mei : null), 'role' => 'ses', 'ses_id' => $sesId], $actor, $note ?? "{$s->name} の PARK への参加を承認しました。");
+        return $u && !$u->password;
     }
 
     // ---------- エンジニア ----------
@@ -472,7 +575,7 @@ class Workflow
         $bySes = []; $count = 0;
         foreach (array_map('intval', $engineerIds) as $eid) {
             $e = DB::table('engineers')->find($eid);
-            if (!$e || DB::table('case_offers')->where('case_id', $caseId)->where('engineer_id', $eid)->exists()) continue;
+            if (!$e || $e->suspended_at || $e->status === 'left' || DB::table('case_offers')->where('case_id', $caseId)->where('engineer_id', $eid)->exists()) continue; // 停止中・退会済は飛ばす
             $s = Matcher::score($c, $e);
             DB::table('case_offers')->insert(['case_id' => $caseId, 'engineer_id' => $eid, 'score' => $s['score'], 'reasons' => implode(' / ', $s['reasons']),
                 'missing' => implode(' / ', $s['missing']), 'sent_by' => $actor->id, 'sent_at' => now_str()]);
@@ -503,6 +606,8 @@ class Workflow
         $e = DB::table('engineers')->find($engineerId);
         if (!$c || !$e) throw new \RuntimeException('案件またはエンジニアが見つかりません');
         if ($c->status !== 'open') throw new \RuntimeException('この案件は募集を終えています');
+        if ($e->status === 'left') throw new \RuntimeException('このエンジニアは退会済のため、応募できません。');
+        if ($e->suspended_at) throw new \RuntimeException('このエンジニアは停止中のため、応募できません。');
         if (!$e->self_confirmed_at) throw new \RuntimeException('エンジニアご本人が、まだ登録の内容を確認していません。ご本人がホームの「登録の内容の確認」を済ませてから応募してください');
         // GP の中での二重応募は受け付けない（同じ人が別の SES 経由で出るのを防ぐ）
         if (DB::table('applications')->where('case_id', $caseId)->where('engineer_id', $engineerId)->exists()) throw new \RuntimeException('この案件には応募済みです');
@@ -526,7 +631,7 @@ class Workflow
     public static function refreshEngineerStatus(int $engineerId): void
     {
         $e = DB::table('engineers')->find($engineerId);
-        if (!$e || $e->status === 'unavailable') return;
+        if (!$e || in_array($e->status, ['unavailable', 'left'], true)) return;
         if (DB::table('contracts')->where('engineer_id', $engineerId)->where('status', 'active')->exists()) { DB::table('engineers')->where('id', $engineerId)->update(['status' => 'working']); return; }
         $active = DB::table('applications')->where('engineer_id', $engineerId)->whereNotIn('status', ['won', 'rejected', 'withdrawn'])->exists();
         DB::table('engineers')->where('id', $engineerId)->update(['status' => $active ? 'proposing' : 'available']);

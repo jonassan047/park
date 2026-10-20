@@ -92,6 +92,9 @@ class EngineerController extends Controller
             'check' => Qa::sheetCheck($id),
             'apps' => DB::table('applications as a')->join('cases as c', 'c.id', '=', 'a.case_id')->where('a.engineer_id', $id)->select('a.*', 'c.title')->orderByDesc('a.id')->get(),
             'eu' => DB::table('users')->where('engineer_id', $id)->where('role', 'eg')->first(),
+            // 停止の確認の文の材料：稼働中の契約の有無と、選考中の応募の数
+            'working' => DB::table('contracts')->where('engineer_id', $id)->where('status', 'active')->exists(),
+            'inSelection' => DB::table('applications')->where('engineer_id', $id)->whereIn('status', ['applied', 'submitted', 'doc_passed', 'interview', 'interviewed'])->count(),
             'hist' => DB::table('engineer_histories')->where('engineer_id', $id)->orderBy('sort')->get(),
             'certs' => DB::table('engineer_certs')->where('engineer_id', $id)->orderBy('sort')->get(),
             'files' => DB::table('engineer_files')->where('engineer_id', $id)->orderByDesc('id')->get(),
@@ -121,6 +124,9 @@ class EngineerController extends Controller
             unset($body['email']);
             if (!in_array($body['status'] ?? '', ['available', 'unavailable'])) unset($body['status']);
         } else {
+            // 退会は詳細の「退会」でだけ行う。退会済の人の状態は、ここでは変えられない
+            if ($e->status === 'left') unset($body['status']);
+            elseif (($body['status'] ?? '') === 'left') return back()->withInput()->with('flash', ['msg' => '状態を「退会済」にはできません。退会は、詳細の「退会」を使ってください。', 'type' => 'bad']);
             $email = strtolower((string) str_in($body['email'] ?? ''));
             if ($email && $email !== ($e->email ?? '') && DB::table('users')->where('email', $email)->exists()) return back()->with('flash', ['msg' => 'このメールアドレスはすでに使われています。', 'type' => 'bad']);
         }
@@ -142,8 +148,12 @@ class EngineerController extends Controller
     public function invite(Request $r, int $id)
     {
         $e = $this->load($r, $id);
+        if ($e->status === 'left') return $this->go("/engineers/$id", '退会済のため、招待を送れません。', 'bad');
+        if ($e->suspended_at) return $this->go("/engineers/$id", '停止中のため、招待を送れません。', 'bad');
         if (!$e->email) return $this->go("/engineers/$id", 'メールアドレスが登録されていません。', 'bad');
-        W::invite(['email' => $e->email, 'name' => $e->name, 'role' => 'eg', 'ses_id' => $e->ses_id, 'engineer_id' => $e->id], $r->user());
+        if (!W::invite(['email' => $e->email, 'name' => $e->name, 'role' => 'eg', 'ses_id' => $e->ses_id, 'engineer_id' => $e->id], $r->user())) {
+            return $this->go("/engineers/$id", '招待を送れませんでした（このメールアドレスは、ほかの立場の人が使っています）。', 'bad');
+        }
         return $this->go("/engineers/$id", '招待メールを送りました。');
     }
 
@@ -154,9 +164,24 @@ class EngineerController extends Controller
         if ($e->status === 'left') return $this->go("/engineers/$id", 'すでに退会済です。');
         if (DB::table('contracts')->where('engineer_id', $id)->where('status', 'active')->exists()) return $this->go("/engineers/$id", '退会にできません。稼働中の契約があります。先に契約を終了してください。', 'bad');
         DB::table('engineers')->where('id', $id)->update(['status' => 'left']);
-        DB::table('users')->where('engineer_id', $id)->where('role', 'eg')->update(['active' => 0]);
+        DB::table('users')->where('engineer_id', $id)->where('role', 'eg')->update(['active' => 0, 'left_at' => now_str()]);
         N::audit($r->user()->id, 'engineer-leave', $e->name);
         return $this->go("/engineers/$id", 'エンジニア「'.$e->name.'」を退会済にしました。');
+    }
+
+    // エンジニアの停止・再開（管理者と所属の SES。権限は load() で確かめる。本人は role ミドルウェアで入れない）
+    public function suspend(Request $r, int $id)
+    {
+        $this->load($r, $id);
+        $res = W::suspendEngineer($id, $r->user());
+        return $this->go("/engineers/$id", $res['msg'], $res['type']);
+    }
+
+    public function resume(Request $r, int $id)
+    {
+        $this->load($r, $id);
+        $res = W::resumeEngineer($id, $r->user());
+        return $this->go("/engineers/$id", $res['msg'], $res['type']);
     }
 
     public function skills(Request $r, int $id)

@@ -14,9 +14,17 @@
 <p><a class="btn ghost" href="{{ url('/admin/ses') }}">SES の一覧に戻る</a></p>
 </x-card>
 </div><div>
-<x-card title="担当者のアカウント"><x-slot:actions><a class="btn small" href="{{ url('/admin/ses/'.$s->id.'/users/new') }}">担当者を登録</a></x-slot:actions><x-table :head="['名前', 'メール', '状態', '最終ログイン']" :count="$users->count()">
-@foreach($users as $u)<tr><td>{{ $u->name }}</td><td>{{ $u->email }}</td><td>{{ $u->password ? '使用中' : '招待中' }}</td>
-<td>{{ fmt_dt($u->last_login) }}</td></tr>@endforeach
+<x-card title="担当者のアカウント"><x-slot:actions><a class="btn small" href="{{ url('/admin/ses/'.$s->id.'/users/new') }}">担当者を登録</a></x-slot:actions>
+@if($noUsable === 'stopped')<p class="bad-text">使える担当者がいません。止めている担当者を再開するか、担当者を登録してください。</p>@endif
+@if($noUsable === 'left')<p class="bad-text">使える担当者がいません。担当者を登録してください。</p>@endif
+<x-table :head="['名前', 'メール', '状態', '最終ログイン', '']" :count="$users->count()">
+@foreach($users as $u)@php
+$state = user_state($u);
+$base = '/admin/ses/'.$s->id.'/users/'.$u->id;
+@endphp<tr><td>{{ $u->name }}</td><td>{{ $u->email }}</td><td>{{ $state }}</td>
+<td>{{ fmt_dt($u->last_login) }}</td><td>@if($state === '停止')<x-post :action="$base.'/resume'" label="再開" cls="small" :confirm="$u->name.' さんを再開します。'" />
+@elseif($state !== '退会済')<x-post :action="$base.'/suspend'" label="停止" cls="ghost small" :confirm="$u->name.' さんを停止します。ログインできなくなります（再開できます）。'" />@endif
+@if($state !== '退会済')<x-post :action="$base.'/delete'" label="退会" cls="danger small" :confirm="$u->name.' さんを退会済にします。ログインできなくなり、元に戻せません（記録は残ります）。よろしいですか？'" />@endif</td></tr>@endforeach
 </x-table>
 </x-card>
 <x-card title="エンジニア">@if($s->status === 'active')<x-slot:actions><a class="btn small" href="{{ url('/engineers/new?ses='.$s->id) }}">エンジニアを登録</a></x-slot:actions> @endif

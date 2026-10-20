@@ -39,7 +39,7 @@ class SesController extends Controller
         $users = DB::table('users')->where('role', 'eg')->whereIn('engineer_id', $list->pluck('id'))->get()->keyBy('engineer_id');
         foreach ($list as $e) {
             $e->skills = implode('、', ($skills[$e->id] ?? collect())->pluck('name')->all());
-            $e->account = isset($users[$e->id]) ? ($users[$e->id]->password ? '使用中' : '招待中') : 'なし';
+            $e->account = user_state($users[$e->id] ?? null);
         }
         return view('ses.engineers', compact('list'));
     }
