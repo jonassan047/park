@@ -100,11 +100,4 @@ class SesController extends Controller
         return $warn ? $this->go('/ses/company', '保存しました。'.$warn, 'warn') : $this->go('/ses/company', '保存しました。');
     }
 
-    // 管理者が入れた会社の情報を、SES が確かめて責任を持つ
-    public function confirmCompany(Request $r)
-    {
-        DB::table('ses_companies')->where('id', $r->user()->ses_id)->update(['self_confirmed_at' => now_str()]);
-        N::audit($r->user()->id, 'ses-confirm', (string) $r->user()->ses_id);
-        return $this->go('/ses/company', '会社の情報を確認しました。内容が変わったら、ご自身で直してください。');
-    }
 }

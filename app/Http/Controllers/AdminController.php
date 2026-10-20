@@ -135,7 +135,8 @@ class AdminController extends Controller
         $ad = W::addressCols($r->all(), '所在地');
         if (isset($ad['bad'])) return back()->withInput()->with('flash', ['msg' => $ad['bad'], 'type' => 'bad']);
         // 管理者が登録した SES は、承認の手順を省いて、すぐ参加中にする（担当者に招待が届く）
-        $id = W::applySes($r->all() + ['agree' => 1], $r->user());
+        // 守秘義務への同意は、担当者が最初のログイン（招待）で行う
+        $id = W::applySes($r->all(), $r->user());
         W::approveSes($id, $r->user(), str_in($r->input('name')).' を PARK に登録しました。');
         return $this->go("/admin/ses/$id", '登録し、ご担当者に招待メールを送りました。');
     }
@@ -198,7 +199,6 @@ class AdminController extends Controller
             'name' => str_in($r->input('name')), ...W::sesPeopleCols($r->all()),
             'email' => strtolower((string) str_in($r->input('email'))) ?: null, 'phone' => str_in($r->input('phone')), ...$ad['ok'],
             'employees' => int_or_null($r->input('employees')), 'strengths' => str_in($r->input('strengths')), 'notes' => str_in($r->input('notes')), 'updated_at' => now_str(),
-            'self_confirmed_at' => null, // 管理者が書き換えたら、SES にもう一度確かめてもらう
         ]);
         return $this->go("/admin/ses/$id", '保存しました。');
     }

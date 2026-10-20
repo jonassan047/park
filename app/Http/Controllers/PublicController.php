@@ -92,11 +92,17 @@ class PublicController extends Controller
         return $u->role === 'eg' && $u->engineer_id && !DB::table('engineers')->where('id', $u->engineer_id)->value('consent_at');
     }
 
+    // SES の会社が、まだ守秘義務に同意していないか
+    private function needSecrecy($u): bool
+    {
+        return $u->role === 'ses' && $u->ses_id && !DB::table('ses_companies')->where('id', $u->ses_id)->value('agreed_at');
+    }
+
     public function inviteForm(string $token)
     {
         $u = W::userByToken($token);
         if (!$u) return view('public.message', ['title' => 'リンクの期限切れ', 'text' => 'このリンクは使えません（期限切れか、使用済み）。管理者またはご担当の SES にご連絡ください。']);
-        return view('public.invite', ['u' => $u, 'token' => $token, 'needConsent' => $this->needConsent($u)]);
+        return view('public.invite', ['u' => $u, 'token' => $token, 'needConsent' => $this->needConsent($u), 'needSecrecy' => $this->needSecrecy($u)]);
     }
 
     public function invite(Request $r, string $token)
@@ -105,7 +111,9 @@ class PublicController extends Controller
         if (!$u) return $this->go('/login', 'リンクの期限が切れています。', 'bad');
         $rules = ['password' => 'required|min:8|confirmed'];
         if ($this->needConsent($u)) $rules['consent'] = 'accepted';
-        $r->validate($rules, [], ['password' => 'パスワード', 'consent' => '個人情報の取り扱いへの同意']);
+        if ($this->needSecrecy($u)) $rules['agree'] = 'accepted';
+        $r->validate($rules, [], ['password' => 'パスワード', 'consent' => '個人情報の取り扱いへの同意', 'agree' => '守秘義務への同意']);
+        if ($this->needSecrecy($u)) DB::table('ses_companies')->where('id', $u->ses_id)->update(['agreed_at' => now_str()]);
         if ($this->needConsent($u)) DB::table('engineers')->where('id', $u->engineer_id)->update(['consent_at' => now_str()]);
         DB::table('users')->where('id', $u->id)->update(['password' => Hash::make($r->input('password')), 'token' => null, 'token_expires' => null, 'last_login' => now_str()]);
         N::audit($u->id, 'password-set', $u->email);

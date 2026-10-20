@@ -199,7 +199,6 @@ Route::middleware('role:ses')->prefix('ses')->group(function () {
     Route::get('/invoices', [Ses::class, 'invoices']);
     Route::get('/company', [Ses::class, 'company']);
     Route::post('/company', [Ses::class, 'saveCompany']);
-    Route::post('/company/confirm', [Ses::class, 'confirmCompany']);
 });
 
 // ---------- エンジニア ----------

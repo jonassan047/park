@@ -349,7 +349,6 @@ class Workflow
     public static function profileHome($user): array
     {
         if ($user->role === 'ses') {
-            if (!DB::table('ses_companies')->where('id', $user->ses_id)->value('self_confirmed_at')) return ['/ses/company', '会社の情報も確かめてください。'];
             return ['/ses', null];
         }
         if ($user->role === 'eg') {

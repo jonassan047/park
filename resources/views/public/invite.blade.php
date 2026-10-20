@@ -9,5 +9,9 @@
 氏名はスキルシートではイニシャルで伏せることができます。外部のサービスには渡しません。事実と違う内容（盛った内容）は書きません。</div>
 <x-field label="上の取り扱いに同意します" name="consent" type="checkbox" required />
 @endif
+@if($needSecrecy)
+<div class="note"><b>守秘義務</b><br>PARK で知った案件・エンジニアの情報は、グループの外に出さないでください。</div>
+<x-field label="守秘義務を守り、案件・エンジニアの情報をグループの外に出さないことに同意します" name="agree" type="checkbox" required />
+@endif
 <button class="btn">設定して始める</button></form></x-card>
 @endsection

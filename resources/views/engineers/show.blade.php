@@ -14,6 +14,7 @@ $stopMsg = 'このエンジニアを停止します。ログインできなく�
 @if($u->role === 'ses' && $e->email && !($eu && $eu->password) && !$e->suspended_at && $e->status !== 'left')
 <x-post :action="'/engineers/'.$e->id.'/invite'" label="招待を送る" cls="ghost small" />
 @endif
+@if($mine)<a class="btn ghost small" href="{{ url('/account#password') }}">パスワード変更</a>@endif
 <a class="btn small" href="{{ url('/engineers/'.$e->id.'/edit') }}">編集</a>
 </x-slot:actions>
 <dl class="dl">

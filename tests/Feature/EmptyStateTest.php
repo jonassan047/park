@@ -170,8 +170,11 @@ class EmptyStateTest extends TestCase
         auth()->logout();
         $this->flushSession();
         $this->get('/invite/'.$contact->token)->assertOk();
-        $this->post('/invite/'.$contact->token, ['password' => 'abcd1234', 'password_confirmation' => 'abcd1234'])->assertRedirect();
+        $this->get('/invite/'.$contact->token)->assertSee('守秘義務');
+        $this->post('/invite/'.$contact->token, ['password' => 'abcd1234', 'password_confirmation' => 'abcd1234'])->assertSessionHasErrors('agree');
+        $this->post('/invite/'.$contact->token, ['password' => 'abcd1234', 'password_confirmation' => 'abcd1234', 'agree' => 1])->assertRedirect();
         $this->assertNotNull(DB::table('users')->where('id', $contact->id)->value('password'));
+        $this->assertNotNull(DB::table('ses_companies')->where('id', $contact->ses_id)->value('agreed_at'));
         auth()->logout();
         $this->flushSession();
         DB::table('users')->where('id', $contact->id)->update(['profile_completed_at' => null]);

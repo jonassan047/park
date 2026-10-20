@@ -26,7 +26,6 @@ class Status extends Command
             'AI：下書きが確かめ待ち' => DB::table('ai_jobs')->where('status', 'done')->count(),
             'AI：最後に取りに来た' => DB::table('ai_jobs')->max('picked_at') ?? 'まだ',
             'SES：承認待ち' => DB::table('ses_companies')->where('kind', 'ses')->where('status', 'pending')->count(),
-            'SES：会社の情報の確認がまだ' => DB::table('ses_companies')->where('kind', 'ses')->where('status', 'active')->whereNull('self_confirmed_at')->count(),
             'エンジニア：本人の確認がまだ' => DB::table('engineers')->whereNull('self_confirmed_at')->count(),
             'エンジニア：管理者の直属' => DB::table('engineers')->whereIn('ses_id', DB::table('ses_companies')->where('kind', 'direct')->select('id'))->count(),
             '案内メール：返事なし（3日以上）' => DB::table('case_mails')->where('reply', 'none')->where('sent_at', '<', $ago('-3 days'))->count(),

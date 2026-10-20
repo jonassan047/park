@@ -110,15 +110,11 @@ class ProfileAndDirectTest extends TestCase
         $this->assertDatabaseHas('users', ['email' => 'admin@park.example', 'name' => '登録 太郎', 'kana' => 'とうろく たろう', 'phone' => '03-0000-0000', 'position' => '部長']);
         $this->assertNotNull(DB::table('users')->where('email', 'admin@park.example')->value('profile_completed_at'));
 
-        // SES：会社の確認がまだなら /ses/company
+        // SES：登録のあとは、確認の画面を挟まずダッシュボードへ
         $sesId = User::where('email', 'ses1@park.example')->value('ses_id');
-        DB::table('ses_companies')->where('id', $sesId)->update(['self_confirmed_at' => null]);
         $sesIn = $in + ['ses_name' => (string) DB::table('ses_companies')->where('id', $sesId)->value('name')];
-        $this->as('ses1@park.example')->post('/welcome', $sesIn)->assertRedirect(url('/ses/company'));
-        $this->assertDatabaseHas('users', ['email' => 'ses1@park.example', 'position' => '部長']);
-        $this->unfinish('ses1@park.example');
-        DB::table('ses_companies')->where('id', $sesId)->update(['self_confirmed_at' => now()]);
         $this->as('ses1@park.example')->post('/welcome', $sesIn)->assertRedirect(url('/ses'));
+        $this->assertDatabaseHas('users', ['email' => 'ses1@park.example', 'position' => '部長']);
 
         // エンジニア：本人の確認がまだなら自分の画面
         $eid = User::where('email', 'eg1@park.example')->value('engineer_id');
@@ -432,7 +428,6 @@ class ProfileAndDirectTest extends TestCase
         $this->assertStringNotContainsString('管理者の直属', $this->get('/admin/reports')->assertOk()->getContent());
         $this->assertStringNotContainsString('管理者の直属', $this->get('/cases/new')->assertOk()->getContent());
         // park:status
-        $this->assertSame(0, $s0['SES：会社の情報の確認がまだ']);
         $this->assertSame(0, $s0['SES：承認待ち'] - 1); // 見本の保留 1 社だけ
         // role=ses の人が直属の行に属しても、ログインできない
         W::createUser('ghost-ses@park.example', '幽霊 担当', 'ses', 'park1234', ['ses_id' => $direct]);
@@ -449,7 +444,6 @@ class ProfileAndDirectTest extends TestCase
         Artisan::call('park:status', ['--json' => true]);
         $d = json_decode(Artisan::output(), true);
         $this->assertSame(1, $d['エンジニア：管理者の直属']);
-        $this->assertSame(0, $d['SES：会社の情報の確認がまだ']);
     }
 
     public function test_e8_no_invoice_for_direct(): void
@@ -771,7 +765,6 @@ class ProfileAndDirectTest extends TestCase
         $this->get('/admin/ses/1/edit')->assertOk()->assertSee('略称でもかまいません');
         $this->post('/admin/ses/1', ['name' => '管理者が直した名前']);
         $this->assertSame(0, $this->renameNotes());
-        $this->assertNull(DB::table('ses_companies')->where('id', 1)->value('self_confirmed_at'));
     }
 
     public function test_j1_engineer_has_no_company_fields(): void

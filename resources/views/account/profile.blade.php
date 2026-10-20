@@ -31,7 +31,7 @@
 <dt>登録した日</dt><dd>{{ fmt_date($u->profile_completed_at) }}</dd>
 <dt>最後のログイン</dt><dd>{{ fmt_dt($u->last_login) }}</dd>
 </dl>
-<p><a class="btn" href="{{ url('/account') }}">編集する</a>
+<p><a class="btn ghost" href="{{ url('/account#password') }}">パスワード変更</a> <a class="btn" href="{{ url('/account') }}">編集する</a>
 @if($u->role === 'ses')
 <a class="btn ghost" href="{{ url('/ses/company') }}">会社情報を見る</a>
 @elseif($u->role === 'eg' && $engineerId)

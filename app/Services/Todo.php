@@ -48,7 +48,6 @@ class Todo
     {
         $out = [];
         $s = DB::table('ses_companies')->find($sesId);
-        if ($s && !$s->self_confirmed_at) $out[] = self::item('会社の情報', '中身を確かめて「確認しました」を押す', '/ses/company');
         // 案内メールの返事
         $mails = DB::table('case_mails as m')->join('cases as c', 'c.id', '=', 'm.case_id')->join('engineers as e', 'e.id', '=', 'm.engineer_id')
             ->where('c.source_ses_id', $sesId)->where('c.status', 'open')->select('m.*', 'c.title', 'e.name', 'e.initials')->get();

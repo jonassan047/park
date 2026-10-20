@@ -4,7 +4,6 @@
 <x-stats :items="[['所属エンジニア', $engs->count(), '待機 '.$engs->where('status', 'available')->count().'名'], ['稼働中', $engs->where('status', 'working')->count()],
     ['選考中', $apps->count()], ['成約（これまで）', $won, '成約率 '.pct($won, $appCount)], ['今月の成功報酬（税別・見込み）', yen($est['subtotal']), this_month()]]" />
 @if(!$engs->count())<x-card title="エンジニアを登録しましょう"><p>貴社のエンジニアを登録すると、合う案件が届くようになります。</p><a class="btn small" href="{{ url('/engineers/new') }}">エンジニアを登録する</a></x-card>@endif
-@if(!$s->self_confirmed_at)<x-card title="会社の情報の確認"><p>会社の情報は、御社が責任を持つものです。「会社情報」で中身を確かめ、「確認しました」を押してください。</p><a class="btn small" href="{{ url('/ses/company') }}">会社情報を開く</a></x-card>@endif
 @php $unconf = $engs->whereNull('self_confirmed_at'); @endphp
 @if($unconf->count())<x-card title="ご本人の確認がまだのエンジニア"><p>登録の内容は、エンジニアご本人が責任を持つものです。ご本人がホームで「確認しました」を押すまで、案件に応募できません。御社で書き換えたときも、もう一度確認が必要になります。</p>
 <p>@foreach($unconf as $x)<a href="{{ url('/engineers/'.$x->id) }}">{{ $x->name }}</a>@if(!$loop->last)、@endif @endforeach</p></x-card>@endif

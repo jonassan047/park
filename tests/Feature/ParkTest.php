@@ -234,13 +234,6 @@ class ParkTest extends TestCase
         $this->as('admin@park.example')->post("/contracts/$kid/end", ['end_date' => date('Y-m-d'), 'end_reason' => '満了']);
         $this->assertDatabaseHas('app_notifications', ['title' => '経歴を更新してください：'.DB::table('cases')->where('id', 1)->value('title')]);
         $this->as('eg1@park.example')->get('/eg')->assertSee('終わった案件を書く');
-
-        // 会社の情報：管理者が書き換えると、SES の確認がやり直し
-        $this->as('admin@park.example')->post('/admin/ses/1', ['name' => 'みどり情報システム', 'notes' => '管理者のメモ']);
-        $this->assertNull(DB::table('ses_companies')->where('id', 1)->value('self_confirmed_at'));
-        $this->as('ses1@park.example')->get('/ses/company')->assertSee('会社の情報の確認');
-        $this->post('/ses/company/confirm')->assertRedirect(url('/ses/company'));
-        $this->assertNotNull(DB::table('ses_companies')->where('id', 1)->value('self_confirmed_at'));
     }
 
     public function test_ses_case_mail_flow(): void

@@ -31,7 +31,7 @@
 @endif
 <x-field label="メールでも通知を受け取る" name="mail_opt_in" type="checkbox" :value="$u->mail_opt_in" />
 <p class="muted">メールアドレス：{{ $u->email }}（変えるときは管理者にご連絡ください）</p><button class="btn">保存する</button></form></x-card>
-<x-card title="パスワードの変更"><form method="post" action="{{ url('/account/password') }}">@csrf
+<x-card title="パスワードの変更" id="password"><form method="post" action="{{ url('/account/password') }}">@csrf
 <x-field label="今のパスワード" name="current" type="password" required autocomplete="current-password" />
 <x-field label="新しいパスワード（8文字以上）" name="password" type="password" required autocomplete="new-password" />
 <x-field label="新しいパスワード（確認）" name="password_confirmation" type="password" required autocomplete="new-password" />
