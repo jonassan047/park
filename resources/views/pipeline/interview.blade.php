@@ -48,6 +48,6 @@
 <x-field label="結果" name="result" type="select" :options="['pass' => '通過', 'fail' => '見送り']" value="pass" />
 <x-field label="感想・元請けからの印象" name="feedback" type="textarea" rows="3" /><button class="btn">記録する</button></form></x-card>
 @endif
-<p><a href="{{ url('/applications/'.$a->id) }}">← 選考の画面へ</a></p>
+<p><a class="btn ghost" href="{{ url('/applications/'.$a->id) }}">選考の画面に戻る</a></p>
 </div></div>
 @endsection

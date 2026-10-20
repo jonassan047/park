@@ -246,3 +246,16 @@ function str_in($v): ?string
     $v = trim((string) $v);
     return $v === '' ? null : $v;
 }
+
+// 詳細画面の「一覧に戻る」の行き先（役割ごと）
+function list_url(string $kind): string
+{
+    $role = auth()->user()->role ?? 'admin';
+    $map = [
+        'engineers' => ['admin' => '/admin/engineers', 'ses' => '/ses/engineers', 'eg' => '/eg'],
+        'cases' => ['admin' => '/admin/cases', 'ses' => '/ses/cases', 'eg' => '/eg/offers'],
+        'applications' => ['admin' => '/admin/applications', 'ses' => '/ses/applications', 'eg' => '/eg/applications'],
+        'contracts' => ['admin' => '/admin/contracts', 'ses' => '/ses/contracts', 'eg' => '/eg'],
+    ];
+    return url($map[$kind][$role] ?? '/');
+}

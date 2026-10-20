@@ -22,7 +22,7 @@
 @foreach($offers as $o)<tr><td>{{ $o->title }}</td><td><x-score :n="$o->score" /></td><td>{{ man($o->price) }}</td><td>{{ fmt_date($o->start_date) }}</td><td><a href="{{ url('/cases/'.$o->case_id) }}">@if($o->status === 'sent')<b>新着</b>@else開く@endif</a></td></tr>@endforeach
 </x-table></x-card>
 <x-card title="応募・選考"><x-table :head="['案件', '状態', '']" :count="$apps->count()" empty="ありません。">
-@foreach($apps as $a)<tr><td>{{ $a->title }}</td><td>{{ badge('appStatus', $a->status) }}</td><td><a href="{{ url('/applications/'.$a->id) }}">開く</a></td></tr>@endforeach
+@foreach($apps as $a)<tr><td>{{ $a->title }}</td><td>{{ badge('appStatus', $a->status) }}</td><td><a class="btn small" href="{{ url('/applications/'.$a->id) }}">開く</a></td></tr>@endforeach
 </x-table></x-card>
 </div><div>
 <x-card title="スキルシートを良くするには"><div class="meter"><i style="width:{{ $check['score'] }}%"></i><b>{{ $check['score'] }}%</b></div>

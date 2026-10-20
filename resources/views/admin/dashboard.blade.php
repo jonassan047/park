@@ -21,11 +21,11 @@
 </x-table></x-card>
 @endif
 <x-card title="いま管理者がやること"><x-table :head="['案件', 'エンジニア', '状態', '次の手順', '']" :count="$todo->count()" empty="ありません。">
-@foreach($todo as $a)<tr><td>{{ $a->title }}</td><td>{{ $a->eg_name }}</td><td>{{ badge('appStatus', $a->status) }}</td><td>{{ $next[$a->status] }}</td><td><a href="{{ url('/applications/'.$a->id) }}">開く</a></td></tr>@endforeach
+@foreach($todo as $a)<tr><td>{{ $a->title }}</td><td>{{ $a->eg_name }}</td><td>{{ badge('appStatus', $a->status) }}</td><td>{{ $next[$a->status] }}</td><td><a class="btn small" href="{{ url('/applications/'.$a->id) }}">開く</a></td></tr>@endforeach
 </x-table></x-card>
 <x-card title="募集中の案件"><x-slot:actions><a class="btn small" href="{{ url('/cases/new') }}">案件を登録</a></x-slot:actions>
 <x-table :head="['案件', '金額', '配信', '応募', '']" :count="$openCases->count()" empty="募集中の案件はありません。「案件を登録」から入れます。">
-@foreach($openCases as $c)<tr><td>{{ $c->title }}</td><td>{{ man($c->price) }}</td><td>{{ $c->offers }}</td><td>{{ $c->apps }}</td><td><a href="{{ url('/cases/'.$c->id) }}">{{ $c->offers ? '開く' : 'マッチング' }}</a></td></tr>@endforeach
+@foreach($openCases as $c)<tr><td>{{ $c->title }}</td><td>{{ man($c->price) }}</td><td>{{ $c->offers }}</td><td>{{ $c->apps }}</td><td><a class="btn small" href="{{ url('/cases/'.$c->id) }}">{{ $c->offers ? '開く' : 'マッチング' }}</a></td></tr>@endforeach
 </x-table></x-card>
 </div><div>
 <x-card title="招待の状況">
@@ -34,7 +34,7 @@
 @foreach($invites as $v)<tr><td>{{ $v['role'] }}</td><td>{{ $v['name'] }}</td><td>{{ $v['org'] ?: '—' }}</td>
 <td>{{ $v['state'] }}@if($v['until'])<span class="muted">（{{ $v['until'] }} まで）</span>@endif</td><td>{{ fmt_dt($v['last_login']) }}</td>
 <td>@if($v['reinvite'])<x-post :action="'/admin/admins/'.$v['reinvite'].'/reinvite'" label="招待を送り直す" cls="ghost small" />@endif
-@if($v['open'])<a href="{{ url('/admin/ses/'.$v['open']) }}">開く</a>@endif</td></tr>@endforeach
+@if($v['open'])<a class="btn small" href="{{ url('/admin/ses/'.$v['open']) }}">開く</a>@endif</td></tr>@endforeach
 </x-table></x-card>
 <x-card title="応募 → 成約（全体）">@if(($funnel[0][1] ?? 0) === 0)<p class="empty">まだ応募はありません。</p>@else<x-funnel :rows="$funnel" />@endif</x-card>
 <x-card title="面談の予定"><x-table :head="['日時', '案件', 'エンジニア', '']" :count="$upcoming->count()" empty="ありません。">
@@ -42,12 +42,12 @@
 </x-table></x-card>
 @if($ending->count())
 <x-card title="1か月以内に終わる契約（延長の確認）"><x-table :head="['終わり', '案件', 'エンジニア', '']">
-@foreach($ending as $k)<tr><td>{{ fmt_date($k->end_date) }}</td><td>{{ $k->title }}</td><td>{{ $k->eg_name }}</td><td><a href="{{ url('/contracts/'.$k->id) }}">開く</a></td></tr>@endforeach
+@foreach($ending as $k)<tr><td>{{ fmt_date($k->end_date) }}</td><td>{{ $k->title }}</td><td>{{ $k->eg_name }}</td><td><a class="btn small" href="{{ url('/contracts/'.$k->id) }}">開く</a></td></tr>@endforeach
 </x-table></x-card>
 @endif
 @if($unread->count())
 <x-card title="未読のメッセージ"><x-table :head="['エンジニア', '件数', '']">
-@foreach($unread as $m)<tr><td>{{ $m->name }}</td><td>{{ $m->n }}</td><td><a href="{{ url('/engineers/'.$m->engineer_id.'/messages') }}">開く</a></td></tr>@endforeach
+@foreach($unread as $m)<tr><td>{{ $m->name }}</td><td>{{ $m->n }}</td><td><a class="btn small" href="{{ url('/engineers/'.$m->engineer_id.'/messages') }}">開く</a></td></tr>@endforeach
 </x-table></x-card>
 @endif
 </div></div>

@@ -4,7 +4,7 @@
 <div class="cols {{ $u->role === 'eg' ? '' : 'wideside' }}"><div>
 <x-card title="案件票">
 <x-slot:actions>
-@if(\App\Support\Perms::caseEdit($u, $c))<a class="btn ghost small" href="{{ url('/cases/'.$c->id.'/edit') }}">編集</a>@endif
+@if(\App\Support\Perms::caseEdit($u, $c))<a class="btn small" href="{{ url('/cases/'.$c->id.'/edit') }}">編集</a>@endif
 </x-slot:actions>
 <dl class="dl">
 <dt>状態</dt><dd>{{ badge('caseStatus', $c->status) }}</dd>
@@ -43,7 +43,7 @@
 @endif
 @if($u->role !== 'eg')
 <x-card title="この案件への応募"><x-table :head="['エンジニア', 'SES', '状態', '応募日', '']" :count="$apps->count()">
-@foreach($apps as $a)<tr><td>{{ $a->eg_name }}</td><td>{{ $a->ses_name }}</td><td>{{ badge('appStatus', $a->status) }}</td><td>{{ fmt_date($a->applied_at) }}</td><td><a href="{{ url('/applications/'.$a->id) }}">詳細</a></td></tr>@endforeach
+@foreach($apps as $a)<tr><td>{{ $a->eg_name }}</td><td>{{ $a->ses_name }}</td><td>{{ badge('appStatus', $a->status) }}</td><td>{{ fmt_date($a->applied_at) }}</td><td><a class="btn small" href="{{ url('/applications/'.$a->id) }}">詳細</a></td></tr>@endforeach
 </x-table></x-card>
 @endif
 </div><div>
@@ -99,4 +99,5 @@
   @endif
 @endif
 </div></div>
+<p class="backrow"><a class="btn ghost" href="{{ list_url('cases') }}">案件の一覧に戻る</a></p>
 @endsection

@@ -19,6 +19,6 @@
 <x-field label="作業内容" name="description" type="textarea" rows="4" :value="$p->description ?? null" hint="何を・どこまで担当したか。40字以上で具体的に。" />
 <x-field label="成果（できれば数字で）" name="achievements" type="textarea" rows="2" :value="$p->achievements ?? null" placeholder="例：バッチの処理時間を 4時間→40分に短縮" />
 <p class="muted">事実だけを書いてください。盛った内容は、面談や配属後のトラブルの元になります。</p>
-<button class="btn">保存する</button></form></x-card>
+<button class="btn">保存する</button> <a class="btn ghost" href="{{ url('/engineers/'.$e->id) }}">戻る</a></form></x-card>
 @isset($p->id)<x-post :action="'/engineers/'.$e->id.'/projects/'.$p->id.'/delete'" label="この案件を削除" cls="danger small" confirm="削除しますか？" />@endisset
 @endsection

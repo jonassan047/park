@@ -6,4 +6,4 @@
 <div class="pair"><x-field label="代表者名（姓）" name="rep_sei" :value="$s->rep_sei ?? null" /><x-field label="代表者名（名）" name="rep_mei" :value="$s->rep_mei ?? null" /></div>
 <x-field label="郵便番号" name="postal_code" :value="postal_norm($s->postal_code ?? null) ?: ($s->postal_code ?? null)" placeholder="123-4567" /><x-field label="所在地" name="address" :value="$s->address ?? null" />
 <x-field label="所属エンジニアの人数" name="employees" type="number" :value="$s->employees ?? null" /><x-field label="得意な分野" name="strengths" :value="$s->strengths ?? null" /></div>
-<x-field label="管理者のメモ（SES には見えません）" name="notes" type="textarea" rows="3" :value="$s->notes ?? null" /><button class="btn">{{ $isNew ? '登録して招待メールを送る' : '保存する' }}</button></form>
+<x-field label="管理者のメモ（SES には見えません）" name="notes" type="textarea" rows="3" :value="$s->notes ?? null" /><button class="btn">{{ $isNew ? '登録して招待メールを送る' : '保存する' }}</button> <a class="btn ghost" href="{{ url($back ?? '/admin/ses') }}">戻る</a></form>

@@ -1,7 +1,7 @@
 @php $display = $anon ? ($e->initials ?: 'イニシャル未設定') : $e->name; @endphp
 @extends('layouts.app', ['title' => 'スキルシート '.$display, 'print' => true, 'noTitle' => true])
 @section('content')
-<div class="noprint toolbar"><a href="{{ url('/engineers/'.$e->id) }}">← 戻る</a>
+<div class="noprint toolbar"><a class="btn ghost small" href="{{ url('/engineers/'.$e->id) }}">戻る</a>
 <form method="get" class="inline">@if($c)<input type="hidden" name="case" value="{{ $c->id }}">@endif<label><input type="checkbox" name="anon" value="1" @checked($anon) onchange="this.form.submit()"> 名前を伏せる</label></form>
 <button class="btn small" onclick="print()">印刷・PDF に保存</button></div>
 <article class="sheet">

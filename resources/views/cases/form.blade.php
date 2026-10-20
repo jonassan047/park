@@ -29,5 +29,5 @@
 <x-field label="作業内容" name="description" type="textarea" rows="5" :value="$c->description ?? null" />
 <x-field label="その他の条件・備考" name="conditions" type="textarea" rows="3" :value="$c->conditions ?? null" />
 <details><summary>元の案件メール（記録用）</summary><x-field name="raw_text" type="textarea" rows="6" :value="$c->raw_text ?? null" /></details>
-<button class="btn">{{ $submit }}</button></form></x-card>
+<button class="btn">{{ $submit }}</button> <a class="btn ghost" href="{{ isset($c->id) ? url('/cases/'.$c->id) : list_url('cases') }}">戻る</a></form></x-card>
 @endsection

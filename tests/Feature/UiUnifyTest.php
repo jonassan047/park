@@ -100,7 +100,7 @@ class UiUnifyTest extends TestCase
 
     public function test_u3_ses_edit_keeps_email_optional(): void
     {
-        $html = $this->admin()->get('/admin/ses/1')->assertOk()->getContent();
+        $html = $this->admin()->get('/admin/ses/1/edit')->assertOk()->getContent();
         preg_match('#action="[^"]*/admin/ses/1">.*?</form>#s', $html, $m);
         $this->assertNotEmpty($m);
         $this->assertDoesNotMatchRegularExpression('/name="email"[^>]*required/', $m[0]);
@@ -155,8 +155,9 @@ class UiUnifyTest extends TestCase
         $this->assertPair($this->get("/admin/admins/$other/edit")->getContent(), 'name', '管理者の編集');
         $new = $this->get('/admin/ses/new')->getContent();
         $this->assertPair($new, 'contact', 'SES の登録'); $this->assertPair($new, 'rep', 'SES の登録');
-        $show = $this->get('/admin/ses/1')->getContent();
-        $this->assertPair($show, 'contact', 'SES の詳細'); $this->assertPair($show, 'rep', 'SES の詳細'); $this->assertPair($show, 'name', 'SES の担当者追加');
+        $show = $this->get('/admin/ses/1/edit')->getContent();
+        $this->assertPair($show, 'contact', 'SES の編集'); $this->assertPair($show, 'rep', 'SES の編集');
+        $this->assertPair($this->get('/admin/ses/1/users/new')->getContent(), 'name', 'SES の担当者追加');
         $eg = $this->get('/engineers/new?ses=1')->getContent();
         $this->assertPair($eg, 'name', 'エンジニアの登録'); $this->assertPair($eg, 'kana', 'エンジニアの登録');
         $edit = $this->get('/engineers/1/edit')->getContent();
@@ -253,12 +254,43 @@ class UiUnifyTest extends TestCase
     public function test_u6_wording(): void
     {
         $this->admin();
-        $show = $this->get('/admin/ses/1')->assertOk()->assertSee('メールアドレス')->assertSee('使用中');
+        $show = $this->get('/admin/ses/1')->assertOk()->assertSee('使用中'); $this->get('/admin/ses/1/edit')->assertOk()->assertSee('メールアドレス');
         $this->assertStringNotContainsString('<span>メール</span>', $show->getContent());
         $this->assertStringNotContainsString('利用中', $show->getContent());
         $this->assertStringNotContainsString('利用中', $this->get('/engineers/1')->getContent());
         $this->as('ses1@park.example');
         $this->assertStringNotContainsString('利用中', $this->get('/ses/engineers')->getContent());
         $this->as('eg1@park.example')->get('/account')->assertOk()->assertSee('保存する')->assertSee('変更する');
+    }
+
+    // ---------- 詳細画面のボタン（2026-10-20） ----------
+
+    public function test_detail_buttons(): void
+    {
+        $this->admin();
+        $show = $this->get('/admin/ses/1')->assertOk()->assertSee('会社情報')->assertSee('担当者を登録')->assertSee('SES の一覧に戻る')->getContent();
+        $this->assertStringContainsString(url('/admin/ses/1/edit'), $show);
+        $this->get('/admin/ses/1/edit')->assertOk()->assertSee('戻る');
+        $this->get('/admin/ses/1/users/new')->assertOk()->assertSee('戻る');
+        $this->get('/engineers/1')->assertOk()->assertSee('エンジニアの一覧に戻る')->assertSee('削除');
+        $this->get('/cases/1')->assertOk()->assertSee('案件の一覧に戻る');
+    }
+
+    public function test_ses_delete_refused_while_engineers_remain(): void
+    {
+        $this->admin();
+        $this->post('/admin/ses/1/delete')->assertSessionHas('flash.type', 'bad');
+        $this->assertDatabaseHas('ses_companies', ['id' => 1]);
+    }
+
+    public function test_engineer_delete(): void
+    {
+        $this->admin();
+        $id = \DB::table('engineers')->whereNotIn('id', \DB::table('contracts')->pluck('engineer_id'))->value('id');
+        $this->assertNotNull($id);
+        $this->post("/engineers/$id/delete")->assertRedirect('/admin/engineers');
+        $this->assertDatabaseMissing('engineers', ['id' => $id]);
+        $cid = \DB::table('contracts')->value('engineer_id');
+        if ($cid) { $this->post("/engineers/$cid/delete")->assertSessionHas('flash.type', 'bad'); $this->assertDatabaseHas('engineers', ['id' => $cid]); }
     }
 }

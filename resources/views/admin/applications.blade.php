@@ -6,6 +6,6 @@
 </div>@endforeach</div>
 @php $done = $list->whereNotIn('status', $lanes); @endphp
 <x-card title="終わったもの"><x-table :head="['エンジニア', '案件', '状態', '理由', '更新', '']" :count="$done->count()">
-@foreach($done as $a)<tr><td>{{ $a->eg_name }}</td><td>{{ $a->title }}</td><td>{{ badge('appStatus', $a->status) }}</td><td>{{ $a->reject_reason }}</td><td>{{ fmt_date($a->updated_at) }}</td><td><a href="{{ url('/applications/'.$a->id) }}">開く</a></td></tr>@endforeach
+@foreach($done as $a)<tr><td>{{ $a->eg_name }}</td><td>{{ $a->title }}</td><td>{{ badge('appStatus', $a->status) }}</td><td>{{ $a->reject_reason }}</td><td>{{ fmt_date($a->updated_at) }}</td><td><a class="btn small" href="{{ url('/applications/'.$a->id) }}">開く</a></td></tr>@endforeach
 </x-table></x-card>
 @endsection

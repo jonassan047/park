@@ -59,4 +59,5 @@
 <x-field name="note" type="textarea" rows="2" placeholder="元請けからの印象、落ちた理由など（次の応募・面談に活かす）" /><button class="btn ghost small">残す</button></form></x-card>
 @endif
 </div></div>
+<p class="backrow"><a class="btn ghost" href="{{ list_url('applications') }}">応募・選考の一覧に戻る</a></p>
 @endsection

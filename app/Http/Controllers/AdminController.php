@@ -157,6 +157,35 @@ class AdminController extends Controller
         ]);
     }
 
+    public function sesEdit(int $id)
+    {
+        return view('admin.ses-edit', ['s' => $this->sesOrFail($id)]);
+    }
+
+    public function sesUserNew(int $id)
+    {
+        return view('admin.ses-user-new', ['s' => $this->sesOrFail($id)]);
+    }
+
+    // SES を消す。エンジニア・案件・契約・請求が残っているときは消さない（先にそれらを片づける）
+    public function sesDelete(Request $r, int $id)
+    {
+        $s = $this->sesOrFail($id);
+        $left = [];
+        if (DB::table('engineers')->where('ses_id', $id)->exists()) $left[] = 'エンジニア';
+        if (DB::table('cases')->where('source_ses_id', $id)->exists()) $left[] = '案件';
+        if (DB::table('applications')->where('ses_id', $id)->exists()) $left[] = '応募';
+        if (DB::table('contracts')->where('ses_id', $id)->exists()) $left[] = '契約';
+        if (DB::table('invoices')->where('ses_id', $id)->exists()) $left[] = '請求';
+        if ($left) return $this->go("/admin/ses/$id", '削除できません。先に、この SES の'.implode('・', $left).'をなくしてください。', 'bad');
+        DB::transaction(function () use ($id) {
+            DB::table('users')->where('ses_id', $id)->where('role', 'ses')->delete();
+            DB::table('ses_companies')->where('id', $id)->delete();
+        });
+        N::audit($r->user()->id, 'ses-delete', $s->name);
+        return $this->go('/admin/ses', 'SES「'.$s->name.'」を削除しました。');
+    }
+
     public function sesUpdate(Request $r, int $id)
     {
         $this->sesOrFail($id);
@@ -193,7 +222,7 @@ class AdminController extends Controller
         if (!$email || DB::table('users')->where('email', $email)->whereNotNull('password')->exists()) return $this->go("/admin/ses/$id", 'このメールアドレスは使えません（空か、すでに使われています）。', 'bad');
         [$full, $sei, $mei] = name_parts($r->all(), 'name', 'name');
         W::invite(['email' => $email, 'name' => (string) $full, 'name_sei' => $sei, 'name_mei' => $mei, 'role' => 'ses', 'ses_id' => $id], $r->user());
-        return $this->go("/admin/ses/$id", '招待メールを送りました。');
+        return $this->go("/admin/ses/$id", '担当者を登録し、招待メールを送りました。');
     }
 
     // ---------- エンジニア ----------

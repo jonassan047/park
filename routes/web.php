@@ -107,6 +107,7 @@ Route::middleware('role:admin,ses')->group(function () {
     Route::get('/engineers/new', [Eng::class, 'create']);
     Route::post('/engineers', [Eng::class, 'store']);
     Route::post('/engineers/{id}/invite', [Eng::class, 'invite']);
+    Route::post('/engineers/{id}/delete', [Eng::class, 'destroy']);
     Route::get('/invoices/{id}', [Pip::class, 'invoice']);
     // 選考（面談依頼の報告・面談スクリプト・結果・成約）。SES は自社の応募だけ
     Route::post('/applications/{id}/status', [Pip::class, 'status']);
@@ -140,6 +141,9 @@ Route::middleware('role:admin')->group(function () {
         Route::get('/ses/new', [Adm::class, 'sesNew']);
         Route::post('/ses', [Adm::class, 'sesStore']);
         Route::get('/ses/{id}', [Adm::class, 'sesShow']);
+        Route::get('/ses/{id}/edit', [Adm::class, 'sesEdit']);
+        Route::get('/ses/{id}/users/new', [Adm::class, 'sesUserNew']);
+        Route::post('/ses/{id}/delete', [Adm::class, 'sesDelete']);
         Route::post('/ses/{id}', [Adm::class, 'sesUpdate']);
         Route::post('/ses/{id}/approve', [Adm::class, 'sesApprove']);
         Route::post('/ses/{id}/suspend', [Adm::class, 'sesSuspend']);

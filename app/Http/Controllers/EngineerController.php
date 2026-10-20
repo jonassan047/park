@@ -147,6 +147,24 @@ class EngineerController extends Controller
         return $this->go("/engineers/$id", '招待メールを送りました。');
     }
 
+    // エンジニアを消す。契約があるときは消さない。応募・メッセージ・書類などはいっしょに消える
+    public function destroy(Request $r, int $id)
+    {
+        $e = $this->load($r, $id);
+        $back = $r->user()->role === 'admin' ? '/admin/engineers' : '/ses/engineers';
+        if (DB::table('contracts')->where('engineer_id', $id)->exists()) return $this->go("/engineers/$id", '削除できません。契約の記録が残っています。', 'bad');
+        foreach (DB::table('engineer_files')->where('engineer_id', $id)->get() as $f) Storage::disk(EngineerDocs::DISK)->delete($f->path);
+        DB::transaction(function () use ($id) {
+            foreach (['engineer_files', 'engineer_histories', 'engineer_certs', 'engineer_skills', 'engineer_projects', 'case_offers', 'applications', 'messages'] as $t) {
+                if (\Illuminate\Support\Facades\Schema::hasTable($t)) DB::table($t)->where('engineer_id', $id)->delete();
+            }
+            DB::table('users')->where('engineer_id', $id)->where('role', 'eg')->delete();
+            DB::table('engineers')->where('id', $id)->delete();
+        });
+        N::audit($r->user()->id, 'engineer-delete', $e->name);
+        return $this->go($back, 'エンジニア「'.$e->name.'」を削除しました。');
+    }
+
     public function skills(Request $r, int $id)
     {
         $e = $this->load($r, $id);

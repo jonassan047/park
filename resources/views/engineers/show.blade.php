@@ -3,10 +3,11 @@
 @section('content')
 <div class="cols"><div>
 <x-card title="基本情報">
-<x-slot:actions><a class="btn ghost small" href="{{ url('/engineers/'.$e->id.'/edit') }}">編集</a>
+<x-slot:actions><a class="btn small" href="{{ url('/engineers/'.$e->id.'/edit') }}">編集</a>
 @if(!$mine && $e->email && !($eu && $eu->password))
-<x-post :action="'/engineers/'.$e->id.'/invite'" label="招待を送る" cls="ghost small" />
+<x-post :action="'/engineers/'.$e->id.'/invite'" label="招待を送る" cls="small" />
 @endif
+@if(!$mine && $u->role !== 'eg')<x-post :action="'/engineers/'.$e->id.'/delete'" label="削除" cls="danger small" confirm="このエンジニアを削除します。経験票・応募・書類・アカウントも消え、元に戻せません。よろしいですか？" />@endif
 </x-slot:actions>
 <dl class="dl">
 <dt>氏名</dt><dd>{{ $e->name }} <span class="muted">{{ $e->kana }}（{{ $e->initials ?: '—' }}）</span></dd>
@@ -21,9 +22,10 @@
 @unless($mine)<dt>アカウント</dt><dd>{{ $eu ? ($eu->password ? '使用中（最終ログイン '.fmt_dt($eu->last_login).'）' : '招待中（未設定）') : 'なし' }}</dd>@endunless
 
 <dt>個人情報の同意</dt><dd>@if($e->consent_at){{ fmt_date($e->consent_at) }}@else<span class="bad-text">未</span>@endif</dd>
-</dl></x-card>
+</dl>
+@unless($mine)<p><a class="btn ghost" href="{{ list_url('engineers') }}">エンジニアの一覧に戻る</a></p>@endunless</x-card>
 
-<x-card title="詳しいプロフィール（履歴書・業務経歴書の項目）"><x-slot:actions><a class="btn ghost small" href="{{ url('/engineers/'.$e->id.'/profile') }}">編集</a></x-slot:actions>
+<x-card title="詳しいプロフィール（履歴書・業務経歴書の項目）"><x-slot:actions><a class="btn small" href="{{ url('/engineers/'.$e->id.'/profile') }}">編集</a></x-slot:actions>
 <dl class="dl">
 <dt>生年月日</dt><dd>{{ $e->birth_date ? fmt_date($e->birth_date) : '—' }}</dd><dt>性別</dt><dd>{{ $e->gender ?: '—' }}</dd>
 <dt>電話</dt><dd>{{ $e->phone ?: '—' }}</dd><dt>現住所</dt><dd>{{ postal_address($e->postal_code, $e->address) }}</dd>
@@ -35,7 +37,7 @@
 <dt>アピール</dt><dd>{!! nl2br(e($e->appeal)) ?: '—' !!}</dd><dt>本人希望</dt><dd>{!! nl2br(e($e->wishes)) ?: '—' !!}</dd>
 </dl></x-card>
 
-<x-card title="スキル"><x-slot:actions><a class="btn ghost small" href="{{ url('/engineers/'.$e->id.'/skills') }}">スキルを編集</a></x-slot:actions>
+<x-card title="スキル"><x-slot:actions><a class="btn small" href="{{ url('/engineers/'.$e->id.'/skills') }}">スキルを編集</a></x-slot:actions>
 @if($skills->count())<div class="skillgrid">@foreach($skills as $s)<div class="sk"><b>{{ $s->name }}</b><span>{{ lbl('skillCat', $s->category) }}</span><span>{{ $s->years ? num_disp($s->years).'年' : '' }}</span>
 <span class="lv">{{ str_repeat('★', (int) $s->level) }}{{ str_repeat('☆', 5 - (int) $s->level) }}</span></div>@endforeach</div>
 @else<p class="empty">まだ登録がありません。</p>@endif</x-card>
@@ -43,7 +45,7 @@
 <x-card title="経験票（これまでの案件）"><x-slot:actions><a class="btn small" href="{{ url('/engineers/'.$e->id.'/projects/new') }}">案件を追加</a></x-slot:actions>
 @forelse($projects as $p)<div class="proj">
 <div class="projhead"><b>{{ $p->title }}</b><span class="muted">{{ $p->period_from ?: '?' }}〜{{ $p->period_to ?: '現在' }}・{{ $p->industry }}・{{ $p->role }}{{ $p->team_size ? '・'.$p->team_size.'名' : '' }}</span>
-<a class="small" href="{{ url('/engineers/'.$e->id.'/projects/'.$p->id.'/edit') }}">編集</a></div>
+<a class="btn small" href="{{ url('/engineers/'.$e->id.'/projects/'.$p->id.'/edit') }}">編集</a></div>
 <x-chips :list="project_techs($p)" /> <span class="muted small">{{ $p->phases }}</span><p>{!! nl2br(e($p->description)) !!}</p>
 @if($p->achievements)<p class="ach">成果：{{ $p->achievements }}</p>@endif</div>
 @empty<p class="empty">まだ登録がありません。直近の案件から入れていきましょう。</p>@endforelse
@@ -85,7 +87,7 @@
 @if($u->role !== 'ses')<p><a href="{{ url('/engineers/'.$e->id.'/messages') }}">管理者とのやり取り（スキルシートの相談）</a></p>@endif
 </x-card>
 <x-card title="応募・選考"><x-table :head="['案件', '状態', '']" :count="$apps->count()">
-@foreach($apps as $a)<tr><td>{{ $a->title }}</td><td>{{ badge('appStatus', $a->status) }}</td><td><a href="{{ url('/applications/'.$a->id) }}">詳細</a></td></tr>@endforeach
+@foreach($apps as $a)<tr><td>{{ $a->title }}</td><td>{{ badge('appStatus', $a->status) }}</td><td><a class="btn small" href="{{ url('/applications/'.$a->id) }}">詳細</a></td></tr>@endforeach
 </x-table></x-card>
 </div></div>
 @endsection

@@ -768,7 +768,7 @@ class ProfileAndDirectTest extends TestCase
     public function test_i12_ses_name_hint_for_admin(): void
     {
         $this->as('admin@park.example')->get('/admin/ses/new')->assertOk()->assertSee('略称でもかまいません');
-        $this->get('/admin/ses/1')->assertOk()->assertSee('略称でもかまいません');
+        $this->get('/admin/ses/1/edit')->assertOk()->assertSee('略称でもかまいません');
         $this->post('/admin/ses/1', ['name' => '管理者が直した名前']);
         $this->assertSame(0, $this->renameNotes());
         $this->assertNull(DB::table('ses_companies')->where('id', 1)->value('self_confirmed_at'));

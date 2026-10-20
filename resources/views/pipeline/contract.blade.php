@@ -28,4 +28,5 @@
 @foreach($fus as $f)<tr><td>{{ fmt_date($f->at) }}</td><td>{{ $f->mood }}</td><td>{{ $f->troubles }}</td><td>{{ $f->note }}</td><td>{{ $f->name }}</td></tr>@endforeach
 </x-table></x-card>
 </div></div>
+<p class="backrow"><a class="btn ghost" href="{{ list_url('contracts') }}">契約の一覧に戻る</a></p>
 @endsection
