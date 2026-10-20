@@ -271,7 +271,7 @@ class PostalAddressTest extends TestCase
         $this->post("/admin/ses/$sid", ['name' => '郵便商事', 'postal_code' => '1500002', 'address' => '東京都渋谷区'])->assertSessionHas('flash.type', 'ok');
         $this->assertSame('150-0002', DB::table('ses_companies')->where('id', $sid)->value('postal_code'));
         // SES の会社情報
-        $this->as('ses1@park.example')->get('/ses/company')->assertOk()->assertSee('name="postal_code"', false);
+        $this->as('ses1@park.example')->get('/ses/company/edit')->assertOk()->assertSee('name="postal_code"', false);
         $this->post('/ses/company', ['name' => 'みどり情報システム', 'postal_code' => '99'])->assertSessionHas('flash.type', 'bad');
         $this->post('/ses/company', ['name' => 'みどり情報システム', 'postal_code' => '1000001', 'address' => '自社ビル'])->assertSessionHas('flash.type', 'ok');
         $this->assertSame('100-0001', DB::table('ses_companies')->where('id', 1)->value('postal_code'));

@@ -171,7 +171,7 @@ class UiUnifyTest extends TestCase
         $w = $this->as('eg1@park.example')->get('/welcome')->assertOk()->getContent();
         $this->assertPair($w, 'name', 'あなたの情報'); $this->assertPair($w, 'kana', 'あなたの情報');
 
-        $co = $this->as('ses1@park.example')->get('/ses/company')->assertOk()->getContent();
+        $co = $this->as('ses1@park.example')->get('/ses/company/edit')->assertOk()->getContent();
         $this->assertPair($co, 'contact', '会社情報'); $this->assertPair($co, 'rep', '会社情報');
     }
 

@@ -83,7 +83,22 @@ class SesController extends Controller
 
     public function company(Request $r)
     {
-        return view('ses.company', ['s' => DB::table('ses_companies')->find($r->user()->ses_id), 'users' => DB::table('users')->where('ses_id', $r->user()->ses_id)->where('role', 'ses')->get()]);
+        $id = $r->user()->ses_id;
+        $engs = DB::table('engineers')->where('ses_id', $id)->orderBy('name')->get();
+        $egIds = $engs->pluck('id');
+        return view('ses.company', [
+            's' => DB::table('ses_companies')->find($id),
+            'users' => DB::table('users')->where('ses_id', $id)->where('role', 'ses')->get(),
+            'engs' => $engs,
+            'working' => DB::table('contracts')->whereIn('engineer_id', $egIds)->where('status', 'active')->pluck('engineer_id')->flip(),
+            'inSel' => DB::table('applications')->whereIn('engineer_id', $egIds)->whereIn('status', PipelineController::OPEN)->get(['engineer_id'])->groupBy('engineer_id')->map->count(),
+            'invs' => DB::table('invoices')->where('ses_id', $id)->where('status', '!=', 'draft')->orderByDesc('period')->get(),
+        ]);
+    }
+
+    public function companyEdit(Request $r)
+    {
+        return view('ses.company-edit', ['s' => DB::table('ses_companies')->find($r->user()->ses_id)]);
     }
 
     public function saveCompany(Request $r)

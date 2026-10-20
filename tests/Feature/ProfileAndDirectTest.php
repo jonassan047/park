@@ -749,7 +749,7 @@ class ProfileAndDirectTest extends TestCase
 
     public function test_i11_company_screen_rename(): void
     {
-        $this->as('ses1@park.example')->get('/ses/company')->assertOk()->assertSee('SES名（会社名）');
+        $this->as('ses1@park.example')->get('/ses/company/edit')->assertOk()->assertSee('SES名（会社名）');
         $this->post('/ses/company', ['name' => '会社画面で変更'])->assertRedirect(url('/ses/company'));
         $this->assertSame('会社画面で変更', $this->sesName());
         $this->assertSame(1, $this->renameLogs());

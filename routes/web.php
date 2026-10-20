@@ -202,6 +202,7 @@ Route::middleware('role:ses')->prefix('ses')->group(function () {
     Route::get('/contracts', [Ses::class, 'contracts']);
     Route::get('/invoices', [Ses::class, 'invoices']);
     Route::get('/company', [Ses::class, 'company']);
+    Route::get('/company/edit', [Ses::class, 'companyEdit']);
     Route::post('/company', [Ses::class, 'saveCompany']);
 });
 
