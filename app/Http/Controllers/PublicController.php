@@ -34,10 +34,15 @@ class PublicController extends Controller
             return back()->withInput(['email' => $email])->with('flash', ['msg' => 'メールアドレスかパスワードが違います。', 'type' => 'bad']);
         }
         $u = Auth::user();
+        // 会社が使えない SES 担当者は断る。ただし、エンジニアを兼ねていてエンジニアが使えるなら断らない（選ぶ画面でエンジニアだけになる）
         if ($u->role === 'ses' && (DB::table('ses_companies')->where('id', $u->ses_id)->value('status') !== 'active' || W::isDirect($u->ses_id))) {
-            Auth::logout();
-            return back()->withInput(['email' => $email])->with('flash', ['msg' => '会社の参加がまだ承認されていないか、停止されています。', 'type' => 'bad']);
+            $row = DB::table('users')->find($u->id);
+            if (!(W::isDual($row) && in_array('eg', W::usableRoles($row), true))) {
+                Auth::logout();
+                return back()->withInput(['email' => $email])->with('flash', ['msg' => '会社の参加がまだ承認されていないか、停止されています。', 'type' => 'bad']);
+            }
         }
+        $r->session()->forget('acting_role'); // 立場は、ログインのたびに選び直す
         $r->session()->regenerate();
         // 次にログイン画面を開いたとき、メールアドレスを最初から入れておく（1年。パスワードは残さない）
         Cookie::queue('park-last-email', $email, 60 * 24 * 365);
@@ -118,6 +123,7 @@ class PublicController extends Controller
         DB::table('users')->where('id', $u->id)->update(['password' => Hash::make($r->input('password')), 'token' => null, 'token_expires' => null, 'last_login' => now_str()]);
         N::audit($u->id, 'password-set', $u->email);
         Auth::loginUsingId($u->id);
+        $r->session()->forget('acting_role');
         // 初めてのログインも、登録のメールアドレスとパスワードに加えて、確認コードで2段階認証を通ってもらう
         TwoFactor::send($r, 'invite');
         if (TwoFactor::confirmed($u)) return $this->go(Auth::user()->home(),'パスワードを設定しました。');

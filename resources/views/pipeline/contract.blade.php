@@ -4,7 +4,7 @@
 <div class="cols"><div>
 <x-card title="契約"><dl class="dl">
 <dt>案件</dt><dd><a href="{{ url('/cases/'.$k->case_id) }}">{{ $k->title }}</a></dd>
-<dt>エンジニア</dt><dd><a href="{{ url('/engineers/'.$k->engineer_id) }}">{{ $k->eg_name }}</a></dd><dt>SES</dt><dd>{{ $k->ses_name }}</dd>
+<dt>エンジニア</dt><dd><a href="{{ url('/engineers/'.$k->engineer_id) }}">{{ $k->eg_name }}</a>@if($u->role === 'admin' && base_role() === 'admin' && (int) $u->engineer_id === (int) $k->engineer_id) <span class="badge warn">管理者ご本人の応募</span>@endif</dd><dt>SES</dt><dd>{{ $k->ses_name }}</dd>
 <dt>状態</dt><dd>{{ badge('contractStatus', $k->status) }}</dd><dt>金額</dt><dd>{{ man($k->price) }}</dd>
 <dt>期間</dt><dd>{{ fmt_date($k->start_date) }}〜{{ fmt_date($k->end_date) }}</dd><dt>延長</dt><dd>{{ $k->extensions }}回</dd>
 @if($k->end_reason)<dt>終了の理由</dt><dd>{{ $k->end_reason }}</dd>@endif

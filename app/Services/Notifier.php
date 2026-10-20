@@ -57,34 +57,42 @@ class Notifier
     }
 
     // 通知（ベル）とメールを一度に出す。link は '/cases/1' のようなアプリ内のパス
-    public static function notify(int $userId, string $title, string $body = '', string $link = '', bool $mail = true, string $kind = 'notice'): void
+    // $forRole：どの立場あてか（admin／ses／eg）。兼任の人は、立場ごとにお知らせを分けて見るため。空ならどの立場でも出す
+    public static function notify(int $userId, string $title, string $body = '', string $link = '', bool $mail = true, string $kind = 'notice', ?string $forRole = null): void
     {
         $u = DB::table('users')->find($userId);
         if (!$u || !$u->active) return;
-        DB::table('app_notifications')->insert(['user_id' => $userId, 'title' => $title, 'body' => $body, 'link' => $link, 'created_at' => now_str()]);
+        DB::table('app_notifications')->insert(['user_id' => $userId, 'title' => $title, 'body' => $body, 'link' => $link, 'created_at' => now_str(), 'for_role' => $forRole]);
         if ($mail && $u->mail_opt_in) {
             $url = $link ? "\n\n▼詳しくはこちら\n".url($link) : '';
-            self::queueMail($u->email, $u->name, $title, user_label($u)." 様\n\n".($body ?: $title).$url, $kind);
+            // 兼任の人には、どの立場あてのメールかを頭に書く
+            $head = $forRole && Workflow::isDual($u) ? ['ses' => '【SES 担当者あて】', 'admin' => '【管理者あて】', 'eg' => '【エンジニアあて】'][$forRole]."\n" : '';
+            self::queueMail($u->email, $u->name, $title, $head.user_label($u)." 様\n\n".($body ?: $title).$url, $kind);
         }
     }
 
     public static function admins() { return DB::table('users')->where('role', 'admin')->where('active', 1)->get(); }
     public static function sesUsers($sesId) { return DB::table('users')->where('role', 'ses')->where('ses_id', $sesId)->where('active', 1)->get(); }
-    public static function egUsers($engineerId) { return DB::table('users')->where('role', 'eg')->where('engineer_id', $engineerId)->where('active', 1)->get(); }
+    // エンジニアあての相手：本人のアカウント（SES 担当者・管理者を兼ねている人も含む）。エンジニアが停止中・退会済なら届けない
+    public static function egUsers($engineerId)
+    {
+        return DB::table('users')->where('engineer_id', $engineerId)->whereIn('role', ['eg', 'ses', 'admin'])->where('active', 1)
+            ->whereExists(fn ($q) => $q->select(DB::raw(1))->from('engineers')->whereColumn('engineers.id', 'users.engineer_id')->whereNull('engineers.suspended_at')->where('engineers.status', '!=', 'left'))->get();
+    }
 
     public static function toAdmins(string $title, string $body, string $link, bool $mail = true, string $kind = 'notice'): void
     {
-        foreach (self::admins() as $u) self::notify($u->id, $title, $body, $link, $mail, $kind);
+        foreach (self::admins() as $u) self::notify($u->id, $title, $body, $link, $mail, $kind, 'admin');
     }
     public static function toSes($sesId, string $title, string $body, string $link, bool $mail = true, string $kind = 'notice'): void
     {
         // 管理者の直属には SES の担当者がいないので、管理者全員に届ける
         if (Workflow::isDirect($sesId ? (int) $sesId : null)) { self::toAdmins($title, $body, $link, $mail, $kind); return; }
-        foreach (self::sesUsers($sesId) as $u) self::notify($u->id, $title, $body, $link, $mail, $kind);
+        foreach (self::sesUsers($sesId) as $u) self::notify($u->id, $title, $body, $link, $mail, $kind, 'ses');
     }
     public static function toEg($engineerId, string $title, string $body, string $link, bool $mail = true, string $kind = 'notice'): void
     {
-        foreach (self::egUsers($engineerId) as $u) self::notify($u->id, $title, $body, $link, $mail, $kind);
+        foreach (self::egUsers($engineerId) as $u) self::notify($u->id, $title, $body, $link, $mail, $kind, 'eg');
     }
 
     public static function audit($userId, string $action, ?string $detail = ''): void

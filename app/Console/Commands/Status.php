@@ -36,6 +36,8 @@ class Status extends Command
             '契約：1か月以内に終わる' => DB::table('contracts')->where('status', 'active')->where('end_date', '<=', date('Y-m-d', strtotime('+31 days')))->count(),
             '経歴の更新待ち（成約した案件）' => DB::table('contracts')->whereNull('history_updated_at')->count(),
             '技術マスタ：確かめ待ち' => DB::table('skill_terms')->where('reviewed', false)->count(),
+            '兼任（SES 担当者）' => DB::table('users')->where('role', 'ses')->whereNotNull('ses_id')->whereNotNull('engineer_id')->count(),
+            '兼任（管理者）' => DB::table('users')->where('role', 'admin')->whereNotNull('engineer_id')->count(),
             '見本データ（@park.example）' => DB::table('users')->where('email', 'like', '%@park.example')->count(),
         ];
         if ($this->option('json')) {

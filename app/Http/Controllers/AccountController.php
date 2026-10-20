@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\Notifier as N;
 use App\Services\Workflow as W;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -10,9 +11,17 @@ use Illuminate\Support\Facades\Hash;
 // どの役割でも使う画面：通知・アカウント
 class AccountController extends Controller
 {
+    // 自分あてのお知らせ。兼任の人は、いまの立場の分（と、立場を決めていない分）だけ
+    private function myNotifications(Request $r)
+    {
+        $q = DB::table('app_notifications')->where('user_id', $r->user()->id);
+        if (is_dual()) $q->where(fn ($w) => $w->whereNull('for_role')->orWhere('for_role', $r->user()->role));
+        return $q;
+    }
+
     public function notifications(Request $r)
     {
-        $list = DB::table('app_notifications')->where('user_id', $r->user()->id)->orderByDesc('id')->limit(200)->get();
+        $list = $this->myNotifications($r)->orderByDesc('id')->limit(200)->get();
         return view('account.notifications', compact('list'));
     }
 
@@ -20,14 +29,44 @@ class AccountController extends Controller
     {
         $n = DB::table('app_notifications')->where('id', $id)->where('user_id', $r->user()->id)->first();
         abort_unless($n, 404);
+        // ほかの立場あてのお知らせは、開かない（既読にもしない）
+        if (is_dual() && $n->for_role && $n->for_role !== $r->user()->role) {
+            $name = ['admin' => '管理者', 'ses' => 'SES 担当者', 'eg' => 'エンジニア'][$n->for_role] ?? $n->for_role;
+            return $this->go('/notifications', "このお知らせは「{$name}」あてです。ログアウトして、{$name}として入り直すと開けます。", 'warn');
+        }
         if (!$n->read_at) DB::table('app_notifications')->where('id', $id)->update(['read_at' => now_str()]);
         return redirect($n->link ?: '/notifications');
     }
 
     public function readAll(Request $r)
     {
-        DB::table('app_notifications')->where('user_id', $r->user()->id)->whereNull('read_at')->update(['read_at' => now_str()]);
+        $this->myNotifications($r)->whereNull('read_at')->update(['read_at' => now_str()]);
         return redirect('/notifications');
+    }
+
+    // ---------- ログインのときに、立場を選ぶ（兼任の人だけ）。入ったあとは変えられない ----------
+    public function roleForm(Request $r)
+    {
+        if (!is_dual() || $r->session()->get('acting_role')) return redirect($r->user()->home());
+        $row = DB::table('users')->find($r->user()->id);
+        return view('public.login-role', ['roles' => W::usableRoles($row), 'sesName' => $row->ses_id ? DB::table('ses_companies')->where('id', $row->ses_id)->value('name') : null]);
+    }
+
+    public function chooseRole(Request $r)
+    {
+        $u = $r->user();
+        if (!is_dual() || $r->session()->get('acting_role')) return redirect($u->home());
+        $row = DB::table('users')->find($u->id);
+        $to = (string) $r->input('to');
+        if (!in_array($to, W::usableRoles($row), true)) return $this->go('/login/role', 'この立場では、いまは入れません。', 'bad');
+        $r->session()->put('acting_role', $to);
+        N::audit($u->id, 'login-role', $to);
+        $u->role = $to;
+        $u->syncOriginalAttribute('role');
+        // intended は使わない（別の立場の画面に送られて 403 になるのを防ぐ）
+        if ($to === 'eg' && !DB::table('engineers')->where('id', $u->engineer_id)->value('consent_at')) return redirect('/eg/consent');
+        [$home, $msg] = W::profileHome($u);
+        return $this->go($home, $msg);
     }
 
     public function show(Request $r)

@@ -51,6 +51,9 @@ Route::middleware('auth')->group(function () {
 
 // ---------- ログインした人（役割ごとに見え方が変わる共通の画面） ----------
 Route::middleware('role')->group(function () {
+    // 兼任の人が、ログインのときに立場を選ぶ（入ったあとは変えられない。切り替えの道は作らない）
+    Route::get('/login/role', [Acc::class, 'roleForm']);
+    Route::post('/login/role', [Acc::class, 'chooseRole'])->middleware('throttle:10,1');
     Route::get('/notifications', [Acc::class, 'notifications']);
     Route::get('/notifications/{id}', [Acc::class, 'openNotification']);
     Route::post('/notifications/read-all', [Acc::class, 'readAll']);
@@ -203,6 +206,8 @@ Route::middleware('role:ses')->prefix('ses')->group(function () {
 
 // ---------- エンジニア ----------
 Route::middleware('role:eg')->group(function () {
+    Route::get('/eg/consent', [Eg::class, 'consentForm']);
+    Route::post('/eg/consent', [Eg::class, 'consent']);
     Route::get('/eg', [Eg::class, 'home']);
     Route::get('/eg/offers', [Eg::class, 'offers']);
     Route::get('/eg/applications', [Eg::class, 'applications']);

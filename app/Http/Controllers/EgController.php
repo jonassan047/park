@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\Notifier as N;
 use App\Services\Qa;
 use App\Services\Workflow as W;
 use Illuminate\Http\Request;
@@ -27,6 +28,23 @@ class EgController extends Controller
             'projectCount' => DB::table('engineer_projects')->where('engineer_id', $eid)->count(),
             'unread' => DB::table('messages')->where('engineer_id', $eid)->where('read_by_eg', false)->count(),
         ]);
+    }
+
+    // 兼任の人が、初めてエンジニアとして入ったときの、個人情報の取り扱いへの同意
+    public function consentForm(Request $r)
+    {
+        if (DB::table('engineers')->where('id', $r->user()->engineer_id)->value('consent_at')) return redirect(W::profileHome($r->user())[0]);
+        return view('eg.consent');
+    }
+
+    public function consent(Request $r)
+    {
+        if (DB::table('engineers')->where('id', $r->user()->engineer_id)->value('consent_at')) return redirect(W::profileHome($r->user())[0]);
+        $r->validate(['consent' => 'accepted'], [], ['consent' => '個人情報の取り扱いへの同意']);
+        DB::table('engineers')->where('id', $r->user()->engineer_id)->update(['consent_at' => now_str()]);
+        N::audit($r->user()->id, 'consent', '');
+        [$home, $msg] = W::profileHome($r->user());
+        return redirect($home)->with('flash', ['msg' => $msg ?? '同意をいただきました。', 'type' => 'ok']);
     }
 
     public function offers(Request $r)

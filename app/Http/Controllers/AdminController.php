@@ -50,7 +50,7 @@ class AdminController extends Controller
                 else $state = '期限切れ';
             }
             $isAdmin = $u->role === 'admin';
-            $rows[] = ['role' => lbl('role', $u->role), 'name' => $u->name, 'org' => $isAdmin ? $u->company_name : ($sesNames[$u->ses_id] ?? null),
+            $rows[] = ['role' => lbl('role', $u->role).(W::isDual($u) ? '（エンジニア兼任）' : ''), 'name' => $u->name, 'org' => $isAdmin ? $u->company_name : ($sesNames[$u->ses_id] ?? null),
                 'state' => $state, 'until' => $until, 'last_login' => $u->last_login,
                 'reinvite' => $isAdmin && $u->active && !$u->password ? $u->id : null, 'open' => $isAdmin ? null : $u->ses_id];
         }
@@ -180,8 +180,13 @@ class AdminController extends Controller
         $s = $this->sesOrFail($id);
         if ($s->status === 'left') return $this->go("/admin/ses/$id", 'すでに退会済です。');
         if (DB::table('contracts')->where('ses_id', $id)->where('status', 'active')->exists()) return $this->go("/admin/ses/$id", '退会にできません。稼働中の契約があります。先に契約を終了してください。', 'bad');
-        DB::transaction(function () use ($id) {
+        DB::transaction(function () use ($id, $r) {
             $egIds = DB::table('engineers')->where('ses_id', $id)->pluck('id');
+            // 管理者を兼ねる人は、エンジニアの紐づけだけ外す（管理者としては引き続き入れる）
+            foreach (DB::table('users')->where('role', 'admin')->whereIn('engineer_id', $egIds)->get(['id', 'engineer_id']) as $a) {
+                DB::table('users')->where('id', $a->id)->update(['engineer_id' => null, 'updated_at' => now_str()]);
+                N::audit($r->user()->id, 'dual-unlink', "#user {$a->id} ← エンジニア #{$a->engineer_id}");
+            }
             DB::table('engineers')->where('ses_id', $id)->update(['status' => 'left']);
             DB::table('users')->where(fn ($q) => $q->where('ses_id', $id)->orWhereIn('engineer_id', $egIds))->whereIn('role', ['ses', 'eg'])->update(['active' => 0, 'left_at' => DB::raw("coalesce(left_at, '".now_str()."')")]);
             DB::table('ses_companies')->where('id', $id)->update(['status' => 'left']);
@@ -222,10 +227,17 @@ class AdminController extends Controller
     {
         $this->sesOrFail($id);
         $email = strtolower((string) str_in($r->input('email')));
+        // 同じ SES のエンジニアのアカウントなら、招待ではなく SES 担当者の役割を足す（兼任）
+        if ($email && W::sesShareTarget($email, $id)) {
+            W::invite(['email' => $email, 'name' => '', 'role' => 'ses', 'ses_id' => $id], $r->user());
+            return $this->go("/admin/ses/$id", 'このメールアドレスのエンジニアのアカウントに、SES 担当者の役割を足しました（招待メールは送っていません）。');
+        }
         if ($email && DB::table('users')->where('email', $email)->where('active', 0)->exists()) return $this->go("/admin/ses/$id", 'このメールアドレスは使えません（停止中か退会済です）。', 'bad');
         if (!$email || DB::table('users')->where('email', $email)->whereNotNull('password')->exists()) return $this->go("/admin/ses/$id", 'このメールアドレスは使えません（空か、すでに使われています）。', 'bad');
         [$full, $sei, $mei] = name_parts($r->all(), 'name', 'name');
-        if (!W::invite(['email' => $email, 'name' => (string) $full, 'name_sei' => $sei, 'name_mei' => $mei, 'kana_sei' => $r->input('kana_sei'), 'kana_mei' => $r->input('kana_mei'), 'role' => 'ses', 'ses_id' => $id], $r->user())) {
+        $res = W::invite(['email' => $email, 'name' => (string) $full, 'name_sei' => $sei, 'name_mei' => $mei, 'kana_sei' => $r->input('kana_sei'), 'kana_mei' => $r->input('kana_mei'), 'role' => 'ses', 'ses_id' => $id], $r->user());
+        // 返ってきた人がこの会社の担当者でなければ（ほかの立場の人が使っているアドレス）、送ったことにしない
+        if (!$res || $res->role !== 'ses' || (int) $res->ses_id !== $id) {
             return $this->go("/admin/ses/$id", 'このメールアドレスには招待を出せません（ほかの立場の人が使っています）。', 'bad');
         }
         return $this->go("/admin/ses/$id", '担当者を登録し、招待メールを送りました。');
@@ -374,13 +386,16 @@ class AdminController extends Controller
         $subject = (string) str_in($r->input('subject')); $body = (string) str_in($r->input('body'));
         if (!$subject || !$body) return $this->go('/admin/mail', '件名と本文を入れてください。', 'bad');
         $q = DB::table('users')->where('active', 1);
+        // エンジニアあては、エンジニアを兼ねている人（role を問わない）も含む。使えるエンジニア＝停止中でも退会済でもない
+        $usableEg = DB::table('engineers')->whereNull('suspended_at')->where('status', '!=', 'left')->select('id');
+        // 会社が参加中でない SES 担当者には送らない。エンジニアあては会社で絞らない（兼任の人はエンジニアとして届く）
+        $sesOk = fn ($w) => $w->where('role', 'ses')->whereIn('ses_id', DB::table('ses_companies')->where('status', 'active')->select('id'));
         match ($t) {
-            'ses' => $q->where('role', 'ses'),
-            'eg' => $q->where('role', 'eg'),
-            'eg_available' => $q->where('role', 'eg')->whereIn('engineer_id', DB::table('engineers')->where('status', 'available')->select('id')),
-            default => $q->whereIn('role', ['ses', 'eg']),
+            'ses' => $q->where($sesOk),
+            'eg' => $q->whereIn('engineer_id', $usableEg),
+            'eg_available' => $q->whereIn('engineer_id', DB::table('engineers')->where('status', 'available')->whereNull('suspended_at')->select('id')),
+            default => $q->where(fn ($w) => $w->where($sesOk)->orWhereIn('engineer_id', $usableEg)),
         };
-        $q->where(fn ($w) => $w->whereNull('ses_id')->orWhereIn('ses_id', DB::table('ses_companies')->where('status', 'active')->select('id')));
         $users = $q->get();
         foreach ($users as $u) N::queueMail($u->email, $u->name, $subject, user_label($u)." 様\n\n$body", 'broadcast', fromName: admin_sender($r->user()));
         N::audit($r->user()->id, 'broadcast', "{$t}：{$subject}（".count($users).'通）');
@@ -447,13 +462,19 @@ class AdminController extends Controller
         if (mb_strlen((string) $r->input('kana_sei')) > 50 || mb_strlen((string) $r->input('kana_mei')) > 50) return $bad('ふりがなは、姓・名とも50文字までです。');
         if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) return $bad('メールアドレスを正しく入れてください。');
         if (mb_strlen($company) > 100) return $bad('企業名は100文字までです。');
-        if (DB::table('users')->where('email', $email)->exists()) return $bad('このメールアドレスはすでに使われています。');
+        // エンジニアのアカウントなら、招待ではなく管理者の役割を足す（兼任）
+        $share = W::adminShareTarget($email);
+        if (!$share && DB::table('users')->where('email', $email)->exists()) return $bad('このメールアドレスはすでに使われています。');
         // 任意の項目：所属・役職、電話番号、郵便番号、住所
         $position = str_in($r->input('position')); $phone = str_in($r->input('phone'));
         if ($position !== null && mb_strlen($position) > 100) return $bad('所属・役職は100文字までにしてください。');
         if ($phone !== null && (mb_strlen($phone) > 30 || !preg_match('/^[0-9+\-() ]*$/', $phone))) return $bad('電話番号は30文字までの、数字・+・-・()・空白で入れてください。');
         $ad = W::addressCols($r->only(['postal_code', 'address']));
         if (isset($ad['bad'])) return $bad($ad['bad']);
+        if ($share) {
+            W::invite(['email' => $email, 'name' => $name, 'role' => 'admin', 'company_name' => $company, 'position' => $position, 'phone' => $phone] + $ad['ok'], $r->user());
+            return $this->go('/admin/admins', 'このメールアドレスのエンジニアのアカウントに、管理者の役割を足しました（招待メールは送っていません）。');
+        }
         W::invite(['email' => $email, 'name' => $name, 'name_sei' => $sei, 'name_mei' => $mei, 'kana_sei' => $r->input('kana_sei'), 'kana_mei' => $r->input('kana_mei'), 'role' => 'admin', 'company_name' => $company,
             'position' => $position, 'phone' => $phone] + $ad['ok'], $r->user());
         return $this->go('/admin/admins', '登録し、招待メールを送りました。');

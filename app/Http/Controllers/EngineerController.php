@@ -75,10 +75,16 @@ class EngineerController extends Controller
         // 新しく登録するときは、メールアドレスが必須（ご本人への招待メールが届かないとログインできないため）
         $email = strtolower((string) str_in($r->input('email')));
         if (!$email || !filter_var($email, FILTER_VALIDATE_EMAIL)) return back()->withInput()->with('flash', ['msg' => 'メールアドレスを正しく入れてください。', 'type' => 'bad']);
-        if (DB::table('users')->where('email', $email)->exists()) return back()->withInput()->with('flash', ['msg' => 'このメールアドレスはすでに使われています。', 'type' => 'bad']);
+        // すでに使われているアドレスでも、同じ SES の担当者（管理者なら管理者）のアカウントなら、エンジニアの役割を足せる（兼任）
+        if (DB::table('users')->where('email', $email)->exists() && !W::egShareTarget($email, $sesId, $r->user())) return back()->withInput()->with('flash', ['msg' => 'このメールアドレスはすでに使われています。', 'type' => 'bad']);
         $ad = W::addressCols($body, '現住所');
         if (isset($ad['bad'])) return back()->withInput()->with('flash', ['msg' => $ad['bad'], 'type' => 'bad']);
-        $id = W::createEngineer($sesId, $ad['ok'] + $body, $r->user(), $r->user()->role === 'ses');
+        $id = W::createEngineer($sesId, $ad['ok'] + $body, $r->user(), $r->user()->role === 'ses', $linked);
+        if ($linked) {
+            return $this->go("/engineers/$id", (int) $linked->id === (int) $r->user()->id
+                ? 'ご自身をエンジニアとして登録しました。エンジニアの画面は、ログアウトして入り直し、「エンジニア」を選ぶと開けます。'
+                : '登録しました。このメールアドレスの方のアカウントに、エンジニアの役割を足しました（招待メールは送っていません）。');
+        }
         return $this->go("/engineers/$id", $r->user()->role === 'ses' ? '登録し、ご本人に招待メールを送りました。' : '登録しました。招待メールは、所属の SES から送ってもらいます。');
     }
 
@@ -91,7 +97,8 @@ class EngineerController extends Controller
             'projects' => DB::table('engineer_projects')->where('engineer_id', $id)->orderByDesc('period_from')->get(),
             'check' => Qa::sheetCheck($id),
             'apps' => DB::table('applications as a')->join('cases as c', 'c.id', '=', 'a.case_id')->where('a.engineer_id', $id)->select('a.*', 'c.title')->orderByDesc('a.id')->get(),
-            'eu' => DB::table('users')->where('engineer_id', $id)->where('role', 'eg')->first(),
+            // ログインの欄：兼任の人も engineer_id で探す（role は問わない）。本人の行（role=eg）があればそれを優先
+            'eu' => DB::table('users')->where('engineer_id', $id)->orderByRaw("case when role = 'eg' then 0 else 1 end")->first(),
             // 停止の確認の文の材料：稼働中の契約の有無と、選考中の応募の数
             'working' => DB::table('contracts')->where('engineer_id', $id)->where('status', 'active')->exists(),
             'inSelection' => DB::table('applications')->where('engineer_id', $id)->whereIn('status', ['applied', 'submitted', 'doc_passed', 'interview', 'interviewed'])->count(),
@@ -128,7 +135,13 @@ class EngineerController extends Controller
             if ($e->status === 'left') unset($body['status']);
             elseif (($body['status'] ?? '') === 'left') return back()->withInput()->with('flash', ['msg' => '状態を「退会済」にはできません。退会は、詳細の「退会」を使ってください。', 'type' => 'bad']);
             $email = strtolower((string) str_in($body['email'] ?? ''));
-            if ($email && $email !== ($e->email ?? '') && DB::table('users')->where('email', $email)->exists()) return back()->with('flash', ['msg' => 'このメールアドレスはすでに使われています。', 'type' => 'bad']);
+            // すでに使われているアドレスでも、同じ SES の担当者（管理者なら管理者）のアカウントで、このエンジニアにまだログインが無ければ通す（兼任。ここでは紐づけない）
+            // 通すのは SES 担当者のアドレスだけ（管理者のアドレスは、実行者が誰でも、ここでは紐づけない）
+            $share = W::egShareTarget($email, (int) $e->ses_id, $r->user());
+            if ($email && $email !== ($e->email ?? '') && DB::table('users')->where('email', $email)->exists()
+                && !($share && $share->role === 'ses' && !DB::table('users')->where('engineer_id', $id)->exists())) {
+                return back()->with('flash', ['msg' => 'このメールアドレスはすでに使われています。', 'type' => 'bad']);
+            }
         }
         // 郵便番号・住所は、この画面からは送られないが、手で送られても検査してそろえる
         $ad = W::addressCols($body, '現住所');
@@ -152,10 +165,15 @@ class EngineerController extends Controller
         if ($e->status === 'left') return $this->go("/engineers/$id", '退会済のため、招待を送れません。', 'bad');
         if ($e->suspended_at) return $this->go("/engineers/$id", '停止中のため、招待を送れません。', 'bad');
         if (!$e->email) return $this->go("/engineers/$id", 'メールアドレスが登録されていません。', 'bad');
-        if (!W::invite(['email' => $e->email, 'name' => $e->name, 'role' => 'eg', 'ses_id' => $e->ses_id, 'engineer_id' => $e->id], $r->user())) {
+        // 同じ SES の担当者のアカウントなら、招待ではなくエンジニアの役割を足す（兼任）
+        $share = W::egShareTarget($e->email, (int) $e->ses_id, $r->user())
+            || DB::table('users')->where('email', strtolower($e->email))->where('engineer_id', $id)->whereIn('role', ['ses', 'admin'])->exists();
+        $res = W::invite(['email' => $e->email, 'name' => $e->name, 'role' => 'eg', 'ses_id' => $e->ses_id, 'engineer_id' => $e->id], $r->user());
+        // 返ってきた人がこのエンジニアのアカウントでなければ（ほかの立場の人が使っているアドレス）、送ったことにしない
+        if (!$res || (int) $res->engineer_id !== (int) $e->id) {
             return $this->go("/engineers/$id", '招待を送れませんでした（このメールアドレスは、ほかの立場の人が使っています）。', 'bad');
         }
-        return $this->go("/engineers/$id", '招待メールを送りました。');
+        return $this->go("/engineers/$id", $share ? 'この方のアカウントに、エンジニアの役割を足しました。' : '招待メールを送りました。');
     }
 
     // エンジニアを退会済にする（記録は残す）。ログインできなくなる。稼働中の契約があるときはできない
@@ -166,7 +184,14 @@ class EngineerController extends Controller
         if (DB::table('contracts')->where('engineer_id', $id)->where('status', 'active')->exists()) return $this->go("/engineers/$id", '退会にできません。稼働中の契約があります。先に契約を終了してください。', 'bad');
         DB::table('engineers')->where('id', $id)->update(['status' => 'left']);
         DB::table('users')->where('engineer_id', $id)->where('role', 'eg')->update(['active' => 0, 'left_at' => now_str()]);
-        N::audit($r->user()->id, 'engineer-leave', $e->name);
+        // 兼任の人は、エンジニアの紐づけだけ外す（SES 担当者・管理者としては引き続き入れる）
+        $mark = W::selfMark($r->user(), $id); // 外す前に決める（外すと自分のエンジニアではなくなるため）
+        $dualIds = DB::table('users')->where('engineer_id', $id)->whereIn('role', ['ses', 'admin'])->pluck('id');
+        if ($dualIds->isNotEmpty()) {
+            DB::table('users')->whereIn('id', $dualIds)->update(['engineer_id' => null, 'updated_at' => now_str()]);
+            foreach ($dualIds as $uid) N::audit($r->user()->id, 'dual-unlink', "#user {$uid} ← エンジニア #{$id}");
+        }
+        N::audit($r->user()->id, 'engineer-leave', $mark.$e->name);
         return $this->go("/engineers/$id", 'エンジニア「'.$e->name.'」を退会済にしました。');
     }
 

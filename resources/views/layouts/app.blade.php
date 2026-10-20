@@ -8,6 +8,12 @@
     ][$u->role ?? ''] ?? [];
     // 2要素認証が済むまでは、メニューを出さない
     $passed = $u && (int) session(\App\Support\TwoFactor::SESSION_KEY) === (int) $u->id;
+    // 兼任の人は、立場を選ぶまでもメニューを出さない
+    $dual = $u && is_dual();
+    $acting = $dual ? session('acting_role') : null;
+    // 「兼任」の文は、2つの立場がどちらも使えるときだけ出す（片方が止まっていれば、その立場だけの人と同じ見え方）
+    $dualBoth = $dual && count(\App\Services\Workflow::usableRoles(DB::table('users')->find($u->id))) === 2;
+    if ($dual && !$acting) $passed = false;
     if ($u && !$passed) $nav = [];
     $path = '/'.trim(request()->path(), '/');
     // ダッシュボード（/admin・/ses・/eg）は、配下の画面を開いても「選択中」にしない（そのページ自身のときだけ）
@@ -22,7 +28,11 @@
     foreach ($alias as $from => $to) if (str_starts_with($path, $from.'/')) { $current = $to; break; }
     if (($u->role ?? '') === 'eg' && str_starts_with($path, '/engineers/')) $current = str_ends_with($path, '/sheet') ? '/eg/sheet' : (str_ends_with($path, '/messages') ? '/eg/messages' : '/eg/profile');
     if (str_starts_with($path, '/ses/')) $current = $path;
-    $unread = $u ? DB::table('app_notifications')->where('user_id', $u->id)->whereNull('read_at')->count() : 0;
+    // ベルの数：兼任の人は、いまの立場の分だけ。もう一方の立場あての未読は、帯に出す
+    $unreadQ = $u ? DB::table('app_notifications')->where('user_id', $u->id)->whereNull('read_at') : null;
+    $unread = $u ? ($dual ? (clone $unreadQ)->where(fn ($w) => $w->whereNull('for_role')->orWhere('for_role', $u->role))->count() : $unreadQ->count()) : 0;
+    $otherUnread = ($dual && $acting) ? (clone $unreadQ)->whereNotNull('for_role')->where('for_role', '!=', $u->role)->count() : 0;
+    $otherName = ['admin' => '管理者', 'ses' => 'SES 担当者', 'eg' => 'エンジニア'];
     $flash = session('flash');
     $print = $print ?? false;
 @endphp
@@ -56,6 +66,10 @@
   @if($u->role === 'admin')管理者{{ $u->company_name ? '（'.$u->company_name.'）' : '' }}としてログインしています：{{ $u->name }}
   @elseif($u->role === 'ses')SES（{{ DB::table('ses_companies')->where('id', $u->ses_id)->value('name') }}）のご担当者としてログインしています
   @else エンジニアとしてログインしています
+  @endif
+  @if($dual)
+    @if($dualBoth)<span class="muted">（{{ $u->role === 'eg' ? $otherName[base_role()] : 'エンジニア' }}も兼任。立場を変えるときは、ログアウトして入り直してください）</span>@endif
+    @if($otherUnread)<a href="{{ url('/notifications') }}">{{ $otherName[$u->role === 'eg' ? base_role() : 'eg'] }}あてのお知らせが {{ $otherUnread }} 件あります</a>@endif
   @endif
 </div></div>
 @endif

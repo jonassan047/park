@@ -56,7 +56,7 @@ class Workflow
         // 招待リンクも使えなくする
         DB::table('users')->where('id', $uid)->update(['active' => 0, 'token' => null, 'token_expires' => null, 'updated_at' => now_str()]);
         N::audit($actor->id ?? null, 'ses-user-suspend', self::sesCompanyName($sesId).' '.$u->name);
-        return ['type' => 'ok', 'msg' => "{$u->name} さんを停止しました。"];
+        return ['type' => 'ok', 'msg' => "{$u->name} さんを停止しました。".(self::isDual($u) ? '（エンジニアとしても入れなくなります）' : '')];
     }
 
     public static function resumeSesUser(int $sesId, int $uid, $actor): ?array
@@ -77,6 +77,14 @@ class Workflow
         if (!($u = self::sesUserOf($sesId, $uid))) return null;
         if ($u->left_at) return ['type' => 'bad', 'msg' => '退会済の人は操作できません。'];
         if ($only = self::onlyUsableUser($sesId, $u)) return $only;
+        // エンジニアを兼ねている人は、SES 担当者の役割だけ外す（エンジニアとしては引き続き入れる）
+        if (self::isDual($u)) {
+            // エンジニアが停止中なら、本人の行も止める（エンジニアの再開で、role='eg' の行として戻る）
+            $egStopped = DB::table('engineers')->where('id', $u->engineer_id)->whereNotNull('suspended_at')->exists();
+            DB::table('users')->where('id', $uid)->update(['role' => 'eg', 'active' => $egStopped ? 0 : $u->active, 'updated_at' => now_str()]);
+            N::audit($actor->id ?? null, 'ses-user-leave', self::sesCompanyName($sesId).' '.$u->name);
+            return ['type' => 'ok', 'msg' => "{$u->name} さんを SES 担当者から外しました。エンジニアとしては引き続き入れます。"];
+        }
         DB::table('users')->where('id', $uid)->update(['active' => 0, 'left_at' => now_str(), 'token' => null, 'token_expires' => null, 'updated_at' => now_str()]);
         N::audit($actor->id ?? null, 'ses-user-leave', self::sesCompanyName($sesId).' '.$u->name);
         return ['type' => 'ok', 'msg' => "{$u->name} さんを退会済にしました。"];
@@ -188,10 +196,136 @@ class Workflow
         }
     }
 
+    // ---------- 兼任（1つのログインで、エンジニアと SES 担当者・管理者を兼ねる。2026-10-20） ----------
+    // 下の関数は、DB の行（DB::table('users') の結果）で判定する。画面の $u->role は「いまの立場」に差し替わっているため
+
+    // エンジニアと、SES 担当者（会社つき）か管理者を兼ねているか
+    public static function isDual(object $u): bool
+    {
+        if (empty($u->engineer_id)) return false;
+        $role = $u->role ?? '';
+        return $role === 'admin' || ($role === 'ses' && !empty($u->ses_id));
+    }
+
+    // その人が持つ立場（兼任なら2つ）
+    public static function rolesOf(object $u): array
+    {
+        if (!self::isDual($u)) return [$u->role];
+        return [$u->role, 'eg'];
+    }
+
+    // いま使える立場。eg＝エンジニアが退会済でも停止中でもない／ses＝会社が参加中／admin＝いつも使える
+    public static function usableRoles(object $u): array
+    {
+        $out = [];
+        foreach (self::rolesOf($u) as $role) {
+            if ($role === 'eg') {
+                $e = $u->engineer_id ? DB::table('engineers')->find($u->engineer_id) : null;
+                if ($e && $e->status !== 'left' && !$e->suspended_at) $out[] = 'eg';
+            } elseif ($role === 'ses') {
+                $s = $u->ses_id ? DB::table('ses_companies')->find($u->ses_id) : null;
+                if ($s && $s->status === 'active' && $s->kind === 'ses') $out[] = 'ses';
+            } else {
+                $out[] = $role;
+            }
+        }
+        return $out;
+    }
+
+    private static function usableUserRow(string $email)
+    {
+        return DB::table('users')->where('email', strtolower($email))->where('active', 1)->whereNull('left_at');
+    }
+
+    // エンジニアの役割を足せる人：同じ SES の担当者、または（実行者が管理者のとき）管理者。すでに別のエンジニアと兼任している人は除く
+    public static function egShareTarget(string $email, int $engineerSesId, $actor): ?object
+    {
+        $u = self::usableUserRow($email)->whereNull('engineer_id')->first();
+        if (!$u) return null;
+        if ($u->role === 'ses' && (int) $u->ses_id === $engineerSesId) return $u;
+        if ($u->role === 'admin' && ($actor->role ?? '') === 'admin') return $u;
+        return null;
+    }
+
+    // SES 担当者の役割を足せる人：同じ SES のエンジニアのアカウント
+    public static function sesShareTarget(string $email, int $sesId): ?object
+    {
+        $u = self::usableUserRow($email)->where('role', 'eg')->where('ses_id', $sesId)->whereNotNull('engineer_id')->first();
+        if (!$u) return null;
+        $e = DB::table('engineers')->find($u->engineer_id);
+        if (!$e || (int) $e->ses_id !== $sesId || $e->status === 'left') return null;
+        // 会社が守秘義務に同意済みでなければ、兼任にしない（SES の画面に入る前に同意が要るため）
+        return DB::table('ses_companies')->where('id', $sesId)->whereNotNull('agreed_at')->exists() ? $u : null;
+    }
+
+    // 管理者の役割を足せる人：エンジニアのアカウント
+    public static function adminShareTarget(string $email): ?object
+    {
+        $u = self::usableUserRow($email)->where('role', 'eg')->whereNotNull('engineer_id')->first();
+        if (!$u) return null;
+        $e = DB::table('engineers')->find($u->engineer_id);
+        return $e && $e->status !== 'left' ? $u : null;
+    }
+
+    // 担当者（または管理者）のアカウントに、エンジニアの役割を足す。管理者には「運営者の印」を付ける
+    public static function linkEngineer(int $userId, int $engineerId, $actor): void
+    {
+        $u = DB::table('users')->find($userId);
+        DB::table('users')->where('id', $userId)->update(['engineer_id' => $engineerId, 'updated_at' => now_str()]);
+        if ($u->role === 'admin') DB::table('engineers')->where('id', $engineerId)->update(['is_operator' => 1]);
+        N::audit($actor->id ?? null, 'dual-link', "#user {$userId} ← エンジニア #{$engineerId}");
+        if ((int) ($actor->id ?? 0) !== $userId) {
+            N::notify($userId, 'エンジニアとしても登録されました', 'ログインのとき「エンジニア」を選ぶと、エンジニアの画面に入れます。', '/eg', true, 'dual', 'eg');
+        }
+    }
+
+    // エンジニアのアカウントに、SES 担当者の役割を足す
+    public static function addSesRole(int $userId, $actor): void
+    {
+        DB::table('users')->where('id', $userId)->update(['role' => 'ses', 'updated_at' => now_str()]);
+        N::audit($actor->id ?? null, 'dual-add-ses', "#user {$userId}");
+        N::notify($userId, 'SES のご担当者としても登録されました', 'ログインのとき「SES 担当者」を選ぶと、SES の画面に入れます。', '/ses', true, 'dual', 'ses');
+    }
+
+    // エンジニアのアカウントに、管理者の役割を足す。$d は管理者の登録の画面の値（企業名・所属・電話・郵便番号・住所）
+    public static function addAdminRole(int $userId, array $d, $actor): void
+    {
+        $u = DB::table('users')->find($userId);
+        $upd = ['role' => 'admin', 'ses_id' => null, 'company_name' => clean_name($d['company_name'] ?? null), 'updated_at' => now_str()];
+        foreach (['position', 'phone', 'postal_code', 'address'] as $f) $upd[$f] = str_in($d[$f] ?? '');
+        DB::table('users')->where('id', $userId)->update($upd);
+        if ($u->engineer_id) DB::table('engineers')->where('id', $u->engineer_id)->update(['is_operator' => 1]);
+        N::audit($actor->id ?? null, 'dual-add-admin', "#user {$userId}");
+        N::notify($userId, '管理者としても登録されました', 'ログインのとき「管理者」を選ぶと、管理者の画面に入れます。', '/admin', true, 'dual', 'admin');
+    }
+
+    // 管理者が、自分のエンジニアに関わる操作をするとき：記録の頭に付ける印（公平性のため）。そうでなければ空
+    public static function selfMark($actor, ?int $engineerId): string
+    {
+        if (!$engineerId || base_role() !== 'admin' || ($actor->role ?? '') !== 'admin') return '';
+        $own = DB::table('users')->where('id', $actor->id ?? 0)->value('engineer_id');
+        return $own && (int) $own === (int) $engineerId ? '［本人］' : '';
+    }
+
     public static function invite(array $d, $actor, string $note = ''): ?object
     {
         $email = strtolower(trim((string) ($d['email'] ?? '')));
         if (!$email) return null;
+        // 兼任：すでにログインできる人に役割を足す（招待メールは送らない）
+        if ($d['role'] === 'eg' && !empty($d['engineer_id'])) {
+            $same = DB::table('users')->where('email', $email)->where('engineer_id', $d['engineer_id'])->whereIn('role', ['ses', 'admin'])->where('active', 1)->first();
+            if ($same) return $same; // すでにこのエンジニアと兼任している
+            if ($t = self::egShareTarget($email, (int) ($d['ses_id'] ?? 0), $actor)) {
+                self::linkEngineer($t->id, (int) $d['engineer_id'], $actor);
+                return DB::table('users')->find($t->id);
+            }
+        } elseif ($d['role'] === 'ses' && !empty($d['ses_id']) && ($t = self::sesShareTarget($email, (int) $d['ses_id']))) {
+            self::addSesRole($t->id, $actor);
+            return DB::table('users')->find($t->id);
+        } elseif ($d['role'] === 'admin' && ($t = self::adminShareTarget($email))) {
+            self::addAdminRole($t->id, $d, $actor);
+            return DB::table('users')->find($t->id);
+        }
         $u = DB::table('users')->where('email', $email)->first();
         if ($u && !$u->active) return null; // 停止中・退会済の人は招待しない
         if ($u && $u->password) return $u; // すでに使っている人は招待しない
@@ -454,12 +588,17 @@ class Workflow
         return $ini(mb_substr($parts[1], 0, 1)).'.'.$ini(mb_substr($parts[0], 0, 1));
     }
 
-    public static function createEngineer(int $sesId, array $d, $actor, bool $invite = true): int
+    // $linked：同じメールアドレスの担当者・管理者のアカウントに、エンジニアの役割を足したとき、その人の行が入る（招待は送らない）
+    public static function createEngineer(int $sesId, array $d, $actor, bool $invite = true, ?object &$linked = null): int
     {
         $v = self::engValues($d);
         $id = DB::table('engineers')->insertGetId($v + ['ses_id' => $sesId, 'created_at' => now_str(), 'updated_at' => now_str()]);
         N::audit($actor->id ?? null, 'engineer-create', "{$v['name']}（SES {$sesId}）");
-        if ($invite && $v['email']) self::invite(['email' => $v['email'], 'name' => $v['name'], 'role' => 'eg', 'ses_id' => $sesId, 'engineer_id' => $id], $actor);
+        $linked = null;
+        if ($v['email'] && ($t = self::egShareTarget($v['email'], $sesId, $actor))) {
+            self::linkEngineer($t->id, $id, $actor);
+            $linked = $t;
+        } elseif ($invite && $v['email']) self::invite(['email' => $v['email'], 'name' => $v['name'], 'role' => 'eg', 'ses_id' => $sesId, 'engineer_id' => $id], $actor);
         N::toAdmins('エンジニアが登録されました', "{$v['name']} さんが登録されました。経験票・スキルシートの作成を一緒に進めてください。", "/engineers/$id", false);
         return $id;
     }
@@ -469,7 +608,7 @@ class Workflow
         $old = DB::table('engineers')->find($id);
         $v = self::engValues($d, $old);
         DB::table('engineers')->where('id', $id)->update($v + ['updated_at' => now_str()]);
-        N::audit($actor->id, 'engineer-update', $v['name']);
+        N::audit($actor->id, 'engineer-update', self::selfMark($actor, $id).$v['name']);
         self::editedBy($id, $actor);
     }
 
@@ -607,7 +746,9 @@ class Workflow
             if (self::isDirect($sesId)) continue; // 直属は、操作した管理者への知らせが要らない
             N::toSes($sesId, "貴社のエンジニアに案件を配信しました：{$c->title}", "次の方に「{$c->title}」を配信しました。\n".implode("\n", $names)."\n\nご本人が応募を決めるほか、貴社から個別にご案内いただくこともできます。", "/cases/$caseId", true, 'offer-ses');
         }
-        N::audit($actor->id, 'distribute', "{$c->title} → {$count}名");
+        $mark = '';
+        foreach ($engineerIds as $eid) if ($mark === '') $mark = self::selfMark($actor, (int) $eid);
+        N::audit($actor->id, 'distribute', "{$mark}{$c->title} → {$count}名");
         return $count;
     }
 
@@ -641,7 +782,7 @@ class Workflow
         N::toAdmins("応募がありました：{$c->title}", "{$e->name} さんが「{$c->title}」に応募しました（{$who}から）。スキルシートを案件に合わせて整え、提出してください。", "/applications/$appId", true, 'apply');
         if (!self::isDirect($e->ses_id)) N::toSes($e->ses_id, "貴社のエンジニアが応募しました：{$c->title}", "{$e->name} さんが「{$c->title}」に応募しました。選考の進み具合は PARK でご確認いただけます。", "/applications/$appId", true, 'apply');
         if ($actor->role !== 'eg') N::toEg($engineerId, "案件に応募しました：{$c->title}", "「{$c->title}」に、{$who}からあなたの応募を出しました。条件に問題があれば、すぐにご連絡ください。", "/applications/$appId", true, 'apply');
-        N::audit($actor->id, 'apply', "{$e->name} → {$c->title}");
+        N::audit($actor->id, 'apply', self::selfMark($actor, $engineerId)."{$e->name} → {$c->title}");
         return $appId;
     }
 
@@ -682,7 +823,7 @@ class Workflow
         }
         // 直属の応募は、上の toSes が管理者に届くので、ここでは重ねて出さない
         if ($status === 'withdrawn' && !(isset($msgs[$status]) && self::isDirect($a->ses_id))) N::toAdmins("応募の取り下げ：{$a->title}", "{$a->eg_name} さんが応募を取り下げました。$note", "/applications/$appId", false);
-        N::audit($actor->id, 'app-status', "{$a->eg_name} / {$a->title} → $label");
+        N::audit($actor->id, 'app-status', self::selfMark($actor, $a->engineer_id)."{$a->eg_name} / {$a->title} → $label");
         self::refreshEngineerStatus($a->engineer_id);
     }
 
@@ -700,7 +841,7 @@ class Workflow
         N::toEg($a->engineer_id, "面談が決まりました：{$a->title}（{$round}回目）", "面談：{$whenText}\n\nこの案件に合わせた「面談対策の Q&A」を用意しました。面談の前に目を通し、自分の言葉で答えられるようにしておいてください。", "/interviews/$id", true, 'interview');
         N::toSes($a->ses_id, "面談が決まりました：{$a->title}", "面談：{$whenText}\n面談スクリプト（想定質問と答え方）を作りました。", "/interviews/$id", true, 'interview');
         if (($actor->role ?? '') === 'ses') N::toAdmins("SES から面談依頼の報告：{$a->title}", "{$a->eg_name} さん／面談：{$whenText}", "/interviews/$id", false, 'interview');
-        N::audit($actor->id, 'interview', "{$a->title} {$round}回目");
+        N::audit($actor->id, 'interview', self::selfMark($actor, $a->engineer_id)."{$a->title} {$round}回目");
         return $id;
     }
 
@@ -714,6 +855,7 @@ class Workflow
             $a = self::loadApp($iv->application_id);
             N::toEg($a->engineer_id, "面談を通過しました：{$a->title}", "{$iv->round}回目の面談を通過しました。".($feedback ? "\n感想：$feedback" : '')."\n次のご連絡をお待ちください。", "/applications/{$a->id}", true, 'status');
             N::toSes($a->ses_id, "面談通過：{$a->title}", "{$iv->round}回目の面談を通過しました。", "/applications/{$a->id}", true, 'status');
+            N::audit($actor->id ?? null, 'interview-result', self::selfMark($actor, $a->engineer_id)."{$a->eg_name} / {$a->title} {$iv->round}回目 通過");
         } else {
             self::setStatus($iv->application_id, 'rejected', $actor, '面談の受け答え', (string) $feedback);
         }
@@ -737,7 +879,7 @@ class Workflow
         if ($won >= ($a->headcount ?: 1)) DB::table('cases')->where('id', $a->case_id)->update(['status' => 'filled', 'updated_at' => now_str()]);
         N::toEg($a->engineer_id, "成約おめでとうございます：{$a->title}", "「{$a->title}」に決まりました。開始は {$start} です。\n最初の1か月に、困りごとがないか短くお話を聞かせてください（PARK のホームから記入できます）。\nこの案件を、経験票にも追加してください（ホームの「経歴の更新」から）。", "/eg", true, 'won');
         N::toSes($a->ses_id, "成約しました：{$a->title}", "{$a->eg_name} さんが「{$a->title}」に決まりました。\n契約：{$start}〜{$end}／".man($price).(self::isDirect($a->ses_id) ? '' : "\n成功報酬（初期費用）は、稼働開始の月の請求に含まれます。"), "/contracts/$kid", true, 'won');
-        N::audit($actor->id, 'contract', "{$a->eg_name} / {$a->title} ".man($price));
+        N::audit($actor->id, 'contract', self::selfMark($actor, $a->engineer_id)."{$a->eg_name} / {$a->title} ".man($price));
         return $kid;
     }
 
@@ -748,14 +890,14 @@ class Workflow
         DB::table('contracts')->where('id', $id)->update(['end_date' => $newEnd, 'extensions' => $k->extensions + 1, 'status' => 'active']);
         N::toSes($k->ses_id, "契約が延長されました：{$k->title}", "契約の終わりが {$newEnd} になりました。", "/contracts/$id", true, 'contract');
         N::toEg($k->engineer_id, "契約が延長されました：{$k->title}", "契約の終わりが {$newEnd} になりました。引き続きよろしくお願いします。", "/contracts/$id", true, 'contract');
-        N::audit($actor->id, 'contract-extend', "{$k->title} → $newEnd");
+        N::audit($actor->id, 'contract-extend', self::selfMark($actor, $k->engineer_id)."{$k->title} → $newEnd");
     }
 
     public static function endContract(int $id, array $d, $actor): void
     {
         $k = DB::table('contracts')->find($id);
         DB::table('contracts')->where('id', $id)->update(['status' => 'ended', 'end_date' => str_in($d['end_date'] ?? '') ?? ($k->end_date ?: today_str()), 'end_reason' => str_in($d['end_reason'] ?? '')]);
-        N::audit($actor->id, 'contract-end', "#$id ".($d['end_reason'] ?? ''));
+        N::audit($actor->id, 'contract-end', self::selfMark($actor, $k->engineer_id)."#$id ".($d['end_reason'] ?? ''));
         self::refreshEngineerStatus($k->engineer_id);
         $title = DB::table('cases')->where('id', $k->case_id)->value('title');
         N::toEg($k->engineer_id, "経歴を更新してください：{$title}", "「{$title}」が終わりました。おつかれさまでした。\n終わった月、担当したこと、成果を経験票に書いてください（ホームの「経歴の更新」から）。次の案件のスキルシートに使います。", '/eg', true, 'history');

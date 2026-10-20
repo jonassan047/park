@@ -36,7 +36,8 @@ class SesController extends Controller
         $list = DB::table('engineers as e')->where('e.ses_id', $r->user()->ses_id)->select('e.*')
             ->selectSub(DB::table('engineer_projects')->whereColumn('engineer_id', 'e.id')->selectRaw('count(*)'), 'projs')->orderBy('e.name')->get();
         $skills = DB::table('engineer_skills')->whereIn('engineer_id', $list->pluck('id'))->get()->groupBy('engineer_id');
-        $users = DB::table('users')->where('role', 'eg')->whereIn('engineer_id', $list->pluck('id'))->get()->keyBy('engineer_id');
+        // ログインの状態：兼任の人も engineer_id で探す（管理者との兼任かどうかは、ここには出さない）
+        $users = DB::table('users')->whereIn('engineer_id', $list->pluck('id'))->orderByRaw("case when role = 'eg' then 1 else 0 end")->get()->keyBy('engineer_id');
         foreach ($list as $e) {
             $e->skills = implode('、', ($skills[$e->id] ?? collect())->pluck('name')->all());
             $e->account = user_state($users[$e->id] ?? null);

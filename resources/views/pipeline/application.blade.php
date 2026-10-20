@@ -4,7 +4,7 @@
 <div class="cols"><div>
 <x-card title="応募の内容"><dl class="dl">
 <dt>案件</dt><dd><a href="{{ url('/cases/'.$a->case_id) }}">{{ $a->title }}</a></dd>
-<dt>エンジニア</dt><dd><a href="{{ url('/engineers/'.$a->engineer_id) }}">{{ $a->eg_name }}</a></dd>
+<dt>エンジニア</dt><dd><a href="{{ url('/engineers/'.$a->engineer_id) }}">{{ $a->eg_name }}</a>@if($u->role === 'admin' && base_role() === 'admin' && (int) $u->engineer_id === (int) $a->engineer_id) <span class="badge warn">管理者ご本人の応募</span>@endif</dd>
 <dt>SES</dt><dd>{{ $a->ses_name }}</dd><dt>状態</dt><dd>{{ badge('appStatus', $a->status) }}</dd>
 <dt>提示の金額</dt><dd>{{ man($a->proposed_price) }}</dd><dt>応募日</dt><dd>{{ fmt_dt($a->applied_at) }}</dd>
 <dt>開始に間に合う</dt><dd>{{ $yes($a->start_ok) }}</dd><dt>金額</dt><dd>{{ $yes($a->price_ok) }}</dd><dt>働き方・場所</dt><dd>{{ $yes($a->style_ok) }}</dd>

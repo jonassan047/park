@@ -128,7 +128,7 @@ class AdminAccountTest extends TestCase
     {
         $this->pendingAdmin('inv-a@park.example');
         DB::table('users')->where('email', 'eg2@park.example')->update(['active' => 0]);
-        foreach (['ses1@park.example', 'eg1@park.example', 'inv-a@park.example', 'INV-A@Park.Example', 'ADMIN@park.example', 'eg2@park.example'] as $email) {
+        foreach (['ses1@park.example', 'inv-a@park.example', 'INV-A@Park.Example', 'ADMIN@park.example', 'eg2@park.example'] as $email) {
             $u0 = $this->users(); $m0 = DB::table('mail_outbox')->count();
             $this->as('admin@park.example')->post('/admin/admins', ['name' => '重複 太郎', 'company_name' => '重複企業', 'email' => $email])
                 ->assertSessionHas('flash.type', 'bad')->assertSessionHas('flash.msg', 'このメールアドレスはすでに使われています。');

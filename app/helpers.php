@@ -262,6 +262,18 @@ function str_in($v): ?string
     return $v === '' ? null : $v;
 }
 
+// 兼任（エンジニアと、SES 担当者・管理者を兼ねる）の人か。ActingRole ミドルウェアが、この要求の間だけ覚えておく
+function is_dual(): bool
+{
+    return (bool) request()->attributes->get('park_dual', false);
+}
+
+// 兼任の人の、DB の本来の役割（いまの立場ではなく users.role）。兼任でなければ null
+function base_role(): ?string
+{
+    return is_dual() ? request()->attributes->get('park_base_role') : null;
+}
+
 // 詳細画面の「一覧に戻る」の行き先（役割ごと）
 function list_url(string $kind): string
 {

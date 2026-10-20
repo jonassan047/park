@@ -21,6 +21,9 @@ class AiJobs
 
     private static function queue(string $kind, string $refType, int $refId, array $input, $actor): int
     {
+        // 作った人のそのときの立場を残す（兼任の人に、できあがりの知らせをその立場あてで出すため）
+        // 先頭に置く（engineers の画面が input の末尾の "engineer_id":N} で下書きを探すため）
+        $input = ['actor_role' => $actor->role ?? null] + $input;
         $id = DB::table('ai_jobs')->insertGetId(['kind' => $kind, 'ref_type' => $refType, 'ref_id' => $refId, 'input' => json_encode($input, JSON_UNESCAPED_UNICODE),
             'status' => 'queued', 'created_by' => $actor->id ?? null, 'created_at' => now_str()]);
         N::audit($actor->id ?? null, 'ai-queue', self::KINDS[$kind]." #$id");
@@ -131,7 +134,7 @@ class AiJobs
             'error' => $ok ? null : ($error ?: ($j->kind === 'script' ? 'AI の答えの形が違うか、項目の数が合いませんでした。もう一度頼んでください' : 'AI の答えの形が違いました。もう一度頼んでください'))]);
         if ($ok && $j->created_by) {
             $link = $j->ref_type === 'interview' ? "/interviews/{$j->ref_id}" : '/engineers/'.(json_decode($j->input, true)['engineer_id'] ?? '').'#docs';
-            N::notify((int) $j->created_by, 'AI の下書きができました：'.self::KINDS[$j->kind], '中身を確かめて、採用するか捨ててください。', $link, false, 'ai');
+            N::notify((int) $j->created_by, 'AI の下書きができました：'.self::KINDS[$j->kind], '中身を確かめて、採用するか捨ててください。', $link, false, 'ai', json_decode($j->input, true)['actor_role'] ?? null);
         }
     }
 }

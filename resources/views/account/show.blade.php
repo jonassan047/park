@@ -7,6 +7,7 @@
 @endphp
 <div class="grid2">
 <x-card title="基本"><p><a href="{{ url('/account/profile') }}">登録情報を見る</a></p>
+@if(is_dual())<p class="muted">このアカウントの立場：{{ base_role() === 'admin' ? '管理者' : 'SES 担当者（'.DB::table('ses_companies')->where('id', $u->ses_id)->value('name').'）' }}・エンジニア</p>@endif
 <form method="post" action="{{ url('/account') }}">@csrf
 <div class="pair">
 <x-field label="氏名（姓）" name="name_sei" :value="$nameSei" />

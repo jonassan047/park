@@ -236,7 +236,7 @@ class EmptyStateTest extends TestCase
         $e = DB::table('engineers')->where('name', '経験 有り')->first();
         $uid = DB::table('users')->where('email', 'exp@example.com')->value('id');
         DB::table('users')->where('id', $uid)->update(['password' => bcrypt('abcd1234'), 'profile_completed_at' => now_str()]);
-        DB::table('engineers')->where('id', $e->id)->update(['self_confirmed_at' => now_str()]);
+        DB::table('engineers')->where('id', $e->id)->update(['self_confirmed_at' => now_str(), 'consent_at' => now_str()]);
         $this->as('exp@example.com')->get('/eg')->assertOk()->assertSee('経験票を入れましょう')->assertSee('いまは届いていません。');
         DB::table('engineer_projects')->insert(['engineer_id' => $e->id, 'title' => '過去の案件']);
         $this->get('/eg')->assertOk()->assertDontSee('経験票を入れましょう');

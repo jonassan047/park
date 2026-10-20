@@ -51,6 +51,7 @@ class PurgeSamplesTest extends TestCase
         $eid = W::createEngineer(W::directSesId(), ['name' => '実在 直属', 'email' => 'real-eg@example.com'], $admin);
         $uid = DB::table('users')->where('email', 'real-eg@example.com')->value('id');
         DB::table('users')->where('id', $uid)->update(['password' => bcrypt('abcd1234'), 'profile_completed_at' => now_str()]);
+        DB::table('engineers')->where('id', $eid)->update(['consent_at' => now_str()]); // 同意済み（未同意だと /eg/consent へ送られる）
         return [$admin, $eid];
     }
 
