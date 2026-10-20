@@ -167,23 +167,20 @@ class AdminController extends Controller
         return view('admin.ses-user-new', ['s' => $this->sesOrFail($id)]);
     }
 
-    // SES を消す。エンジニア・案件・契約・請求が残っているときは消さない（先にそれらを片づける）
+    // SES を退会済にする（記録は残す）。所属エンジニアも退会済にし、ログインできなくする。稼働中の契約があるときはできない
     public function sesDelete(Request $r, int $id)
     {
         $s = $this->sesOrFail($id);
-        $left = [];
-        if (DB::table('engineers')->where('ses_id', $id)->exists()) $left[] = 'エンジニア';
-        if (DB::table('cases')->where('source_ses_id', $id)->exists()) $left[] = '案件';
-        if (DB::table('applications')->where('ses_id', $id)->exists()) $left[] = '応募';
-        if (DB::table('contracts')->where('ses_id', $id)->exists()) $left[] = '契約';
-        if (DB::table('invoices')->where('ses_id', $id)->exists()) $left[] = '請求';
-        if ($left) return $this->go("/admin/ses/$id", '削除できません。先に、この SES の'.implode('・', $left).'をなくしてください。', 'bad');
+        if ($s->status === 'left') return $this->go("/admin/ses/$id", 'すでに退会済です。');
+        if (DB::table('contracts')->where('ses_id', $id)->where('status', 'active')->exists()) return $this->go("/admin/ses/$id", '退会にできません。稼働中の契約があります。先に契約を終了してください。', 'bad');
         DB::transaction(function () use ($id) {
-            DB::table('users')->where('ses_id', $id)->where('role', 'ses')->delete();
-            DB::table('ses_companies')->where('id', $id)->delete();
+            $egIds = DB::table('engineers')->where('ses_id', $id)->pluck('id');
+            DB::table('engineers')->where('ses_id', $id)->update(['status' => 'left']);
+            DB::table('users')->where(fn ($q) => $q->where('ses_id', $id)->orWhereIn('engineer_id', $egIds))->whereIn('role', ['ses', 'eg'])->update(['active' => 0]);
+            DB::table('ses_companies')->where('id', $id)->update(['status' => 'left']);
         });
-        N::audit($r->user()->id, 'ses-delete', $s->name);
-        return $this->go('/admin/ses', 'SES「'.$s->name.'」を削除しました。');
+        N::audit($r->user()->id, 'ses-leave', $s->name);
+        return $this->go("/admin/ses/$id", 'SES「'.$s->name.'」と所属エンジニアを退会済にしました。');
     }
 
     public function sesUpdate(Request $r, int $id)

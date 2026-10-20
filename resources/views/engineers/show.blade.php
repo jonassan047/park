@@ -7,7 +7,7 @@
 @if(!$mine && $e->email && !($eu && $eu->password))
 <x-post :action="'/engineers/'.$e->id.'/invite'" label="招待を送る" cls="small" />
 @endif
-@if(!$mine && $u->role !== 'eg')<x-post :action="'/engineers/'.$e->id.'/delete'" label="削除" cls="danger small" confirm="このエンジニアを削除します。経験票・応募・書類・アカウントも消え、元に戻せません。よろしいですか？" />@endif
+@if(!$mine && $u->role !== 'eg' && $e->status !== 'left')<x-post :action="'/engineers/'.$e->id.'/delete'" label="退会にする" cls="danger small" confirm="このエンジニアを退会済にします。ログインできなくなります（記録は残ります）。よろしいですか？" />@endif
 </x-slot:actions>
 <dl class="dl">
 <dt>氏名</dt><dd>{{ $e->name }} <span class="muted">{{ $e->kana }}（{{ $e->initials ?: '—' }}）</span></dd>

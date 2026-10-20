@@ -272,25 +272,28 @@ class UiUnifyTest extends TestCase
         $this->assertStringContainsString(url('/admin/ses/1/edit'), $show);
         $this->get('/admin/ses/1/edit')->assertOk()->assertSee('戻る');
         $this->get('/admin/ses/1/users/new')->assertOk()->assertSee('戻る');
-        $this->get('/engineers/1')->assertOk()->assertSee('エンジニアの一覧に戻る')->assertSee('削除');
+        $this->get('/engineers/1')->assertOk()->assertSee('エンジニアの一覧に戻る')->assertSee('退会にする');
         $this->get('/cases/1')->assertOk()->assertSee('案件の一覧に戻る');
     }
 
-    public function test_ses_delete_refused_while_engineers_remain(): void
+    public function test_ses_and_engineer_leave(): void
     {
         $this->admin();
-        $this->post('/admin/ses/1/delete')->assertSessionHas('flash.type', 'bad');
-        $this->assertDatabaseHas('ses_companies', ['id' => 1]);
+        $egs = \DB::table('engineers')->where('ses_id', 1)->pluck('id');
+        \DB::table('contracts')->where('ses_id', 1)->update(['status' => 'ended']);
+        $this->post('/admin/ses/1/delete')->assertSessionHas('flash.type', 'ok');
+        $this->assertDatabaseHas('ses_companies', ['id' => 1, 'status' => 'left']);
+        foreach ($egs as $i) $this->assertDatabaseHas('engineers', ['id' => $i, 'status' => 'left']);
+        $this->assertSame(0, \DB::table('users')->where('ses_id', 1)->where('active', 1)->count());
+        $this->get('/admin/ses/1')->assertOk()->assertSee('退会済');
     }
 
-    public function test_engineer_delete(): void
+    public function test_leave_refused_while_contract_active(): void
     {
         $this->admin();
-        $id = \DB::table('engineers')->whereNotIn('id', \DB::table('contracts')->pluck('engineer_id'))->value('id');
-        $this->assertNotNull($id);
-        $this->post("/engineers/$id/delete")->assertRedirect('/admin/engineers');
-        $this->assertDatabaseMissing('engineers', ['id' => $id]);
-        $cid = \DB::table('contracts')->value('engineer_id');
-        if ($cid) { $this->post("/engineers/$cid/delete")->assertSessionHas('flash.type', 'bad'); $this->assertDatabaseHas('engineers', ['id' => $cid]); }
+        $k = \DB::table('contracts')->where('status', 'active')->first();
+        if (!$k) { $this->markTestSkipped('稼働中の契約がない'); }
+        $this->post("/admin/ses/{$k->ses_id}/delete")->assertSessionHas('flash.type', 'bad');
+        $this->post("/engineers/{$k->engineer_id}/delete")->assertSessionHas('flash.type', 'bad');
     }
 }

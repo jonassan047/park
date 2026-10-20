@@ -6,8 +6,8 @@ use Illuminate\Support\HtmlString;
 
 const PARK_LABELS = [
     'role' => ['admin' => '管理者', 'ses' => 'SES', 'eg' => 'エンジニア'],
-    'sesStatus' => ['pending' => '申込中', 'active' => '参加中', 'suspended' => '停止'],
-    'engStatus' => ['available' => '待機中', 'proposing' => '提案中', 'working' => '稼働中', 'unavailable' => '休止'],
+    'sesStatus' => ['pending' => '申込中', 'active' => '参加中', 'suspended' => '停止', 'left' => '退会済'],
+    'engStatus' => ['available' => '待機中', 'proposing' => '提案中', 'working' => '稼働中', 'unavailable' => '休止', 'left' => '退会済'],
     'caseStatus' => ['draft' => '下書き', 'open' => '募集中', 'filled' => '充足', 'closed' => '終了'],
     'offerStatus' => ['sent' => '配信済み', 'viewed' => '既読', 'declined' => '見送り', 'applied' => '応募'],
     'appStatus' => ['applied' => '応募', 'submitted' => '書類提出', 'doc_passed' => '書類通過', 'interview' => '面談調整', 'interviewed' => '面談済み', 'won' => '成約', 'rejected' => '見送り', 'withdrawn' => '辞退', 'note' => 'メモ'],
@@ -23,7 +23,7 @@ const PARK_REJECT_REASONS = ['スキル・経験の不足', '経験年数', '単
 const PARK_FUNNEL = ['applied', 'submitted', 'doc_passed', 'interview', 'interviewed', 'won'];
 const PARK_PHASES = ['要件定義', '基本設計', '詳細設計', '実装', '単体テスト', '結合テスト', '総合テスト', '運用・保守', 'マネジメント'];
 const PARK_TONE = [
-    'pending' => 'warn', 'active' => 'ok', 'suspended' => 'mute', 'available' => 'ok', 'proposing' => 'info', 'working' => 'strong', 'unavailable' => 'mute',
+    'pending' => 'warn', 'active' => 'ok', 'suspended' => 'mute', 'left' => 'mute', 'available' => 'ok', 'proposing' => 'info', 'working' => 'strong', 'unavailable' => 'mute',
     'draft' => 'mute', 'open' => 'ok', 'filled' => 'strong', 'closed' => 'mute', 'sent' => 'info', 'viewed' => 'info', 'declined' => 'mute',
     'applied' => 'info', 'submitted' => 'info', 'doc_passed' => 'ok', 'interview' => 'warn', 'interviewed' => 'warn', 'won' => 'strong', 'rejected' => 'mute', 'withdrawn' => 'mute',
     'pass' => 'ok', 'fail' => 'mute', 'ended' => 'mute', 'issued' => 'warn', 'paid' => 'ok', 'queued' => 'warn', 'failed' => 'bad', 'saved' => 'mute',

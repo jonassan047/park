@@ -2,9 +2,9 @@
 @section('content')
 <div class="cols"><div>
 <x-card title="会社情報"><x-slot:actions><a class="btn small" href="{{ url('/admin/ses/'.$s->id.'/edit') }}">編集</a>
-@if($s->status !== 'active')<x-post :action="'/admin/ses/'.$s->id.'/approve'" label="承認して招待を送る" cls="small" confirm="参加を承認し、担当の方に招待メールを送ります。" />@endif
+@if(in_array($s->status, ['pending', 'suspended']))<x-post :action="'/admin/ses/'.$s->id.'/approve'" label="承認して招待を送る" cls="small" confirm="参加を承認し、担当の方に招待メールを送ります。" />@endif
 @if($s->status === 'active')<x-post :action="'/admin/ses/'.$s->id.'/suspend'" label="停止する" cls="ghost small" confirm="停止すると、この SES の担当者はログインできなくなります。" />@endif
-<x-post :action="'/admin/ses/'.$s->id.'/delete'" label="削除" cls="danger small" confirm="この SES を削除します。担当者のアカウントも消え、元に戻せません。よろしいですか？" />
+@if($s->status !== 'left')<x-post :action="'/admin/ses/'.$s->id.'/delete'" label="退会にする" cls="danger small" confirm="この SES と所属エンジニアを退会済にします。全員ログインできなくなります（記録は残ります）。よろしいですか？" />@endif
 </x-slot:actions><dl class="dl">
 <dt>状態</dt><dd>{{ badge('sesStatus', $s->status) }}</dd><dt>代表者</dt><dd>{{ $s->rep_name ?: '—' }}</dd><dt>担当</dt><dd>{{ $s->contact_name ?: '—' }}</dd>
 <dt>メール</dt><dd>{{ $s->email ?: '—' }}</dd><dt>電話</dt><dd>{{ $s->phone ?: '—' }}</dd><dt>所在地</dt><dd>{{ postal_address($s->postal_code, $s->address) }}</dd>
