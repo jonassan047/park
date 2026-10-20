@@ -131,6 +131,13 @@ class Workflow
         return ['name' => $full, 'name_sei' => self::cut50($sei), 'name_mei' => self::cut50($mei)];
     }
 
+    // ふりがなの列（姓・名の2欄。つないだ kana も残す）
+    public static function kanaCols(array $d): array
+    {
+        $ks = clean_name($d['kana_sei'] ?? null); $km = clean_name($d['kana_mei'] ?? null);
+        return ['kana_sei' => self::cut50($ks), 'kana_mei' => self::cut50($km), 'kana' => join_name($ks, $km)];
+    }
+
     // SES の代表者・担当者の氏名の列（姓・名の2欄、または古い1欄から）
     public static function sesPeopleCols(array $d): array
     {
@@ -186,7 +193,7 @@ class Workflow
         // 未設定の人でも、立場（役割・SES・エンジニア）が依頼と違うなら招待しない（別の立場のリンクを渡さないため）
         if ($u && ($u->role !== $d['role'] || (int) $u->ses_id !== (int) ($d['ses_id'] ?? 0) || (int) $u->engineer_id !== (int) ($d['engineer_id'] ?? 0))) return null;
         if (!$u) {
-            $row = ['email' => $email] + self::nameCols((string) $d['name'], $d['name_sei'] ?? null, $d['name_mei'] ?? null) + ['role' => $d['role'], 'ses_id' => $d['ses_id'] ?? null,
+            $row = ['email' => $email] + self::nameCols((string) $d['name'], $d['name_sei'] ?? null, $d['name_mei'] ?? null) + self::kanaCols($d) + ['role' => $d['role'], 'ses_id' => $d['ses_id'] ?? null,
                 'engineer_id' => $d['engineer_id'] ?? null, 'created_at' => now_str(), 'updated_at' => now_str()];
             // 企業名は管理者だけ（宛名に出る）
             // 所属・役職・電話・郵便番号・住所も管理者だけ（呼ぶ側で検査・そろえ済みの値を渡す）
@@ -254,11 +261,17 @@ class Workflow
         if (isset($ad['bad'])) return $bad($ad['bad']);
         $extra += $ad['ok'];
 
+        $ks = clean_name($d['kana_sei'] ?? null); $km = clean_name($d['kana_mei'] ?? null);
+        if (mb_strlen((string) $ks) > 50 || mb_strlen((string) $km) > 50) return $bad('ふりがなは姓・名とも50文字までです。');
         $name = join_name($sei, $mei);
         $upd = [];
         // 姓・名の列が空の古い行は、つないだ name を分けたものを基準にする（何も変えずに保存したら「変化なし」）
         [$curSei, $curMei] = ($u->name_sei || $u->name_mei) ? [$u->name_sei, $u->name_mei] : split_name($u->name);
         if ($sei !== $curSei || $mei !== $curMei) $upd += ['name_sei' => $sei, 'name_mei' => $mei, 'name' => $name];
+        if (array_key_exists('kana_sei', $d) || array_key_exists('kana_mei', $d)) {
+            [$curKs, $curKm] = ($u->kana_sei || $u->kana_mei) ? [$u->kana_sei, $u->kana_mei] : split_name($u->kana);
+            if ($ks !== $curKs || $km !== $curKm) $upd += ['kana_sei' => $ks, 'kana_mei' => $km, 'kana' => join_name($ks, $km)];
+        }
         if ($company !== $u->company_name) $upd['company_name'] = $company;
         if ($emailChanged) $upd['email'] = $new;
         $changedExtra = [];

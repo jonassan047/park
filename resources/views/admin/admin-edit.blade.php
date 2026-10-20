@@ -3,6 +3,7 @@
 @php
     // 姓・名の列がまだ空の人は、つないだ name から分けて出す
     [$nameSei, $nameMei] = ($u->name_sei || $u->name_mei) ? [$u->name_sei, $u->name_mei] : split_name($u->name);
+    [$kanaSei, $kanaMei] = ($u->kana_sei || $u->kana_mei) ? [$u->kana_sei, $u->kana_mei] : split_name($u->kana);
     $state = !$u->active ? '停止' : ($u->password ? '使用中' : '招待中');
     $self = (int) $u->id === (int) auth()->id();
     $emailFixed = $self || !$u->active || $u->password; // 変えられるのは、招待中の他人だけ
@@ -15,6 +16,10 @@
 <div class="pair">
 <x-field label="氏名（姓）" name="name_sei" :value="$nameSei" required />
 <x-field label="氏名（名）" name="name_mei" :value="$nameMei" />
+</div>
+<div class="pair">
+<x-field label="ふりがな（姓）" name="kana_sei" :value="$kanaSei" placeholder="やまだ" />
+<x-field label="ふりがな（名）" name="kana_mei" :value="$kanaMei" placeholder="たろう" />
 </div>
 <x-field label="企業名" name="company_name" :value="$u->company_name" required hint="メールの差出人の名前にも使います。" />
 <x-field label="所属・役職" name="position" :value="$u->position" />

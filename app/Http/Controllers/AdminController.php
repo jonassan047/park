@@ -225,7 +225,7 @@ class AdminController extends Controller
         if ($email && DB::table('users')->where('email', $email)->where('active', 0)->exists()) return $this->go("/admin/ses/$id", 'このメールアドレスは使えません（停止中か退会済です）。', 'bad');
         if (!$email || DB::table('users')->where('email', $email)->whereNotNull('password')->exists()) return $this->go("/admin/ses/$id", 'このメールアドレスは使えません（空か、すでに使われています）。', 'bad');
         [$full, $sei, $mei] = name_parts($r->all(), 'name', 'name');
-        if (!W::invite(['email' => $email, 'name' => (string) $full, 'name_sei' => $sei, 'name_mei' => $mei, 'role' => 'ses', 'ses_id' => $id], $r->user())) {
+        if (!W::invite(['email' => $email, 'name' => (string) $full, 'name_sei' => $sei, 'name_mei' => $mei, 'kana_sei' => $r->input('kana_sei'), 'kana_mei' => $r->input('kana_mei'), 'role' => 'ses', 'ses_id' => $id], $r->user())) {
             return $this->go("/admin/ses/$id", 'このメールアドレスには招待を出せません（ほかの立場の人が使っています）。', 'bad');
         }
         return $this->go("/admin/ses/$id", '担当者を登録し、招待メールを送りました。');
@@ -444,6 +444,7 @@ class AdminController extends Controller
         if ($name === null) return $bad('担当者名（姓）を入れてください。');
         if ($company === null) return $bad('企業名を入れてください。');
         if (mb_strlen((string) $sei) > 50 || mb_strlen((string) $mei) > 50) return $bad('担当者名は、姓・名とも50文字までです。');
+        if (mb_strlen((string) $r->input('kana_sei')) > 50 || mb_strlen((string) $r->input('kana_mei')) > 50) return $bad('ふりがなは、姓・名とも50文字までです。');
         if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) return $bad('メールアドレスを正しく入れてください。');
         if (mb_strlen($company) > 100) return $bad('企業名は100文字までです。');
         if (DB::table('users')->where('email', $email)->exists()) return $bad('このメールアドレスはすでに使われています。');
@@ -453,7 +454,7 @@ class AdminController extends Controller
         if ($phone !== null && (mb_strlen($phone) > 30 || !preg_match('/^[0-9+\-() ]*$/', $phone))) return $bad('電話番号は30文字までの、数字・+・-・()・空白で入れてください。');
         $ad = W::addressCols($r->only(['postal_code', 'address']));
         if (isset($ad['bad'])) return $bad($ad['bad']);
-        W::invite(['email' => $email, 'name' => $name, 'name_sei' => $sei, 'name_mei' => $mei, 'role' => 'admin', 'company_name' => $company,
+        W::invite(['email' => $email, 'name' => $name, 'name_sei' => $sei, 'name_mei' => $mei, 'kana_sei' => $r->input('kana_sei'), 'kana_mei' => $r->input('kana_mei'), 'role' => 'admin', 'company_name' => $company,
             'position' => $position, 'phone' => $phone] + $ad['ok'], $r->user());
         return $this->go('/admin/admins', '登録し、招待メールを送りました。');
     }
@@ -477,7 +478,7 @@ class AdminController extends Controller
     public function adminUpdate(Request $r, int $id)
     {
         abort_unless(DB::table('users')->where('id', $id)->where('role', 'admin')->exists(), 404);
-        $res = W::updateAdmin($id, $r->only(['name_sei', 'name_mei', 'company_name', 'email', 'position', 'phone', 'postal_code', 'address']), $r->user());
+        $res = W::updateAdmin($id, $r->only(['name_sei', 'name_mei', 'kana_sei', 'kana_mei', 'company_name', 'email', 'position', 'phone', 'postal_code', 'address']), $r->user());
         if ($res['type'] === 'bad') return back()->withInput()->with('flash', ['msg' => $res['msg'], 'type' => 'bad']);
         return $this->go("/admin/admins/$id", $res['msg'], $res['type']);
     }
