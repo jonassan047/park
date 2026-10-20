@@ -123,7 +123,7 @@ class AdminController extends Controller
     {
         if (!str_in($r->input('name'))) return back()->withInput()->with('flash', ['msg' => '会社名を入れてください。', 'type' => 'bad']);
         $email = strtolower((string) str_in($r->input('email')));
-        if ($email && clean_name($r->input('contact_name')) === null) return back()->withInput()->with('flash', ['msg' => '担当者名を入れてください（招待メールの宛名になります）。', 'type' => 'bad']);
+        if ($email && name_parts($r->all(), 'contact', 'contact_name')[0] === null) return back()->withInput()->with('flash', ['msg' => '担当者名を入れてください（招待メールの宛名になります）。', 'type' => 'bad']);
         if ($email && !filter_var($email, FILTER_VALIDATE_EMAIL)) return back()->withInput()->with('flash', ['msg' => 'メールアドレスを正しく入れてください。', 'type' => 'bad']);
         if ($email && DB::table('users')->where('email', $email)->exists()) return back()->withInput()->with('flash', ['msg' => 'このメールアドレスはすでに使われています。', 'type' => 'bad']);
         // 管理者が登録した SES は、承認の手順を省いて、すぐ参加中にする（担当者のメールがあれば招待が届く）
@@ -156,7 +156,7 @@ class AdminController extends Controller
     {
         $this->sesOrFail($id);
         DB::table('ses_companies')->where('id', $id)->update([
-            'name' => str_in($r->input('name')), 'rep_name' => str_in($r->input('rep_name')), 'contact_name' => str_in($r->input('contact_name')),
+            'name' => str_in($r->input('name')), ...W::sesPeopleCols($r->all()),
             'email' => strtolower((string) str_in($r->input('email'))) ?: null, 'phone' => str_in($r->input('phone')), 'address' => str_in($r->input('address')),
             'employees' => int_or_null($r->input('employees')), 'strengths' => str_in($r->input('strengths')), 'notes' => str_in($r->input('notes')), 'updated_at' => now_str(),
             'self_confirmed_at' => null, // 管理者が書き換えたら、SES にもう一度確かめてもらう
@@ -184,7 +184,8 @@ class AdminController extends Controller
         $this->sesOrFail($id);
         $email = strtolower((string) str_in($r->input('email')));
         if (!$email || DB::table('users')->where('email', $email)->whereNotNull('password')->exists()) return $this->go("/admin/ses/$id", 'このメールアドレスは使えません（空か、すでに使われています）。', 'bad');
-        W::invite(['email' => $email, 'name' => (string) str_in($r->input('name')), 'role' => 'ses', 'ses_id' => $id], $r->user());
+        [$full, $sei, $mei] = name_parts($r->all(), 'name', 'name');
+        W::invite(['email' => $email, 'name' => (string) $full, 'name_sei' => $sei, 'name_mei' => $mei, 'role' => 'ses', 'ses_id' => $id], $r->user());
         return $this->go("/admin/ses/$id", '招待メールを送りました。');
     }
 
@@ -365,17 +366,16 @@ class AdminController extends Controller
 
     public function admins(Request $r)
     {
-        $name = clean_name($r->input('name')); $company = clean_name($r->input('company_name'));
+        [$name, $sei, $mei] = name_parts($r->all(), 'name', 'name'); $company = clean_name($r->input('company_name'));
         $email = strtolower(trim((string) $r->input('email')));
         $bad = fn (string $msg) => back()->withInput()->with('flash', ['msg' => $msg, 'type' => 'bad']);
-        if ($name === null) return $bad('担当者名を入れてください。');
+        if ($name === null) return $bad('担当者名（姓）を入れてください。');
         if ($company === null) return $bad('企業名を入れてください。');
-        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) return $bad('メールアドレスを正しく入れてください。');
-        [$sei, $mei] = split_name($name); // 姓・名に分けたとき、どちらも50文字まで
         if (mb_strlen((string) $sei) > 50 || mb_strlen((string) $mei) > 50) return $bad('担当者名は、姓・名とも50文字までです。');
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) return $bad('メールアドレスを正しく入れてください。');
         if (mb_strlen($company) > 100) return $bad('企業名は100文字までです。');
         if (DB::table('users')->where('email', $email)->exists()) return $bad('このメールアドレスはすでに使われています。');
-        W::invite(['email' => $email, 'name' => $name, 'role' => 'admin', 'company_name' => $company], $r->user());
+        W::invite(['email' => $email, 'name' => $name, 'name_sei' => $sei, 'name_mei' => $mei, 'role' => 'admin', 'company_name' => $company], $r->user());
         return $this->go('/admin/settings', '登録し、招待メールを送りました。');
     }
 

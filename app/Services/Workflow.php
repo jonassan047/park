@@ -26,10 +26,18 @@ class Workflow
     }
 
     // 1つの欄の氏名を、name と姓・名の列にして返す（1欄の入口：初めの設定・招待・担当者の追加など）
-    public static function nameCols(string $full): array
+    public static function nameCols(string $full, ?string $sei = null, ?string $mei = null): array
     {
-        [$sei, $mei] = split_name($full);
+        if ($sei === null && $mei === null) [$sei, $mei] = split_name($full);
         return ['name' => $full, 'name_sei' => self::cut50($sei), 'name_mei' => self::cut50($mei)];
+    }
+
+    // SES の代表者・担当者の氏名の列（姓・名の2欄、または古い1欄から）
+    public static function sesPeopleCols(array $d): array
+    {
+        [$rep, $rs, $rm] = name_parts($d, 'rep', 'rep_name');
+        [$con, $cs, $cm] = name_parts($d, 'contact', 'contact_name');
+        return ['rep_name' => $rep, 'rep_sei' => self::cut50($rs), 'rep_mei' => self::cut50($rm), 'contact_name' => $con, 'contact_sei' => self::cut50($cs), 'contact_mei' => self::cut50($cm)];
     }
 
     private static function cut50(?string $s): ?string
@@ -60,7 +68,7 @@ class Workflow
         // 未設定の人でも、立場（役割・SES・エンジニア）が依頼と違うなら招待しない（別の立場のリンクを渡さないため）
         if ($u && ($u->role !== $d['role'] || (int) $u->ses_id !== (int) ($d['ses_id'] ?? 0) || (int) $u->engineer_id !== (int) ($d['engineer_id'] ?? 0))) return null;
         if (!$u) {
-            $row = ['email' => $email] + self::nameCols((string) $d['name']) + ['role' => $d['role'], 'ses_id' => $d['ses_id'] ?? null,
+            $row = ['email' => $email] + self::nameCols((string) $d['name'], $d['name_sei'] ?? null, $d['name_mei'] ?? null) + ['role' => $d['role'], 'ses_id' => $d['ses_id'] ?? null,
                 'engineer_id' => $d['engineer_id'] ?? null, 'created_at' => now_str(), 'updated_at' => now_str()];
             // 企業名は管理者だけ（宛名に出る）
             if ($d['role'] === 'admin') $row['company_name'] = clean_name($d['company_name'] ?? null);
@@ -78,7 +86,7 @@ class Workflow
 
     public static function createUser(string $email, string $name, string $role, string $password, array $extra = []): int
     {
-        return DB::table('users')->insertGetId(['email' => strtolower($email)] + self::nameCols($name) + ['role' => $role, 'password' => Hash::make($password),
+        return DB::table('users')->insertGetId(['email' => strtolower($email)] + self::nameCols($name, $extra['sei'] ?? null, $extra['mei'] ?? null) + ['role' => $role, 'password' => Hash::make($password),
             'ses_id' => $extra['ses_id'] ?? null, 'engineer_id' => $extra['engineer_id'] ?? null, 'created_at' => now_str(), 'updated_at' => now_str()]);
     }
 
@@ -203,13 +211,13 @@ class Workflow
     public static function applySes(array $d, $actor = null): int
     {
         $id = DB::table('ses_companies')->insertGetId([
-            'name' => str_in($d['name'] ?? ''), 'rep_name' => str_in($d['rep_name'] ?? ''), 'contact_name' => str_in($d['contact_name'] ?? ''),
+            'name' => str_in($d['name'] ?? ''), ...self::sesPeopleCols($d),
             'email' => strtolower((string) str_in($d['email'] ?? '')), 'phone' => str_in($d['phone'] ?? ''), 'address' => str_in($d['address'] ?? ''),
             'employees' => int_or_null($d['employees'] ?? null), 'strengths' => str_in($d['strengths'] ?? ''), 'message' => str_in($d['message'] ?? ''),
             'notes' => str_in($d['notes'] ?? ''), 'status' => 'pending', 'agreed_at' => !empty($d['agree']) ? now_str() : null, 'created_at' => now_str(), 'updated_at' => now_str(),
         ]);
         if (($actor->role ?? '') === 'admin') return $id;
-        $name = str_in($d['name'] ?? ''); $contact = str_in($d['contact_name'] ?? '');
+        $name = str_in($d['name'] ?? ''); $contact = self::sesPeopleCols($d)['contact_name'];
         N::toAdmins('SES から参加の申し込みがありました', "{$name}（{$contact} 様）から参加の申し込みがありました。内容を確認し、承認してください。", "/admin/ses/$id", true, 'ses-apply');
         N::queueMail(str_in($d['email'] ?? ''), $contact, '参加のお申し込みを受け付けました', "{$contact} 様\n\nPARK への参加のお申し込みを受け付けました。管理者が内容を確認のうえ、ご連絡します。\n\n会社名：{$name}", 'ses-apply');
         return $id;
@@ -220,7 +228,7 @@ class Workflow
         $s = DB::table('ses_companies')->find($sesId);
         DB::table('ses_companies')->where('id', $sesId)->update(['status' => 'active', 'joined_at' => $s->joined_at ?: today_str(), 'updated_at' => now_str()]);
         N::audit($actor->id, 'ses-approve', $s->name);
-        if ($s->email) self::invite(['email' => $s->email, 'name' => $s->contact_name ?: ($s->rep_name ?: $s->name), 'role' => 'ses', 'ses_id' => $sesId], $actor, $note ?? "{$s->name} の PARK への参加を承認しました。");
+        if ($s->email) self::invite(['email' => $s->email, 'name' => $s->contact_name ?: ($s->rep_name ?: $s->name), 'name_sei' => $s->contact_name ? $s->contact_sei : ($s->rep_name ? $s->rep_sei : null), 'name_mei' => $s->contact_name ? $s->contact_mei : ($s->rep_name ? $s->rep_mei : null), 'role' => 'ses', 'ses_id' => $sesId], $actor, $note ?? "{$s->name} の PARK への参加を承認しました。");
     }
 
     // ---------- エンジニア ----------

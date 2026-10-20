@@ -200,6 +200,18 @@ function join_name(?string $sei, ?string $mei): ?string
     return $sei ?? $mei;
 }
 
+// 氏名の入力から [氏名, 姓, 名] を返す。姓・名の2欄（{$base}_sei・{$base}_mei）のどちらかがあればそれを使い、
+// 無ければ1欄 $full（古い呼び方）を最初の空白で分ける。文字数は切らない（呼ぶ側で調べる）。どちらも空なら [null, null, null]
+function name_parts(array $in, string $base, string $full): array
+{
+    if (isset($in[$base.'_sei']) || isset($in[$base.'_mei'])) {
+        [$sei, $mei] = [clean_name($in[$base.'_sei'] ?? null), clean_name($in[$base.'_mei'] ?? null)];
+    } else {
+        [$sei, $mei] = split_name(is_string($in[$full] ?? null) ? $in[$full] : null);
+    }
+    return [join_name($sei, $mei), $sei, $mei];
+}
+
 function int_or_null($v): ?int { return is_numeric($v) ? (int) $v : null; }
 function num_or_null($v): ?float { return is_numeric($v) ? (float) $v : null; }
 function str_in($v): ?string

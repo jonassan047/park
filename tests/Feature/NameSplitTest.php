@@ -315,4 +315,23 @@ class NameSplitTest extends TestCase
         $e = DB::table('engineers')->where('name', '古い 画面')->first();
         $this->assertSame(['古い', '画面', 'ふるい', 'がめん'], [$e->name_sei, $e->name_mei, $e->kana_sei, $e->kana_mei]);
     }
+
+    public function test_m11_person_names_use_sei_mei_fields(): void
+    {
+        $this->as('admin@park.example');
+        $this->post('/admin/settings/admins', ['name_sei' => '招待', 'name_mei' => '次郎', 'company_name' => '企業', 'email' => 'm11a@park.example'])->assertSessionHas('flash.type', 'ok');
+        $this->assertSame(['招待', '次郎', '招待 次郎'], [($u = $this->user('m11a@park.example'))->name_sei, $u->name_mei, $u->name]);
+
+        $this->post('/admin/ses', ['name' => '分割 SES', 'rep_sei' => '代表', 'rep_mei' => '一', 'contact_sei' => '担当', 'contact_mei' => '二', 'email' => 'm11b@park.example'])->assertSessionHas('flash.type', 'ok');
+        $s = DB::table('ses_companies')->where('name', '分割 SES')->first();
+        $this->assertSame(['代表 一', '代表', '一', '担当 二', '担当', '二'], [$s->rep_name, $s->rep_sei, $s->rep_mei, $s->contact_name, $s->contact_sei, $s->contact_mei]);
+        $u = $this->user('m11b@park.example');
+        $this->assertSame(['担当', '二'], [$u->name_sei, $u->name_mei]);
+
+        $this->post('/admin/ses/'.$s->id.'/users', ['name_sei' => '追加', 'name_mei' => '三', 'email' => 'm11c@park.example'])->assertRedirect();
+        $this->assertSame(['追加', '三'], [($u = $this->user('m11c@park.example'))->name_sei, $u->name_mei]);
+
+        $this->post('/admin/ses', ['name' => '宛名なし SES', 'contact_mei' => '名だけ', 'email' => 'm11d@park.example'])->assertSessionHas('flash.type', 'ok');
+        $this->post('/admin/ses', ['name' => '宛名なし SES2', 'email' => 'm11e@park.example'])->assertSessionHas('flash.type', 'bad');
+    }
 }

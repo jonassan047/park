@@ -64,8 +64,10 @@ class PublicController extends Controller
     public function setup(Request $r)
     {
         if (DB::table('users')->where('role', 'admin')->exists()) return redirect('/login');
-        $r->validate(['name' => 'required', 'email' => 'required|email', 'password' => 'required|min:8'], [], ['password' => 'パスワード']);
-        $id = W::createUser($r->input('email'), $r->input('name'), 'admin', $r->input('password'));
+        $r->validate(['email' => 'required|email', 'password' => 'required|min:8'], [], ['password' => 'パスワード']);
+        [$full, $sei, $mei] = name_parts($r->all(), 'name', 'name');
+        if ($full === null) return back()->withInput()->with('flash', ['msg' => 'お名前（姓）を入れてください。', 'type' => 'bad']);
+        $id = W::createUser($r->input('email'), $full, 'admin', $r->input('password'), ['sei' => $sei, 'mei' => $mei]);
         Auth::loginUsingId($id);
         $r->session()->regenerate();
         TwoFactor::pass($r); // 最初の管理者を作るときだけ（まだ誰もいないので）
@@ -76,7 +78,8 @@ class PublicController extends Controller
 
     public function apply(Request $r)
     {
-        $r->validate(['name' => 'required', 'contact_name' => 'required', 'email' => 'required|email', 'agree' => 'accepted'], [], ['name' => '会社名', 'contact_name' => 'ご担当者名', 'agree' => '守秘義務への同意']);
+        $r->validate(['name' => 'required', 'email' => 'required|email', 'agree' => 'accepted'], [], ['name' => '会社名', 'agree' => '守秘義務への同意']);
+        if (name_parts($r->all(), 'contact', 'contact_name')[0] === null) return back()->withInput()->with('flash', ['msg' => 'ご担当者名（姓）を入れてください。', 'type' => 'bad']);
         W::applySes($r->all());
         return view('public.message', ['title' => 'お申し込みを受け付けました', 'text' => 'ありがとうございます。管理者が内容を確認のうえ、ご連絡します。']);
     }

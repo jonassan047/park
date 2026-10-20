@@ -86,8 +86,8 @@ class AdminAccountTest extends TestCase
     {
         $ok = ['name' => '招待 二郎', 'company_name' => '二郎企業', 'email' => 'inv-b@park.example'];
         $cases = [
-            [['name' => ''], '担当者名を入れてください。'],
-            [['name' => "　 \t"], '担当者名を入れてください。'],
+            [['name' => ''], '担当者名（姓）を入れてください。'],
+            [['name' => "　 \t"], '担当者名（姓）を入れてください。'],
             [['company_name' => ''], '企業名を入れてください。'],
             [['email' => ''], 'メールアドレスを正しく入れてください。'],
             [['email' => 'abc'], 'メールアドレスを正しく入れてください。'],

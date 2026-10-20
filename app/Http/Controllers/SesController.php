@@ -92,7 +92,7 @@ class SesController extends Controller
         $r->validate(['name' => 'nullable|max:100'], [], ['name' => 'SES名（会社名）']);
         $warn = ($name = $r->input('name')) ? W::renameSes((int) $r->user()->ses_id, $name, $r->user()) : null;
         DB::table('ses_companies')->where('id', $r->user()->ses_id)->update([
-            'rep_name' => str_in($r->input('rep_name')), 'contact_name' => str_in($r->input('contact_name')), 'phone' => str_in($r->input('phone')),
+            ...W::sesPeopleCols($r->all()), 'phone' => str_in($r->input('phone')),
             'address' => str_in($r->input('address')), 'employees' => int_or_null($r->input('employees')), 'strengths' => str_in($r->input('strengths')), 'updated_at' => now_str(),
         ]);
         return $warn ? $this->go('/ses/company', '保存しました。'.$warn, 'warn') : $this->go('/ses/company', '保存しました。');
