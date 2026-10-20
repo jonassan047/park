@@ -61,7 +61,7 @@ class AccountProfileTest extends TestCase
     {
         DB::table('users')->where('email', 'admin@park.example')->update(['name' => '管理者', 'name_sei' => '管理者', 'name_mei' => null]);
         $html = $this->as('admin@park.example')->get('/account/profile')->assertOk()->getContent();
-        $this->assertMatchesRegularExpression('#氏名（名）</dt><dd>—</dd>#u', $html);
+        $this->assertMatchesRegularExpression('#<dt>氏名</dt><dd>管理者</dd>#u', $html);
     }
 
     public function test_n3_role_links(): void

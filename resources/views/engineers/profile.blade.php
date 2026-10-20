@@ -7,7 +7,7 @@
 <x-field label="生年月日" name="birth_date" type="date" :value="$e->birth_date" />
 <x-field label="性別（任意）" name="gender" type="select" :options="['' => '書かない', '男' => '男', '女' => '女']" :value="$e->gender" />
 <x-field label="電話番号" name="phone" type="tel" :value="$e->phone" />
-<x-field label="郵便番号" name="postal_code" :value="$e->postal_code" placeholder="146-0082" />
+<x-field label="郵便番号" name="postal_code" :value="postal_norm($e->postal_code) ?: $e->postal_code" placeholder="123-4567" />
 <x-field label="現住所" name="address" :value="$e->address" cls="span2" />
 <x-field label="現住所のふりがな" name="address_kana" :value="$e->address_kana" cls="span2" />
 <x-field label="最寄りの路線" name="nearest_line" :value="$e->nearest_line" placeholder="東急池上線" />

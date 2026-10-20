@@ -361,3 +361,253 @@ b. どこにも出さない
 **5** 登録情報の表示（`/account/profile`）の氏名・ふりがな（入力の欄ではなく、表示の行が「氏名（姓）」「氏名（名）」と別の行になっている）
 a. 「氏名」1行に「姓 名」で出す（この計画の仮定）
 b. 今のまま（入力の欄だけ同じ行にする）
+
+---
+
+# 2026-10-20 画面の統一（2）
+
+上の「画面の統一」（U1〜U7）は実装済み（未コミット）。tezzo の回答と追加の要求を受けて、続きを決める。**上の節（と P〜S）とぶつかるところは、この節を正とする**。主に書き換わるところ：U1-2・U2・U6-3 の「修正」（→ 一覧「詳細」→ 詳細画面 → 「編集」）、仮定 j・U5-3〜U5-5・U5-7・U7-1 の「管理者の直属」（→ 新しく登録する入口をなくす）、上の「テスト」の U5-4 直属・U5-7 の行。
+
+## tezzo の回答（上の確認 1〜5）
+
+- 1：管理者の直属は無い。「管理者の直属（SES なし）」の行・`?ses=direct`・直属の登録の入口は要らない。エンジニアは必ず SES を選んでから登録する。今ある直属のデータは消さず、表示だけ無理なく扱う。
+- 2：「修正」ではなく、ほかと同じ「一覧 → 詳細 → 編集」にする。一覧の行は「詳細」、詳細画面（新しく `/admin/admins/{id}`）から「編集」へ、編集画面は今の修正画面。SES・エンジニア・案件と文言・ボタンの置き方をそろえる。「編集」がアプリの統一の言葉。
+- 3〜5：上の仮定どおり（3＝新しく登録する画面だけメール必須、4＝招待メールの一言は登録画面、5＝登録情報の氏名は1行）。
+
+追加の要求：管理者・SES・エンジニアのすべてに郵便番号・住所を足す（登録・編集・詳細に出す。任意。表示は「〒123-4567 住所」。形の検査は7桁の数字・ハイフン可、保存の形はそろえる）。管理者は項目が少ないので、実際に使うものを少し足す。住所は個人情報なので、管理者以外に他人の住所が見えないようにする。
+
+## 今のつくり（コードで確かめた。2026-10-20 時点の未コミットの状態）
+
+- 直属：`EngineerController::create` が `?ses=direct` を受けて「所属：管理者の直属（SES なし）」を出す。`store` は `ses_id=direct` で `W::directSesId()`（無ければ作る）。`AdminController::sesIndex` が `$direct`（人数）を渡し、`admin/ses-index.blade.php` 6 行目に直属の行（「エンジニアを登録」「一覧」）。`admin/engineers.blade.php` に「直属」の印（`ses_kind === 'direct'`）と「直属だけ」ボタン（`?ses=direct`）。`W::directSesId()` は `park:purge-samples --move-kept-to-direct`（`SamplePurge`）でも使う。直属の人の知らせは管理者に届く、`user_label` は会社名を付けない、などの扱いは残っている。
+- 管理者：ルートは `GET /admin/admins/{id}` → `adminEdit`（`admin/admin-edit.blade.php`、題名「管理者の情報の修正」、ボタン「保存する」「管理者の一覧に戻る」）、`POST /admin/admins/{id}` → `adminUpdate`（ok は `/admin/admins/{id}`、bad は `back()`）。一覧の行は「修正」。詳細画面は無い。
+- ほかの流れ：SES は一覧「詳細」→ `/admin/ses/{id}`（題名は会社名。編集は同じ画面のカード「会社情報の編集」）。エンジニアは一覧「詳細」→ `/engineers/{id}`（題名は氏名。カード「基本情報」の右上に `btn ghost small`「編集」）→ `/engineers/{id}/edit`（題名「プロフィールの編集」）。案件は詳細の `btn ghost small`「編集」→ 題名「案件の編集：案件名」。
+- 管理者の列（`users`）：`name`・`name_sei/mei`・`kana`・`kana_sei/mei`・`phone`（30）・`position`（画面の名前は「所属・役職」）・`company_name`（100）がある。`phone`・`position`・`kana` は本人の `/welcome`・`/account` でだけ入れられ、ほかの管理者の画面（登録・修正）には出ていない。
+- 管理者の情報の使われ方：メールの差出人の名前と署名は `company_name`（`admin_sender`。無ければ設定の `operator_name`）。宛名は「企業名 氏名」（`user_label`）。請求書（`pipeline/invoice.blade.php`）の発行者は設定の `operator_name` だけで、管理者個人の情報は使っていない。電話・所属・役職・住所を使っている所は無い。
+- 住所の列：`engineers` には `postal_code`（10）・`address`・`address_kana` がある（詳しいプロフィール `/engineers/{id}/profile` で入れ、詳細の「詳しいプロフィール」に「〒… 住所」で出る。履歴書の Excel にも出る。名前を伏せた業務経歴書には出ない）。`ses_companies` は `address`（画面の名前は「所在地」）だけで郵便番号が無い。`users` には住所の列が無い。郵便番号の形の検査・そろえはどこにも無い。
+- 見える範囲：管理者の画面は `role:admin`。エンジニアの詳細・詳しいプロフィール・書類は `Perms::engineer`（管理者・所属の SES・本人）。SES の会社情報 `/ses/company` は自社だけ。
+- 残り（上の U6-4 の取りこぼし）：`engineers/show.blade.php` 21 行目と `SesController.php` 42 行目に「利用中」が残っている。`UiUnifyTest::test_u6_wording` と食い違うので、この回で「使用中」に直す。
+
+## 仮定（tezzo が違えば直す。最後の「確かめること」と対応）
+
+- m. 今ある直属のデータ（`kind='direct'` の入れ物とそのエンジニア）は消さず、動かさない。エンジニアの一覧の「直属」の印は残し、「直属だけ」のボタンは直属の人が1人以上いるときだけ出す。詳細の「所属 SES」は今のまま（「管理者の直属」）。直属の人の編集・応募・選考・成約・知らせはこれまでどおり。SES へ移す画面はこの回では作らない（確認 3）。`W::directSesId()` と見本の片付けのオプションは残す。
+- n. 管理者の詳細の題名はその人の氏名（SES・エンジニアと同じ）。編集画面の題名は「**管理者の編集：氏名**」（案件の「案件の編集：案件名」と同じ形）。
+- o. 管理者に足す項目は、すでに列がある **所属・役職**（`position`）・**電話番号**（`phone`）と、新しい **郵便番号・住所**。部署と役職は分けない（列を増やさない。画面の名前は今の「所属・役職」のまま）。ふりがなは本人が `/account` で入れるので、ほかの管理者の画面には足さない。この回は保存して見せるだけで、メールの署名・請求書には使わない（確認 2）。
+- p. 住所の見える範囲：管理者はみんなの分、本人は自分の分。SES の担当者は**自社の会社の所在地**と、**自社のエンジニアの住所**が見える（履歴書の書き出しに住所が要り、今も「見られるのは、本人・所属の SES・管理者だけ」と画面に書いてあるため）。ほかの SES・ほかのエンジニア・管理者の住所は見えない（確認 1）。
+- q. 郵便番号の保存の形は `123-4567`（3桁＋ハイフン＋4桁）。今あるエンジニアの郵便番号（ハイフン付きが多い）をそのまま使え、履歴書の書き出しも直さずに済む。今あるデータは書き換えない（マイグレーションでそろえない）。表示のときにそろえ、次に保存したときに保存の形になる。
+- r. 住所は200文字まで。会社の住所の画面の名前は今の「所在地」、エンジニアは今の「現住所」、管理者は「住所」。
+- s. 最初の1人の `/setup` と、`park:invite-admin` には住所を足さない（あとで `/welcome`・`/account` で入れる）。
+
+## 受け入れ条件
+
+### V1. 管理者の直属は新しく作らない
+
+- V1-1. 管理者が `GET /engineers/new?ses=direct` を開く → `/admin/ses` へ 302、warn「エンジニアは、SES の画面で SES を選んでから登録します。」（ほかのだめな値と同じ。上の U5-3 から `direct` の例外を消す）。
+- V1-2. 管理者の `POST /engineers` に `ses_id=direct` → bad「所属と氏名を入れてください。」。`engineers`・`users`・`mail_outbox` は増えず、直属の入れ物（`ses_companies` の `kind='direct'`）も作られない。
+- V1-3. SES の一覧（`/admin/ses`）に「管理者の直属（SES なし）」の行が出ない。`?ses=direct` へのリンクも無い。SES が0件のときは今の「SES はまだありません。…」の文だけ（`count` は `$list->count()` に戻す）。
+- V1-4. 今ある直属のエンジニア（テストでは `W::createEngineer(W::directSesId(), …)` で作る）は、エンジニアの一覧に「直属」の印つきで出る。詳細・編集・詳しいプロフィールが今までどおり開けて保存できる。直属の人がいるときだけ「直属だけ」のボタンが出て、`/admin/engineers?ses=direct` で絞り込める。直属の人がいないときはボタンが出ない（URL を直接開いても 200 で0件）。
+- V1-5. ダッシュボード・分析・案件の登録・請求に「管理者の直属」が出ない（今のまま）。
+- V1-6. 見本の片付け（`park:purge-samples --move-kept-to-direct`）は今のまま動く（`W::directSesId()` は残す）。
+
+### V2. 管理者：一覧 → 詳細 → 編集
+
+- V2-1. `GET /admin/admins`：行末は文字のリンク「**詳細**」（`/admin/admins/{id}`）と、招待中の人だけ `btn ghost small`「招待を送り直す」（今のまま）。「修正」「直す」は出ない。
+- V2-2. `GET /admin/admins/{id}`（新しい詳細画面。管理者だけ。SES・エンジニアは 403。管理者でない id・無い id は 404）：題名はその人の氏名。`x-card title="基本情報"` の右上（`x-slot:actions`）に `btn ghost small`「**編集**」（`/admin/admins/{id}/edit`）と、招待中の人だけ「招待を送り直す」（`x-post`、`cls="ghost small"`）。中身は `dl`：状態（使用中／招待中／停止）・氏名・企業名・所属・役職・電話番号・住所（「〒123-4567 住所」。空なら「—」）・メールアドレス・最終ログイン。自分の詳細も開ける。
+- V2-3. `GET /admin/admins/{id}/edit`（今の修正画面を移す）：題名「**管理者の編集：氏名**」。欄は 氏名（姓・名。同じ行）・企業名・所属・役職・電話番号・郵便番号・住所・メールアドレス（メールの扱いは Q4 のまま）。ボタン `btn`「保存する」と `btn ghost`「戻る」（`/admin/admins/{id}`）。権限・404 は V2-2 と同じ。
+- V2-4. 保存 `POST /admin/admins/{id}`（URL は今のまま）：ok は詳細 `/admin/admins/{id}` へ「保存しました。」。bad は編集画面へ戻り、入れた値が残る。Q3〜Q8 は今のまま（足した項目も「何も変えなければ保存しました。だけ・監査ログなし」に入れる。監査ログには変えた項目の名前だけを足し、電話・住所の中身は書かない）。
+- V2-5. 「修正」は画面のボタン・リンク・題名から無くなる（`resources/views` に `>修正<`・`の修正` が0件）。マニュアルの「修正」も「詳細」→「編集」の説明に直す。
+- V2-6. 招待の送り直し（`POST /admin/admins/{id}/reinvite`）は、一覧から押したら一覧へ、詳細から押したら詳細へ戻る（`back()`。来た所が分からないときは一覧へ）。
+
+### V3. 管理者の項目を増やす
+
+- V3-1. 登録 `/admin/admins/new`：今の欄（担当者名・企業名・メールアドレス）の下に、任意の **所属・役職**（`position`、100文字まで）・**電話番号**（`phone`、30文字まで、数字・`+`・`-`・`(`・`)`・空白だけ。`/account` と同じ決まり）・**郵便番号**・**住所** を足す。
+- V3-2. 登録で入れた値は `users` の行に入る（`W::invite` が新しく管理者の行を作るときだけ。すでにある行への送り直しでは書き換えない）。
+- V3-3. 編集（V2-3）でも同じ4つを直せる。検査も同じ。だめなときは bad、何も保存しない。
+- V3-4. 本人の `/welcome`・`/account`（管理者のとき）に郵便番号・住所を足す（所属・役職と電話番号はすでにある）。`/account/profile` に「住所」の行（管理者のときだけ）。SES・エンジニアの `/welcome`・`/account` には住所の欄を出さない（SES は会社の所在地、エンジニアは現住所で持つため）。
+- V3-5. メールの署名・差出人・宛名、請求書は今のまま（足した項目を使わない）。
+
+### V4. 郵便番号・住所（管理者・SES・エンジニア共通）
+
+- V4-1. 形：前後と途中の空白を取り、全角の数字は半角に、全角のハイフン・長音（`－` `ー` `‐` `−`）は `-` にし、頭の「〒」は取る。そのうえで「3桁の数字＋（ハイフンあり・なし）＋4桁の数字」なら `123-4567` の形で保存。空なら null（任意）。それ以外（6桁・8桁・文字が入る・`12-34567` など）は bad「郵便番号は7桁の数字で入れてください（例：123-4567）。」で、何も保存しない。
+- V4-2. 住所：前後の空白を取り、200文字まで（超えたら bad「住所は200文字までにしてください。」。会社は「所在地は200文字までにしてください。」、エンジニアは「現住所は200文字までにしてください。」）。空なら null。
+- V4-3. 表示：郵便番号と住所の両方 →「〒123-4567 東京都…」、郵便番号だけ →「〒123-4567」、住所だけ → 住所、どちらも無い →「—」。保存の形でない古い郵便番号（例：`1460082`）も、そろえられれば `〒146-0082` と出し、そろえられなければ入っているとおりに出す。
+- V4-4. 管理者：V3 のとおり（登録・編集・詳細・本人の画面）。
+- V4-5. SES：管理者の SES の登録 `/admin/ses/new`・SES の詳細の「会社情報の編集」・SES の会社情報 `/ses/company`・公開の申し込み `/apply` に「郵便番号」を「所在地」の前に足す。SES の詳細（`/admin/ses/{id}`）の「所在地」は V4-3 の形で出す。保存は `W::applySes`・`sesUpdate`・`SesController::saveCompany` で同じ検査（bad は `withInput` で戻る）。
+- V4-6. エンジニア：登録 `/engineers/new`（管理者・SES とも）に任意の「郵便番号」「現住所」を足す。編集は今の詳しいプロフィール（`/engineers/{id}/profile`。すでに欄がある）で、ここにも同じ検査を入れる（placeholder は `123-4567`）。`/engineers/{id}/edit`（基本情報の編集）には足さない（同じ列を2か所で直さないため）。詳細の「現住所」は V4-3 の形（今の表示を共通の関数に替える）。
+- V4-7. 今あるデータは書き換えない。マイグレーションは列を足すだけ。
+
+### V5. 住所の見える範囲（個人情報）
+
+- V5-1. 管理者の住所（`users.postal_code`・`address`）が出るのは、管理者の画面（`/admin/admins/{id}`・`/edit`。`role:admin`）と、本人の `/account`・`/account/profile` だけ。SES・エンジニアが `/admin/admins/{id}` を開くと 403。管理者の一覧（`/admin/admins`）とダッシュボードの「招待の状況」にも住所は出さない。
+- V5-2. SES の会社の郵便番号・所在地が出るのは、管理者の SES の詳細と、その SES の担当者の `/ses/company` だけ。ほかの SES の担当者・エンジニアの画面には出ない。SES の一覧にも出さない。
+- V5-3. エンジニアの郵便番号・現住所が出るのは、`Perms::engineer` が通る人（管理者・所属の SES・本人）の詳細・詳しいプロフィール・履歴書（今のまま）。ほかの SES の担当者・ほかのエンジニアは、詳細・詳しいプロフィールとも 403（今のまま。テストで確かめる）。エンジニアの一覧（管理者・SES）・スキルシート・名前を伏せた業務経歴書・案件・応募・メールの本文には出ない。
+- V5-4. メールの本文・署名、ベルの知らせ、監査ログに住所・郵便番号の中身を書かない。
+
+### V6. 文言の残り
+
+- V6-1. 「利用中」→「使用中」：`engineers/show.blade.php` 21 行目、`SesController.php` 42 行目。
+
+## 仕様
+
+### マイグレーション（新規 `database/migrations/2026_10_20_000002_add_postal_address.php`）
+
+```php
+// 郵便番号・住所（管理者は users、SES は ses_companies。エンジニアは engineers に既にある）（2026-10-20）
+up():
+  Schema::table('users', function (Blueprint $t) {
+      $t->string('postal_code', 8)->nullable()->after('company_name');
+      $t->string('address', 200)->nullable()->after('postal_code');
+  });
+  Schema::table('ses_companies', function (Blueprint $t) {
+      $t->string('postal_code', 8)->nullable()->after('phone');
+  });
+down():
+  users の postal_code・address、ses_companies の postal_code を dropColumn
+```
+
+データは書き換えない（仮定 q）。公開版では `park-deploy.sh` の migrate で列が足される（常時了承の範囲。列を足すだけで、消すものは無い）。
+
+### 共通の関数（`app/helpers.php`）
+
+- `postal_norm($v): string|null|false`：V4-1。空 → null、正しい → `'123-4567'`、だめ → false。
+- `postal_address(?string $postal, ?string $address): string`：V4-3。`postal_norm` でそろえられれば `〒123-4567`、そろえられなければ入っているとおり。
+
+### 手続き（`app/Services/Workflow.php`）
+
+- 新しく `addressCols(array $d, string $label = '住所'): array`：戻り値は `['ok' => ['postal_code' => …, 'address' => …]]` か `['bad' => 'メッセージ']`。`$d` に `postal_code`・`address` のキーが無ければ、その列は返さない（送られてこなかった画面では今の値のまま）。SES・エンジニア・管理者の保存はみなこれを使う。
+- `invite()`：`role === 'admin'` で新しく行を作るときだけ、`position`・`phone`・`postal_code`・`address` も入れる（呼ぶ側で検査済みの値を渡す）。
+- `updateAdmin()`：`position`・`phone`・`postal_code`・`address` を足す。キーが来たものだけ比べて、変わったものだけ更新。検査（V3-3・V4-1・V4-2）は保存の前に全部見て、1つでもだめなら何も保存しない。監査ログ（Q7）には「所属・役職」「電話番号」「住所」と項目の名前だけを足す（中身は書かない）。
+- `saveProfile()`（`/welcome`・`/account`）：管理者のときだけ `postal_code`・`address` を保存。
+- `applySes()`：`postal_code` を足す（`addressCols` を通した値）。
+
+### コントローラ
+
+- `routes/web.php`（admin 群）：`Route::get('/admins/{id}', [Adm::class, 'adminShow']);`、`Route::get('/admins/{id}/edit', [Adm::class, 'adminEdit']);`。`POST /admins/{id}` と `/reinvite` は今のまま。
+- `AdminController`：
+  - `adminShow(int $id)`（新規）：管理者でなければ 404。`view('admin.admin-show', ['u' => $u])`。
+  - `adminEdit()`：今のまま（view だけ）。
+  - `adminUpdate()`：ok の戻り先は今の `/admin/admins/$id`（＝詳細）のまま。`only([...])` に `position`・`phone`・`postal_code`・`address` を足す。
+  - `admins()`：電話の形・所属・役職の長さ・`addressCols` を見てから `W::invite`。
+  - `reinviteAdmin()`：戻り先を `back()`（V2-6）。
+  - `sesIndex()`：`$direct` を消す。
+  - `engineers()`：`hasDirect`（直属のエンジニアがいるか）を view に渡す。
+  - `sesStore()`・`sesUpdate()`：`addressCols($r->all(), '所在地')` を通す。bad は `back()->withInput()`。
+- `EngineerController`：
+  - `create()`：`$ses === 'direct'` の分岐を消す（V1-1）。
+  - `store()`：`ses_id === 'direct'` の分岐を消し、参加中の SES の検査だけに（V1-2）。`addressCols($body, '現住所')` を通す。
+  - `saveProfile()`：`addressCols` を通し、bad は `back()->withInput()`。
+- `SesController::saveCompany()`：`addressCols($r->all(), '所在地')`。42 行目の「利用中」→「使用中」。
+- `PublicController::apply()`：`addressCols($r->all(), '所在地')`。
+- `AccountController`：管理者のときだけ、検証の前に `postal_code` を `postal_norm` した値（だめなら元の文字）に入れ替え、決まりに `'postal_code' => ['nullable', 'regex:/^\d{3}-\d{4}$/']`、`'address' => 'nullable|max:200'` を足す（メッセージは V4-1・V4-2 の文。項目名は「郵便番号」「住所」）。
+
+### 画面
+
+- `admin/admins.blade.php`：行のリンクの文字を「詳細」に。
+- `admin/admin-show.blade.php`（新規）：V2-2。
+- `admin/admin-edit.blade.php`：題名「管理者の編集：{{ $u->name }}」。欄を足す（V2-3）。郵便番号と住所は `.pair` で同じ行にしない（住所は長いので1行全部）。戻るは詳細へ。
+- `admin/admin-new.blade.php`：所属・役職・電話番号・郵便番号・住所（任意）を足す。
+- `admin/ses-index.blade.php`：直属の行を消す。`:count="$list->count()"`。
+- `admin/engineers.blade.php`：「直属だけ」のボタンは、`hasDirect` のとき（または `?ses=direct` で開いているとき）だけ出す。
+- `admin/ses-form.blade.php`・`ses/company.blade.php`・`public/apply.blade.php`：「郵便番号」（`postal_code`、placeholder `123-4567`）を「所在地」の前に。
+- `admin/ses-show.blade.php`：「所在地」を `postal_address($s->postal_code, $s->address)` に。
+- `engineers/form.blade.php`：新規のときだけ「郵便番号」「現住所」。`sesFixed` の「管理者の直属」の扱いは消える（コントローラが渡さなくなる）。
+- `engineers/profile.blade.php`：郵便番号の placeholder を `123-4567` に。
+- `engineers/show.blade.php`：「現住所」を `postal_address(...)` に。21 行目の「利用中」→「使用中」。
+- `account/show.blade.php`・`account/welcome.blade.php`：管理者のときだけ「郵便番号」「住所」。`account/profile.blade.php`：管理者のときだけ「住所」の行。
+
+## 変更するファイル
+
+| ファイル | 変更 |
+|---|---|
+| `database/migrations/2026_10_20_000002_add_postal_address.php`（新規） | 列を足す（上のとおり） |
+| `app/helpers.php` | `postal_norm`・`postal_address` |
+| `app/Services/Workflow.php` | `addressCols`（新規）、`invite`・`updateAdmin`・`saveProfile`・`applySes` |
+| `routes/web.php` | `/admins/{id}` を `adminShow` に、`/admins/{id}/edit` を足す |
+| `app/Http/Controllers/AdminController.php` | `adminShow`（新規）、`admins`・`adminUpdate`・`reinviteAdmin`・`sesIndex`・`sesStore`・`sesUpdate`・`engineers`（`hasDirect`） |
+| `app/Http/Controllers/EngineerController.php` | `create`・`store`（直属を消す・住所）、`saveProfile`（住所の検査） |
+| `app/Http/Controllers/SesController.php` | `saveCompany`（郵便番号）、「利用中」 |
+| `app/Http/Controllers/PublicController.php` | `apply`（郵便番号） |
+| `app/Http/Controllers/AccountController.php` | 管理者の郵便番号・住所の検証 |
+| `resources/views/admin/admin-show.blade.php`（新規） | V2-2 |
+| `resources/views/admin/admins.blade.php`・`admin-edit.blade.php`・`admin-new.blade.php` | V2・V3 |
+| `resources/views/admin/ses-index.blade.php`・`engineers.blade.php` | V1 |
+| `resources/views/admin/ses-form.blade.php`・`ses-show.blade.php`・`ses/company.blade.php`・`public/apply.blade.php` | V4-5 |
+| `resources/views/engineers/form.blade.php`・`profile.blade.php`・`show.blade.php` | V4-6・V6 |
+| `resources/views/account/show.blade.php`・`welcome.blade.php`・`profile.blade.php` | V3-4 |
+| `resources/manuals/admin.md`・`admin-steps.md` | 管理者は「詳細」→「編集」、足した項目、直属の登録の記述を消す（今いる直属の人は一覧に「直属」の印で出る、の1文だけ残す）、SES の郵便番号、住所の見える範囲 |
+| `resources/manuals/ses.md`・`ses-steps.md` | 会社情報・エンジニアの登録に郵便番号・住所、自社のエンジニアの住所が見える範囲 |
+| `resources/manuals/engineer.md`・`engineer-steps.md` | 詳しいプロフィールの郵便番号の形（7桁）、住所を見られるのは本人・所属の SES・管理者だけ。「直属の人は管理者」の言い回しは、今いる人のために残す |
+| テスト | 下の「既存のテストの直し」と新しい `tests/Feature/PostalAddressTest.php` |
+
+外部ライブラリは足さない。
+
+## 作業の手順
+
+1. マイグレーションと `postal_norm`・`postal_address`・`W::addressCols` を足す。`php artisan migrate`（手元）。
+2. 直属の入口を消す（`create`・`store`・`sesIndex`・`ses-index`）。`admin/engineers` の「直属だけ」の出し方。
+3. 管理者の詳細を足し、ルートを分ける（`adminShow`・`/edit`）。一覧の「詳細」、編集の題名・戻る、送り直しの戻り先。
+4. 管理者の項目（登録・編集・`invite`・`updateAdmin`）、本人の `/welcome`・`/account`・`/account/profile`。
+5. SES（登録・詳細の編集・会社情報・申し込み・詳細の表示）とエンジニア（登録・詳しいプロフィール・詳細の表示）の郵便番号・住所。
+6. 「利用中」の残り。
+7. 既存のテストを直し、`PostalAddressTest` を足す。`php artisan test` が全部通ること。
+8. マニュアル。41_Park-Project の `04_Manuals` の写しは JOE が写し直す。
+
+公開版への反映は push のあと JOE が `park-deploy.sh` で行う（常時了承の範囲。今回はマイグレーションあり、列を足すだけ）。データの削除・書き換えはしない（直属の人・古い形の郵便番号はそのまま）。テストのメールは `mail_outbox` に入るだけで送らない。
+
+## 既存のテストの直し（わかっている所）
+
+- 直属を `POST /engineers` の `ses_id=direct` で作っている所は、`W::createEngineer(W::directSesId(), [...], $admin)` で直接作るか、参加中の SES（`ses_id=1`）に替える：`ProfileAndDirectTest` 36（`directEngineer()`）・370・377、`NameSplitTest` 170・183〜187・237・247・314、`EmptyStateTest` 150・231、`UiUnifyTest` 242。直属の扱い（知らせ・`user_label`・一覧の印・分析に入らない）を確かめているテストは、直接作る形にして残す。
+- `?ses=direct` を開いて 200 を期待している所は、302（`/admin/ses`）を確かめる形に：`ProfileAndDirectTest` 339・343、`NameSplitTest` 192（並びの確かめは `?ses=1` で行う。「所属：」の後ろは SES の名前）、`UiUnifyTest` 212。`ParkTest` 48・`EmptyStateTest` 125 の画面の一覧の `/engineers/new?ses=direct` は `/engineers/new?ses=1`（見本なしの `EmptyStateTest` は先に SES を1つ作ってその id）。
+- `ses_id=direct` の POST が「直属の行を作る」ことを確かめている所（`ProfileAndDirectTest` 360〜378、`NameSplitTest` 176・187）は、「bad で、直属の行も作られない」に書き換え。
+- SES の一覧の直属の行を期待している所（`UiUnifyTest::test_u5_ses_list_has_direct_row`、`ProfileAndDirectTest` 416〜417）は、「出ない」を確かめる形に書き換え。
+- 管理者の修正画面を `GET /admin/admins/{id}` で開いている所は `/admin/admins/{id}/edit` に。`/admin/admins/{id}` は詳細を確かめる形に：`AdminAccountTest` 189〜192（「>修正</a>」→「>詳細</a>」、「管理者の情報の修正」→ 編集画面の「管理者の編集：」）、`UiUnifyTest` 56〜58・85・154。bad のときの戻り先を確かめている所は `from('/admin/admins/{id}/edit')` で。
+- 「所属・役職」「電話」の並びを見ている所（`AccountProfileTest` 38・43、`NameSplitTest` 101〜105・164）は、管理者のときだけ「電話」の後ろに「郵便番号」「住所」が入るので、並びの確かめを合わせる。
+- `UiUnifyTest::test_u6_wording` は V6-1 で通るようになる（今は「利用中」が残っていて食い違う）。
+
+## テスト（新しく `tests/Feature/PostalAddressTest.php`。用意は `UiUnifyTest` と同じ）
+
+| 条件 | 手順 | 確かめること |
+|---|---|---|
+| V1-1 | 管理者で `GET /engineers/new?ses=direct` | `/admin/ses` へ 302、flash warn |
+| V1-2 | 管理者で `POST /engineers` に `ses_id=direct`・氏名・メール | bad。`engineers`・`users`・`mail_outbox` 増えない。`ses_companies` の `kind='direct'` が0件のまま |
+| V1-3 | 管理者で `GET /admin/ses` | 「管理者の直属」と `ses=direct` が出ない |
+| V1-4 | `W::createEngineer(W::directSesId(), …)` で1人作り、`/admin/engineers`・`/engineers/{id}`・`/engineers/{id}/edit` を開き、編集を保存 | 一覧に「直属」の印と「直属だけ」。詳細・編集 200、保存 ok。直属の人がいないときは「直属だけ」が出ない |
+| V2-1 | 管理者で `GET /admin/admins` | 各行に `href=".../admin/admins/{id}">詳細</a>`。「修正」「直す」が無い |
+| V2-2 | `GET /admin/admins/{他人の id}`／自分の id／SES・エンジニアで同じ URL／SES 担当者の users.id・99999 | 200 で題名に氏名、「基本情報」「編集」（`href=".../admin/admins/{id}/edit"`）、住所の行。自分も 200。403。404 |
+| V2-2 招待中 | 招待中の管理者の詳細 | 「招待を送り直す」が出る。使用中の人には出ない |
+| V2-3 | `GET /admin/admins/{id}/edit` | 「管理者の編集：氏名」、欄（所属・役職・電話番号・郵便番号・住所）、「戻る」が詳細へ |
+| V2-4 | 編集から正しく保存／姓を空で保存 | 前者は `/admin/admins/{id}` へ ok。後者は編集へ戻り bad、何も変わらない |
+| V2-5 | `resources/views` を読む | `>修正<`・`の修正` が0件 |
+| V2-6 | 詳細から（`from()`）reinvite | 詳細へ戻る |
+| V3-1・V3-2 | `POST /admin/admins` に所属・役職・電話・`postal_code=１２３４５６７`・住所も入れる | 行に position・phone・`postal_code=123-4567`・address。invite +1 |
+| V3-3 | 編集で郵便番号 `12345`／電話 `abc`／住所201文字 | どれも bad、何も保存されない（氏名を同時に変えても変わらない） |
+| V3-4 | 管理者で `/welcome`（未登録）・`/account` に郵便番号・住所を入れて保存、`/account/profile` を開く | 保存される。「住所」の行に「〒123-4567 …」。SES・エンジニアの `/account` には `name="postal_code"` が無い |
+| V3-5 | 住所を入れた管理者が招待を送る | `mail_outbox` の本文に住所・郵便番号が無い |
+| V4-1 | `postal_norm` に `1234567`・`123-4567`・`〒123-4567`・`１２３ー４５６７`・`' 123 4567 '`・`''`・`123456`・`12345678`・`12-34567`・`abc-defg` | 前の5つは `123-4567`、空は null、残りは false |
+| V4-3 | `postal_address` に（`123-4567`,住所）・（`1460082`,null）・（null,住所）・（null,null）・（`abc`,null） | 「〒123-4567 住所」「〒146-0082」「住所」「—」「abc」 |
+| V4-5 | `/admin/ses/new`・SES 詳細の編集・`/ses/company`・`/apply` で郵便番号 `1000001` と所在地を入れて保存 | `ses_companies.postal_code=100-0001`。SES の詳細に「〒100-0001 …」。郵便番号 `99` は bad、何も増えない・変わらない |
+| V4-6 | 管理者が `?ses=1` から、SES 担当者が、郵便番号・現住所つきでエンジニアを登録。詳しいプロフィールで郵便番号 `1-2` を保存 | `engineers.postal_code` が `xxx-xxxx`、詳細に「〒… 現住所」。`1-2` は bad で変わらない。`/engineers/{id}/edit` に `name="postal_code"` が無い |
+| V5-1 | SES・エンジニアで `/admin/admins/{id}` | 403。管理者の一覧・ダッシュボードの HTML に、管理者の住所の文字が無い |
+| V5-2 | ses1 の担当者で `/ses/company` | 自社の所在地が出る。別の SES（id 2）の所在地の文字は、ses1 のどの画面（`/ses`・`/ses/company`・`/ses/engineers`）にも出ない |
+| V5-3 | エンジニア（ses1 所属）に住所を入れ、ses1 の担当者・管理者・本人で詳細を開く／別の SES の担当者・別のエンジニアで詳細・詳しいプロフィールを開く | 前の3人は住所が出る。後ろは 403。管理者の `/admin/engineers`・ses1 の `/ses/engineers`・`/engineers/{id}/sheet?anon=1` に住所の文字が無い |
+| V5-4 | 住所を入れたあとの `audit_log`・`notifications`・`mail_outbox` | 住所・郵便番号の文字が無い |
+| V6-1 | 使用中の EG がいるエンジニアの詳細、ses1 の `/ses/engineers` | 「使用中」、「利用中」が無い |
+| マイグレーション | `RefreshDatabase` で全マイグレーションが通る | `users` に `postal_code`・`address`、`ses_companies` に `postal_code` がある（`Schema::hasColumn`） |
+
+## 確かめること（返事がなくても、下の仮定で進める）
+
+**1** SES の担当者に、自社のエンジニアの住所を見せるか（「管理者以外に他人の住所が見えない」を文字どおりにすると、SES は自社のエンジニアの住所も見られなくなる。ただ、今は SES が履歴書（住所入り）を書き出して出す流れがあり、画面にも「見られるのは、本人・所属の SES・管理者だけ」と書いてある）
+a. 見せる（今のまま。この計画の仮定 p）
+b. 見せない（SES の画面の住所を隠し、SES が書き出す履歴書の住所も空にする。前に管理者が書き出した書類は SES も開けるので、その扱いも別に決める）
+
+**2** 管理者に足した項目を、どこかで使うか（今は企業名だけがメールの差出人・署名に出て、請求書の発行者は設定の「運営の名前」だけ）
+a. この回は保存して見せるだけ（この計画の仮定 o）
+b. 管理者が送るメールの署名に「所属・役職」「電話番号」も出す
+c. 請求書の発行者の住所・電話を出す（管理者個人ではなく、設定に「運営の住所・電話」を足す形がよい）
+
+**3** 今ある直属のエンジニア（公開版にいるかは、JOE が `park:status` などで確かめる）
+a. そのまま（この計画の仮定 m）
+b. SES へ移す画面を次の回で作る（tezzo がどの SES に移すか決める）
+
+**4** 「所属・役職」の名前（tezzo の例は「部署・役職」）
+a. 今の「所属・役職」のまま（この計画の仮定。SES の担当者の画面とも同じ）
+b. 全部「部署・役職」に変える（テストとマニュアルも直す）

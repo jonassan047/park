@@ -212,6 +212,32 @@ function name_parts(array $in, string $base, string $full): array
     return [join_name($sei, $mei), $sei, $mei];
 }
 
+// 郵便番号をそろえる。空なら null、7桁の数字（ハイフン・〒・全角・空白は許す）なら「123-4567」、それ以外は false
+function postal_norm($v)
+{
+    if ($v === null) return null;
+    $s = mb_convert_kana((string) $v, 'n'); // 全角の数字を半角に
+    $s = str_replace(['－', 'ー', '‐', '−', '―'], '-', $s);
+    $s = preg_replace('/[\s　]+/u', '', $s) ?? '';
+    $s = preg_replace('/^〒/u', '', $s) ?? '';
+    if ($s === '') return null;
+    if (preg_match('/^(\d{3})-?(\d{4})$/', $s, $m)) return $m[1].'-'.$m[2];
+    return false;
+}
+
+// 郵便番号と住所を「〒123-4567 住所」の形で見せる。どちらも無ければ「—」。そろえられない古い郵便番号は入っているとおりに出す
+function postal_address(?string $postal, ?string $address): string
+{
+    $p = trim((string) $postal);
+    if ($p !== '') {
+        $n = postal_norm($p);
+        $p = '〒'.($n ? $n : $p);
+    }
+    $a = trim((string) $address);
+    $out = trim($p.' '.$a);
+    return $out === '' ? '—' : $out;
+}
+
 function int_or_null($v): ?int { return is_numeric($v) ? (int) $v : null; }
 function num_or_null($v): ?float { return is_numeric($v) ? (float) $v : null; }
 function str_in($v): ?string

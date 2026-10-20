@@ -80,6 +80,8 @@ class PublicController extends Controller
     {
         $r->validate(['name' => 'required', 'email' => 'required|email', 'agree' => 'accepted'], [], ['name' => '会社名', 'agree' => '守秘義務への同意']);
         if (name_parts($r->all(), 'contact', 'contact_name')[0] === null) return back()->withInput()->with('flash', ['msg' => 'ご担当者名（姓）を入れてください。', 'type' => 'bad']);
+        $ad = W::addressCols($r->all(), '所在地');
+        if (isset($ad['bad'])) return back()->withInput()->with('flash', ['msg' => $ad['bad'], 'type' => 'bad']);
         W::applySes($r->all());
         return view('public.message', ['title' => 'お申し込みを受け付けました', 'text' => 'ありがとうございます。管理者が内容を確認のうえ、ご連絡します。']);
     }

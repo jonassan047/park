@@ -27,6 +27,7 @@
 <x-field label="稼働できる日" name="available_from" type="date" :value="$e->available_from ?? null" />
 <x-field label="希望の働き方" name="work_style" type="select" :options="PARK_LABELS['workStyle']" :value="$e->work_style ?? 'any'" />
 <x-field label="週の稼働日数" name="days_per_week" type="number" min="1" :value="$e->days_per_week ?? 5" />
+@if($isNew)<x-field label="郵便番号" name="postal_code" placeholder="123-4567" /><x-field label="現住所" name="address" hint="履歴書に使います。見られるのは、ご本人・所属の SES・管理者だけです。" />@endif
 @if($isEg)
   @php $st = $e->status ?? 'available'; $opts = ['available' => '案件を探している', 'unavailable' => '今は休止'] + (in_array($st, ['working', 'proposing']) ? [$st => lbl('engStatus', $st)] : []); @endphp
   <x-field label="今の状態" name="status" type="select" :options="$opts" :value="$st" />

@@ -25,6 +25,10 @@
 <x-field label="所属・役職" name="position" :value="$u->position" />
 @endunless
 <x-field label="電話" name="phone" type="tel" :value="$u->phone" />
+@if($u->role === 'admin')
+<x-field label="郵便番号" name="postal_code" :value="postal_norm($u->postal_code) ?: $u->postal_code" placeholder="123-4567" />
+<x-field label="住所" name="address" :value="$u->address" />
+@endif
 <x-field label="メールでも通知を受け取る" name="mail_opt_in" type="checkbox" :value="$u->mail_opt_in" />
 <p class="muted">メールアドレス：{{ $u->email }}（変えるときは管理者にご連絡ください）</p><button class="btn">保存する</button></form></x-card>
 <x-card title="パスワードの変更"><form method="post" action="{{ url('/account/password') }}">@csrf

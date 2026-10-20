@@ -167,30 +167,30 @@ class NameSplitTest extends TestCase
     public function test_m6_register_engineer_with_parts(): void
     {
         $this->as('admin@park.example');
-        $this->post('/engineers', ['ses_id' => 'direct', 'name_sei' => '直属', 'name_mei' => '一郎', 'kana_sei' => 'ちょくぞく', 'kana_mei' => 'いちろう', 'email' => 'm6-direct@park.example'])->assertRedirect();
+        $this->post('/engineers', ['ses_id' => '1', 'name_sei' => '直属', 'name_mei' => '一郎', 'kana_sei' => 'ちょくぞく', 'kana_mei' => 'いちろう', 'email' => 'm6-direct@park.example'])->assertRedirect();
         $e = DB::table('engineers')->where('name', '直属 一郎')->first();
         $this->assertNotNull($e);
         $this->assertSame('ちょくぞく いちろう', $e->kana);
         $this->assertSame(['直属', '一郎'], [$e->name_sei, $e->name_mei]);
         $this->assertSame('I.C', $e->initials);
-        $this->assertSame('direct', DB::table('ses_companies')->where('id', $e->ses_id)->value('kind'));
+        $this->assertSame(1, (int) $e->ses_id);
     }
 
     public function test_m6_register_requires_both_parts(): void
     {
         $this->as('admin@park.example');
         $n = DB::table('engineers')->count();
-        $this->post('/engineers', ['ses_id' => 'direct', 'name_sei' => '姓だけ'])->assertSessionHas('flash.msg', '所属と氏名を入れてください。');
-        $this->post('/engineers', ['ses_id' => 'direct', 'name_sei' => '姓だけ', 'name_mei' => '  　'])->assertSessionHas('flash.type', 'bad');
-        $this->post('/engineers', ['ses_id' => 'direct', 'name_mei' => '名だけ'])->assertSessionHas('flash.type', 'bad');
+        $this->post('/engineers', ['ses_id' => '1', 'name_sei' => '姓だけ'])->assertSessionHas('flash.msg', '所属と氏名を入れてください。');
+        $this->post('/engineers', ['ses_id' => '1', 'name_sei' => '姓だけ', 'name_mei' => '  　'])->assertSessionHas('flash.type', 'bad');
+        $this->post('/engineers', ['ses_id' => '1', 'name_mei' => '名だけ'])->assertSessionHas('flash.type', 'bad');
         $this->assertSame($n, DB::table('engineers')->count());
         $this->assertSame(0, DB::table('ses_companies')->where('kind', 'direct')->count());
     }
 
     public function test_m6_form_order_and_hint(): void
     {
-        $this->as('admin@park.example')->get('/engineers/new?ses=direct')->assertOk()
-            ->assertSeeInOrder(['所属：管理者の直属（SES なし）', '氏名（姓）', '氏名（名）', 'ふりがな（姓）', 'ふりがな（名）', 'スキルシートのイニシャル（T.Y）に使います', 'メールで呼ぶ名前', 'メールアドレス']);
+        $this->as('admin@park.example')->get('/engineers/new?ses=1')->assertOk()
+            ->assertSeeInOrder(['所属：','氏名（姓）', '氏名（名）', 'ふりがな（姓）', 'ふりがな（名）', 'スキルシートのイニシャル（T.Y）に使います', 'メールで呼ぶ名前', 'メールアドレス']);
         $this->get('/engineers/1/edit')->assertOk()->assertSeeInOrder(['氏名（姓）', '氏名（名）', 'ふりがな（姓）', 'ふりがな（名）', 'メールで呼ぶ名前']);
     }
 
@@ -234,7 +234,7 @@ class NameSplitTest extends TestCase
         $this->assertSame(str_repeat('あ', 50), $u->name_sei);
         $this->assertSame(str_repeat('い', 50), $u->name_mei);
         // エンジニアの登録・編集も 51 文字はだめ
-        $this->as('admin@park.example')->post('/engineers', ['ses_id' => 'direct', 'name_sei' => str_repeat('あ', 51), 'name_mei' => '名'])->assertSessionHas('flash.type', 'bad');
+        $this->as('admin@park.example')->post('/engineers', ['ses_id' => '1', 'name_sei' => str_repeat('あ', 51), 'name_mei' => '名'])->assertSessionHas('flash.type', 'bad');
         $this->assertSame(0, DB::table('engineers')->where('name_sei', 'like', str_repeat('あ', 51).'%')->count());
         $this->post('/engineers/1', ['name_sei' => str_repeat('あ', 51)])->assertSessionHas('flash.type', 'bad');
         $this->assertSame('山田', DB::table('engineers')->find(1)->name_sei);
@@ -244,7 +244,7 @@ class NameSplitTest extends TestCase
 
     public function test_m8_initials_from_joined_kana(): void
     {
-        $this->as('admin@park.example')->post('/engineers', ['ses_id' => 'direct', 'name_sei' => '山田', 'name_mei' => '次郎', 'kana_sei' => 'やまだ', 'kana_mei' => 'じろう', 'email' => 'm8-jiro@park.example'])->assertRedirect();
+        $this->as('admin@park.example')->post('/engineers', ['ses_id' => '1', 'name_sei' => '山田', 'name_mei' => '次郎', 'kana_sei' => 'やまだ', 'kana_mei' => 'じろう', 'email' => 'm8-jiro@park.example'])->assertRedirect();
         $this->assertSame('J.Y', DB::table('engineers')->where('name', '山田 次郎')->value('initials'));
     }
 
@@ -311,7 +311,7 @@ class NameSplitTest extends TestCase
 
     public function test_m11_legacy_engineer_post(): void
     {
-        $this->as('admin@park.example')->post('/engineers', ['ses_id' => 'direct', 'name' => '古い 画面', 'kana' => 'ふるい がめん', 'email' => 'm11-old@park.example'])->assertRedirect();
+        $this->as('admin@park.example')->post('/engineers', ['ses_id' => '1', 'name' => '古い 画面', 'kana' => 'ふるい がめん', 'email' => 'm11-old@park.example'])->assertRedirect();
         $e = DB::table('engineers')->where('name', '古い 画面')->first();
         $this->assertSame(['古い', '画面', 'ふるい', 'がめん'], [$e->name_sei, $e->name_mei, $e->kana_sei, $e->kana_mei]);
     }

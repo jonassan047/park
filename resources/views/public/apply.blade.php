@@ -6,7 +6,7 @@
 <div class="pair"><x-field label="代表者名（姓）" name="rep_sei" /><x-field label="代表者名（名）" name="rep_mei" /></div>
 <div class="pair"><x-field label="ご担当者名（姓）" name="contact_sei" required /><x-field label="ご担当者名（名）" name="contact_mei" /></div>
 <x-field label="メールアドレス" name="email" type="email" required /><x-field label="電話番号" name="phone" type="tel" />
-<x-field label="所在地" name="address" />
+<x-field label="郵便番号" name="postal_code" placeholder="123-4567" /><x-field label="所在地" name="address" />
 <x-field label="所属エンジニアの人数" name="employees" type="number" min="0" /><x-field label="得意な分野" name="strengths" placeholder="例：Java の業務系、インフラ" /></div>
 <x-field label="ひとこと" name="message" type="textarea" rows="3" />
 <x-field label="守秘義務を守り、案件・エンジニアの情報をグループの外に出さないことに同意します" name="agree" type="checkbox" required />

@@ -40,7 +40,7 @@ class AccountController extends Controller
     {
         $this->trimNames($r);
         // まだ登録していない人は、ここからの登録でも企業名・SES名を必須にする
-        $r->validate($this->profileRules(!$r->user()->profile_completed_at, $r->user()->role), [], $this->profileNames());
+        $r->validate($this->profileRules(!$r->user()->profile_completed_at, $r->user()->role), $this->profileMessages(), $this->profileNames());
         $warn = W::saveProfile($r->user(), $r->all());
         DB::table('users')->where('id', $r->user()->id)->update(['mail_opt_in' => $r->boolean('mail_opt_in')]);
         return $warn ? $this->go('/account', '保存しました。'.$warn, 'warn') : $this->go('/account', '保存しました。');
@@ -59,6 +59,15 @@ class AccountController extends Controller
     {
         $this->legacyNames($r);
         $r->merge(collect(['name_sei', 'name_mei', 'kana_sei', 'kana_mei', 'company_name', 'ses_name'])->mapWithKeys(fn ($k) => [$k => clean_name($r->input($k))])->all());
+        // 管理者の郵便番号・住所：郵便番号は「123-4567」にそろえてから検証する（そろえられなければ入れた文字のまま検証に回し、はじく）
+        if ($r->user()->role === 'admin') {
+            if ($r->has('postal_code')) {
+                $in = $r->input('postal_code');
+                $norm = is_string($in) ? postal_norm($in) : null;
+                $r->merge(['postal_code' => $norm === false ? $in : $norm]);
+            }
+            if ($r->has('address')) $r->merge(['address' => clean_name($r->input('address'))]);
+        }
     }
 
     // 前の送り方（name・kana の1つの欄）で来たら、姓・名に分けてから検証する。姓・名の欄があるときは、そちらを使う
@@ -79,14 +88,23 @@ class AccountController extends Controller
             'name_mei' => ($required ? 'required' : 'nullable').'|max:50',
             'kana_sei' => 'nullable|max:50', 'kana_mei' => 'nullable|max:50',
             'phone' => ['nullable', 'max:30', 'regex:/^[0-9+\-() ]*$/'], 'position' => 'nullable|max:100'];
-        if ($role === 'admin') $rules['company_name'] = ($required ? 'required' : 'nullable').'|max:100';
+        if ($role === 'admin') {
+            $rules['company_name'] = ($required ? 'required' : 'nullable').'|max:100';
+            $rules['postal_code'] = ['nullable', 'regex:/^\d{3}-\d{4}$/'];
+            $rules['address'] = 'nullable|max:200';
+        }
         if ($role === 'ses') $rules['ses_name'] = ($required ? 'required' : 'nullable').'|max:100';
         return $rules;
     }
 
+    private function profileMessages(): array
+    {
+        return ['postal_code.regex' => '郵便番号は7桁の数字で入れてください（例：123-4567）。', 'address.max' => '住所は200文字までにしてください。'];
+    }
+
     private function profileNames(): array
     {
-        return ['name_sei' => '氏名（姓）', 'name_mei' => '氏名（名）', 'kana_sei' => 'ふりがな（姓）', 'kana_mei' => 'ふりがな（名）', 'phone' => '電話', 'position' => '所属・役職', 'company_name' => '企業名', 'ses_name' => 'SES名'];
+        return ['postal_code' => '郵便番号', 'address' => '住所', 'name_sei' => '氏名（姓）', 'name_mei' => '氏名（名）', 'kana_sei' => 'ふりがな（姓）', 'kana_mei' => 'ふりがな（名）', 'phone' => '電話', 'position' => '所属・役職', 'company_name' => '企業名', 'ses_name' => 'SES名'];
     }
 
     // 最初のログインで出す「あなたの情報」。済んでいる人は、アカウントの画面へ
@@ -97,6 +115,7 @@ class AccountController extends Controller
         $v = (object) ['name_sei' => $u->name_sei, 'name_mei' => $u->name_mei, 'kana_sei' => $u->kana_sei, 'kana_mei' => $u->kana_mei,
             'phone' => $u->phone, 'position' => $u->position,
             'company_name' => $u->role === 'admin' ? $u->company_name : null,
+            'postal_code' => $u->role === 'admin' ? $u->postal_code : null, 'address' => $u->role === 'admin' ? $u->address : null,
             'ses_name' => $u->role === 'ses' ? DB::table('ses_companies')->where('id', $u->ses_id)->value('name') : null];
         // 姓・名の列がまだ空の人は、つないだ name・kana から分ける
         if (!$v->name_sei && !$v->name_mei) [$v->name_sei, $v->name_mei] = split_name($u->name);
@@ -115,7 +134,7 @@ class AccountController extends Controller
     {
         $this->trimNames($r);
         $u = $r->user();
-        $r->validate($this->profileRules(true, $u->role), [], $this->profileNames());
+        $r->validate($this->profileRules(true, $u->role), $this->profileMessages(), $this->profileNames());
         $warn = W::saveProfile($u, $r->all());
         [$to, $msg] = W::profileHome($u);
         return $warn ? $this->go($to, '登録しました。'.$warn, 'warn') : $this->go($to, $msg ?? '登録しました。');

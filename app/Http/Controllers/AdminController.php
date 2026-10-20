@@ -114,10 +114,7 @@ class AdminController extends Controller
             ->selectSub(DB::table('engineers')->whereColumn('ses_id', 's.id')->selectRaw('count(*)'), 'engs')
             ->selectSub(DB::table('contracts')->whereColumn('ses_id', 's.id')->where('status', 'active')->selectRaw('count(*)'), 'working')
             ->orderBy('status')->orderBy('name')->get();
-        // 一覧の最後に出す「管理者の直属」の行用（入れ物がまだ無ければ人数 0）
-        $directId = DB::table('ses_companies')->where('kind', 'direct')->value('id');
-        $direct = (object) ['engs' => $directId ? DB::table('engineers')->where('ses_id', $directId)->count() : 0];
-        return view('admin.ses-index', compact('list', 'direct'));
+        return view('admin.ses-index', compact('list'));
     }
 
     public function sesNew() { return view('admin.ses-new'); }
@@ -133,6 +130,8 @@ class AdminController extends Controller
         if (name_parts($r->all(), 'contact', 'contact_name')[0] === null) return back()->withInput()->with('flash', ['msg' => '担当者名を入れてください（招待メールの宛名になります）。', 'type' => 'bad']);
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) return back()->withInput()->with('flash', ['msg' => 'メールアドレスを正しく入れてください。', 'type' => 'bad']);
         if (DB::table('users')->where('email', $email)->exists()) return back()->withInput()->with('flash', ['msg' => 'このメールアドレスはすでに使われています。', 'type' => 'bad']);
+        $ad = W::addressCols($r->all(), '所在地');
+        if (isset($ad['bad'])) return back()->withInput()->with('flash', ['msg' => $ad['bad'], 'type' => 'bad']);
         // 管理者が登録した SES は、承認の手順を省いて、すぐ参加中にする（担当者に招待が届く）
         $id = W::applySes($r->all() + ['agree' => 1], $r->user());
         W::approveSes($id, $r->user(), str_in($r->input('name')).' を PARK に登録しました。');
@@ -161,9 +160,11 @@ class AdminController extends Controller
     public function sesUpdate(Request $r, int $id)
     {
         $this->sesOrFail($id);
+        $ad = W::addressCols($r->all() + ['postal_code' => null, 'address' => null], '所在地'); // 送られなかった欄は空として扱う（この画面は全欄を送る）
+        if (isset($ad['bad'])) return back()->withInput()->with('flash', ['msg' => $ad['bad'], 'type' => 'bad']);
         DB::table('ses_companies')->where('id', $id)->update([
             'name' => str_in($r->input('name')), ...W::sesPeopleCols($r->all()),
-            'email' => strtolower((string) str_in($r->input('email'))) ?: null, 'phone' => str_in($r->input('phone')), 'address' => str_in($r->input('address')),
+            'email' => strtolower((string) str_in($r->input('email'))) ?: null, 'phone' => str_in($r->input('phone')), ...$ad['ok'],
             'employees' => int_or_null($r->input('employees')), 'strengths' => str_in($r->input('strengths')), 'notes' => str_in($r->input('notes')), 'updated_at' => now_str(),
             'self_confirmed_at' => null, // 管理者が書き換えたら、SES にもう一度確かめてもらう
         ]);
@@ -207,7 +208,9 @@ class AdminController extends Controller
         $direct = $r->query('ses') === 'direct';
         if ($direct) $list = $list->where('ses_kind', 'direct');
         if ($q !== '') $list = $list->filter(fn ($e) => str_contains(mb_strtolower(implode(' ', [$e->name, $e->kana, $e->skills, $e->ses_name, $e->strengths])), mb_strtolower($q)));
-        return view('admin.engineers', ['list' => $list->values(), 'q' => $q, 'st' => $st, 'direct' => $direct]);
+        // 直属のエンジニアが今いるときだけ、「直属だけ」のボタンを出す（新しく直属を作る入口はない）
+        $hasDirect = DB::table('engineers as e')->join('ses_companies as s', 's.id', '=', 'e.ses_id')->where('s.kind', 'direct')->exists();
+        return view('admin.engineers', ['list' => $list->values(), 'q' => $q, 'st' => $st, 'direct' => $direct, 'hasDirect' => $hasDirect]);
     }
 
     public function operator(Request $r)
@@ -387,11 +390,26 @@ class AdminController extends Controller
         if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) return $bad('メールアドレスを正しく入れてください。');
         if (mb_strlen($company) > 100) return $bad('企業名は100文字までです。');
         if (DB::table('users')->where('email', $email)->exists()) return $bad('このメールアドレスはすでに使われています。');
-        W::invite(['email' => $email, 'name' => $name, 'name_sei' => $sei, 'name_mei' => $mei, 'role' => 'admin', 'company_name' => $company], $r->user());
+        // 任意の項目：所属・役職、電話番号、郵便番号、住所
+        $position = str_in($r->input('position')); $phone = str_in($r->input('phone'));
+        if ($position !== null && mb_strlen($position) > 100) return $bad('所属・役職は100文字までにしてください。');
+        if ($phone !== null && (mb_strlen($phone) > 30 || !preg_match('/^[0-9+\-() ]*$/', $phone))) return $bad('電話番号は30文字までの、数字・+・-・()・空白で入れてください。');
+        $ad = W::addressCols($r->only(['postal_code', 'address']));
+        if (isset($ad['bad'])) return $bad($ad['bad']);
+        W::invite(['email' => $email, 'name' => $name, 'name_sei' => $sei, 'name_mei' => $mei, 'role' => 'admin', 'company_name' => $company,
+            'position' => $position, 'phone' => $phone] + $ad['ok'], $r->user());
         return $this->go('/admin/admins', '登録し、招待メールを送りました。');
     }
 
-    // 管理者の情報の修正画面
+    // 管理者の詳細（管理者だけ。住所などの個人情報が出る）
+    public function adminShow(int $id)
+    {
+        $u = DB::table('users')->where('id', $id)->where('role', 'admin')->first();
+        abort_unless($u, 404);
+        return view('admin.admin-show', ['u' => $u, 'self' => $u->id === auth()->id()]);
+    }
+
+    // 管理者の編集画面
     public function adminEdit(int $id)
     {
         $u = DB::table('users')->where('id', $id)->where('role', 'admin')->first();
@@ -402,7 +420,7 @@ class AdminController extends Controller
     public function adminUpdate(Request $r, int $id)
     {
         abort_unless(DB::table('users')->where('id', $id)->where('role', 'admin')->exists(), 404);
-        $res = W::updateAdmin($id, $r->only(['name_sei', 'name_mei', 'company_name', 'email']), $r->user());
+        $res = W::updateAdmin($id, $r->only(['name_sei', 'name_mei', 'company_name', 'email', 'position', 'phone', 'postal_code', 'address']), $r->user());
         if ($res['type'] === 'bad') return back()->withInput()->with('flash', ['msg' => $res['msg'], 'type' => 'bad']);
         return $this->go("/admin/admins/$id", $res['msg'], $res['type']);
     }
@@ -413,7 +431,10 @@ class AdminController extends Controller
         $u = DB::table('users')->where('id', $id)->where('role', 'admin')->where('active', 1)->whereNull('password')->first();
         if (!$u) return $this->go('/admin/admins', 'この人には送り直せません。', 'bad');
         W::invite(['email' => $u->email, 'name' => $u->name, 'role' => 'admin'], $r->user());
-        return $this->go('/admin/admins', '招待を送り直しました。');
+        // 詳細から押したら詳細へ、一覧から押したら一覧へ戻る
+        $back = url()->previous();
+        $to = $back === url("/admin/admins/$id") ? "/admin/admins/$id" : '/admin/admins';
+        return $this->go($to, '招待を送り直しました。');
     }
 
     public function audit()

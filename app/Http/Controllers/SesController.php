@@ -39,7 +39,7 @@ class SesController extends Controller
         $users = DB::table('users')->where('role', 'eg')->whereIn('engineer_id', $list->pluck('id'))->get()->keyBy('engineer_id');
         foreach ($list as $e) {
             $e->skills = implode('、', ($skills[$e->id] ?? collect())->pluck('name')->all());
-            $e->account = isset($users[$e->id]) ? ($users[$e->id]->password ? '利用中' : '招待中') : 'なし';
+            $e->account = isset($users[$e->id]) ? ($users[$e->id]->password ? '使用中' : '招待中') : 'なし';
         }
         return view('ses.engineers', compact('list'));
     }
@@ -90,10 +90,12 @@ class SesController extends Controller
         // 名前の変更は、三つの入口（最初の登録・アカウント・ここ）で同じ動きにするため Workflow に任せる
         $r->merge(['name' => clean_name($r->input('name'))]);
         $r->validate(['name' => 'nullable|max:100'], [], ['name' => 'SES名（会社名）']);
+        $ad = W::addressCols($r->all() + ['postal_code' => null, 'address' => null], '所在地'); // 送られなかった欄は空として扱う（この画面は全欄を送る）
+        if (isset($ad['bad'])) return back()->withInput()->with('flash', ['msg' => $ad['bad'], 'type' => 'bad']);
         $warn = ($name = $r->input('name')) ? W::renameSes((int) $r->user()->ses_id, $name, $r->user()) : null;
         DB::table('ses_companies')->where('id', $r->user()->ses_id)->update([
             ...W::sesPeopleCols($r->all()), 'phone' => str_in($r->input('phone')),
-            'address' => str_in($r->input('address')), 'employees' => int_or_null($r->input('employees')), 'strengths' => str_in($r->input('strengths')), 'updated_at' => now_str(),
+            ...$ad['ok'], 'employees' => int_or_null($r->input('employees')), 'strengths' => str_in($r->input('strengths')), 'updated_at' => now_str(),
         ]);
         return $warn ? $this->go('/ses/company', '保存しました。'.$warn, 'warn') : $this->go('/ses/company', '保存しました。');
     }

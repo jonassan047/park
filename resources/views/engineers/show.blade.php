@@ -18,7 +18,7 @@
 <dt>働き方</dt><dd>{{ lbl('workStyle', $e->work_style) }}・週{{ $e->days_per_week ?: 5 }}日</dd>
 <dt>強み</dt><dd>{{ $e->strengths ?: '—' }}</dd><dt>自己PR</dt><dd>{!! nl2br(e($e->summary)) ?: '—' !!}</dd>
 <dt>本人の確認</dt><dd>@if($e->self_confirmed_at)済み（{{ fmt_dt($e->self_confirmed_at) }}）@else<b>まだ</b>@if(!$mine)<span class="muted">（ご本人が確かめるまで、応募できません。管理者・SES が書き換えると、もう一度確認が必要になります）</span>@endif @endif</dd>
-@unless($mine)<dt>アカウント</dt><dd>{{ $eu ? ($eu->password ? '利用中（最終ログイン '.fmt_dt($eu->last_login).'）' : '招待中（未設定）') : 'なし' }}</dd>@endunless
+@unless($mine)<dt>アカウント</dt><dd>{{ $eu ? ($eu->password ? '使用中（最終ログイン '.fmt_dt($eu->last_login).'）' : '招待中（未設定）') : 'なし' }}</dd>@endunless
 
 <dt>個人情報の同意</dt><dd>@if($e->consent_at){{ fmt_date($e->consent_at) }}@else<span class="bad-text">未</span>@endif</dd>
 </dl></x-card>
@@ -26,7 +26,7 @@
 <x-card title="詳しいプロフィール（履歴書・業務経歴書の項目）"><x-slot:actions><a class="btn ghost small" href="{{ url('/engineers/'.$e->id.'/profile') }}">編集</a></x-slot:actions>
 <dl class="dl">
 <dt>生年月日</dt><dd>{{ $e->birth_date ? fmt_date($e->birth_date) : '—' }}</dd><dt>性別</dt><dd>{{ $e->gender ?: '—' }}</dd>
-<dt>電話</dt><dd>{{ $e->phone ?: '—' }}</dd><dt>現住所</dt><dd>{{ trim(($e->postal_code ? '〒'.$e->postal_code.' ' : '').$e->address) ?: '—' }}</dd>
+<dt>電話</dt><dd>{{ $e->phone ?: '—' }}</dd><dt>現住所</dt><dd>{{ postal_address($e->postal_code, $e->address) }}</dd>
 <dt>最終学歴</dt><dd>{{ $e->education ?: '—' }}{{ $e->graduated_ym ? '（'.$e->graduated_ym.' 卒業）' : '' }}</dd>
 <dt>希望業務</dt><dd>{{ $e->desired_roles ?: '—' }}</dd><dt>語学</dt><dd>{{ $e->english_level ?: '—' }}</dd>
 <dt>職務概要</dt><dd>{!! nl2br(e($e->career_summary)) ?: '—' !!}</dd>

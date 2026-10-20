@@ -40,6 +40,24 @@ class Workflow
         return ['rep_name' => $rep, 'rep_sei' => self::cut50($rs), 'rep_mei' => self::cut50($rm), 'contact_name' => $con, 'contact_sei' => self::cut50($cs), 'contact_mei' => self::cut50($cm)];
     }
 
+    // 郵便番号・住所の検査とそろえ。$d に postal_code・address のキーがあるものだけ返す（無ければ今の値のまま）。
+    // 戻り値は ['ok' => [列 => 値]] か ['bad' => '文']。$label は住所の画面の名前（住所・所在地・現住所）
+    public static function addressCols(array $d, string $label = '住所'): array
+    {
+        $ok = [];
+        if (array_key_exists('postal_code', $d)) {
+            $p = postal_norm(is_string($d['postal_code']) ? $d['postal_code'] : null);
+            if ($p === false) return ['bad' => '郵便番号は7桁の数字で入れてください（例：123-4567）。'];
+            $ok['postal_code'] = $p;
+        }
+        if (array_key_exists('address', $d)) {
+            $a = clean_name($d['address']);
+            if ($a !== null && mb_strlen($a) > 200) return ['bad' => $label.'は200文字までにしてください。'];
+            $ok['address'] = $a;
+        }
+        return ['ok' => $ok];
+    }
+
     private static function cut50(?string $s): ?string
     {
         return $s === null ? null : mb_substr($s, 0, 50);
@@ -71,7 +89,11 @@ class Workflow
             $row = ['email' => $email] + self::nameCols((string) $d['name'], $d['name_sei'] ?? null, $d['name_mei'] ?? null) + ['role' => $d['role'], 'ses_id' => $d['ses_id'] ?? null,
                 'engineer_id' => $d['engineer_id'] ?? null, 'created_at' => now_str(), 'updated_at' => now_str()];
             // 企業名は管理者だけ（宛名に出る）
-            if ($d['role'] === 'admin') $row['company_name'] = clean_name($d['company_name'] ?? null);
+            // 所属・役職・電話・郵便番号・住所も管理者だけ（呼ぶ側で検査・そろえ済みの値を渡す）
+            if ($d['role'] === 'admin') {
+                $row['company_name'] = clean_name($d['company_name'] ?? null);
+                foreach (['position', 'phone', 'postal_code', 'address'] as $f) $row[$f] = str_in($d[$f] ?? '');
+            }
             $id = DB::table('users')->insertGetId($row);
             $u = DB::table('users')->find($id);
         }
@@ -116,6 +138,22 @@ class Workflow
             if (DB::table('users')->where('email', $new)->where('id', '!=', $id)->exists()) return $bad('このメールアドレスはすでに使われています。');
         }
 
+        // 所属・役職・電話・郵便番号・住所（キーが来たものだけ。検査は保存の前に全部すませる）
+        $extra = [];
+        if (array_key_exists('position', $d)) {
+            $pos = str_in($d['position']);
+            if ($pos !== null && mb_strlen($pos) > 100) return $bad('所属・役職は100文字までにしてください。');
+            $extra['position'] = $pos;
+        }
+        if (array_key_exists('phone', $d)) {
+            $tel = str_in($d['phone']);
+            if ($tel !== null && (mb_strlen($tel) > 30 || !preg_match('/^[0-9+\-() ]*$/', $tel))) return $bad('電話番号は30文字までの、数字・+・-・()・空白で入れてください。');
+            $extra['phone'] = $tel;
+        }
+        $ad = self::addressCols($d);
+        if (isset($ad['bad'])) return $bad($ad['bad']);
+        $extra += $ad['ok'];
+
         $name = join_name($sei, $mei);
         $upd = [];
         // 姓・名の列が空の古い行は、つないだ name を分けたものを基準にする（何も変えずに保存したら「変化なし」）
@@ -123,6 +161,10 @@ class Workflow
         if ($sei !== $curSei || $mei !== $curMei) $upd += ['name_sei' => $sei, 'name_mei' => $mei, 'name' => $name];
         if ($company !== $u->company_name) $upd['company_name'] = $company;
         if ($emailChanged) $upd['email'] = $new;
+        $changedExtra = [];
+        foreach ($extra as $f => $val) {
+            if ($val !== ($u->$f ?? null)) { $upd[$f] = $val; $changedExtra[] = $f; }
+        }
         if (!$upd) return ['type' => 'ok', 'msg' => '保存しました。'];
 
         DB::transaction(fn () => DB::table('users')->where('id', $id)->update($upd + ['updated_at' => now_str()]));
@@ -137,6 +179,10 @@ class Workflow
         if (isset($upd['name'])) $log[] = '氏名：'.$u->name.'→'.$name;
         if (isset($upd['company_name'])) $log[] = '企業名：'.$u->company_name.'→'.$company;
         if ($emailChanged) $log[] = "メール：{$old}→{$new}";
+        // 電話・住所は個人情報なので、変えたという項目の名前だけを記録する（中身は書かない）
+        $labels = ['position' => '所属・役職', 'phone' => '電話番号', 'postal_code' => '住所', 'address' => '住所'];
+        $names = array_unique(array_map(fn ($f) => $labels[$f], $changedExtra));
+        if ($names) $log[] = implode('・', $names).'を変更';
         N::audit($actor->id ?? null, 'admin-edit', mb_substr("#$id ".implode('／', $log), 0, 300));
         return ['type' => 'ok', 'msg' => $msg];
     }
@@ -153,6 +199,10 @@ class Workflow
         if ($ns !== null || $nm !== null) $upd += ['name_sei' => $ns, 'name_mei' => $nm, 'name' => join_name($ns, $nm)];
         if ($user->role !== 'eg') $upd['position'] = str_in($d['position'] ?? '');
         if ($user->role === 'admin' && ($c = str_in($d['company_name'] ?? '')) !== null) $upd['company_name'] = $c;
+        // 管理者の郵便番号・住所（呼ぶ側で検査済み。キーが来たものだけ保存）
+        if ($user->role === 'admin') {
+            foreach (['postal_code', 'address'] as $f) if (array_key_exists($f, $d)) $upd[$f] = str_in($d[$f] ?? '');
+        }
         if (!DB::table('users')->where('id', $user->id)->value('profile_completed_at')) $upd['profile_completed_at'] = now_str();
         $warn = null;
         DB::transaction(function () use ($user, $upd, $d, &$warn) {
@@ -212,7 +262,8 @@ class Workflow
     {
         $id = DB::table('ses_companies')->insertGetId([
             'name' => str_in($d['name'] ?? ''), ...self::sesPeopleCols($d),
-            'email' => strtolower((string) str_in($d['email'] ?? '')), 'phone' => str_in($d['phone'] ?? ''), 'address' => str_in($d['address'] ?? ''),
+            'email' => strtolower((string) str_in($d['email'] ?? '')), 'phone' => str_in($d['phone'] ?? ''),
+            'postal_code' => postal_norm(is_string($d['postal_code'] ?? null) ? $d['postal_code'] : null) ?: null, 'address' => str_in($d['address'] ?? ''),
             'employees' => int_or_null($d['employees'] ?? null), 'strengths' => str_in($d['strengths'] ?? ''), 'message' => str_in($d['message'] ?? ''),
             'notes' => str_in($d['notes'] ?? ''), 'status' => 'pending', 'agreed_at' => !empty($d['agree']) ? now_str() : null, 'created_at' => now_str(), 'updated_at' => now_str(),
         ]);

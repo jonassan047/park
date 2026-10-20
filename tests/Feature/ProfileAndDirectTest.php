@@ -30,11 +30,12 @@ class ProfileAndDirectTest extends TestCase
         DB::table('users')->whereIn('email', $emails)->update(['profile_completed_at' => null]);
     }
 
-    // 管理者の直属のエンジニアを1人登録して、その engineers.id を返す（管理者として操作する）
+    // 管理者の直属のエンジニアを1人作って、その engineers.id を返す（管理者として操作する）。
+    // 直属は画面からは新しく登録できない（PLAN V1）ので、今いる直属の人と同じ形で直接作る
     private function directEngineer(string $email = 'direct-eg@park.example', string $name = '直属 一郎'): int
     {
-        $this->as('admin@park.example')->post('/engineers', ['ses_id' => 'direct', 'name' => $name, 'email' => $email])->assertRedirect();
-        return (int) DB::table('engineers')->where('name', $name)->value('id');
+        $this->as('admin@park.example');
+        return W::createEngineer(W::directSesId(), ['name' => $name, 'email' => $email], User::where('email', 'admin@park.example')->first());
     }
 
     // ---------- A. 最初の情報登録 ----------
@@ -336,11 +337,14 @@ class ProfileAndDirectTest extends TestCase
     public function test_e3_options_and_zero_rows(): void
     {
         $this->as('admin@park.example');
-        $this->get('/engineers/new?ses=direct')->assertOk()->assertSee('所属：管理者の直属（SES なし）');
+        // V1-1：直属を新しく登録する入口はない（SES を選んでから登録する）
+        $this->get('/engineers/new?ses=direct')->assertRedirect(url('/admin/ses'))->assertSessionHas('flash.type', 'warn');
         $this->get('/admin/engineers?ses=direct')->assertOk(); // 0件でも開ける
         $this->assertSame(0, DB::table('ses_companies')->where('kind', 'direct')->count()); // 開いただけでは作らない
+        $this->get('/admin/engineers')->assertOk()->assertDontSee('直属だけ'); // 直属の人がいないときはボタンが出ない
         W::directSesId();
-        $this->assertStringNotContainsString('<select name="ses_id"', $this->get('/engineers/new?ses=direct')->getContent()); // 所属は選ばせない（読むだけ）
+        $this->get('/admin/engineers')->assertOk()->assertDontSee('直属だけ'); // 入れ物だけでは出ない（直属のエンジニアがいるときだけ）
+        $this->assertStringNotContainsString('<select name="ses_id"', $this->get('/engineers/new?ses=1')->getContent()); // 所属は選ばせない（読むだけ）
         $this->as('ses1@park.example')->get('/engineers/new')->assertOk()->assertDontSee('管理者の直属');
     }
 
@@ -366,15 +370,12 @@ class ProfileAndDirectTest extends TestCase
         $this->post('/engineers', ['ses_id' => 99999, 'name' => '幻 太郎'])->assertSessionHas('flash.type', 'bad');
         $this->assertSame($n, DB::table('engineers')->count());
         $this->assertSame(0, DB::table('ses_companies')->where('kind', 'direct')->count());
-        // 所属に direct を選ぶと kind=direct の行に入る
-        $this->post('/engineers', ['ses_id' => 'direct', 'name' => '直属 選択', 'email' => 'direct-pick@park.example'])->assertRedirect();
-        $e = DB::table('engineers')->where('name', '直属 選択')->first();
-        $this->assertSame('direct', DB::table('ses_companies')->where('id', $e->ses_id)->value('kind'));
-        // 名前が空なら、直属の行も作らない
-        DB::table('engineers')->where('ses_id', $e->ses_id)->delete();
-        DB::table('users')->where('ses_id', $e->ses_id)->delete();
-        DB::table('ses_companies')->where('kind', 'direct')->delete();
-        $this->post('/engineers', ['ses_id' => 'direct', 'name' => ''])->assertSessionHas('flash.type', 'bad');
+        // V1-2：所属に direct を送っても受けない（直属の行も、エンジニアも、ユーザーも、メールも増えない）
+        $u = DB::table('users')->count(); $m = DB::table('mail_outbox')->count();
+        $this->post('/engineers', ['ses_id' => 'direct', 'name' => '直属 選択', 'email' => 'direct-pick@park.example'])->assertSessionHas('flash.type', 'bad')->assertSessionHas('flash.msg', '所属と氏名を入れてください。');
+        $this->assertSame($n, DB::table('engineers')->count());
+        $this->assertSame($u, DB::table('users')->count());
+        $this->assertSame($m, DB::table('mail_outbox')->count());
         $this->assertSame(0, DB::table('ses_companies')->where('kind', 'direct')->count());
     }
 
@@ -413,8 +414,8 @@ class ProfileAndDirectTest extends TestCase
         $s0 = json_decode(Artisan::output(), true);
         $this->as('admin@park.example');
         $list = $this->get('/admin/ses')->assertOk();
-        // 一覧の最後の「直属」の行は出るが、SES の詳細（/admin/ses/{id}）へのリンクは無い
-        $this->assertStringContainsString('管理者の直属（SES なし）', $list->getContent());
+        // 一覧に「直属」の行は出ない（V1-3）。SES の詳細（/admin/ses/{id}）へのリンクも無い
+        $this->assertStringNotContainsString('管理者の直属', $list->getContent());
         $this->assertStringNotContainsString(url("/admin/ses/$direct").'"', $list->getContent());
         foreach (["/admin/ses/$direct"] as $p) $this->get($p)->assertNotFound();
         $this->post("/admin/ses/$direct", ['name' => 'x'])->assertNotFound();

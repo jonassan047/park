@@ -22,6 +22,9 @@
 <dt>所属・役職</dt><dd>{{ $dash($u->position) }}</dd>
 @endunless
 <dt>電話</dt><dd>{{ $dash($u->phone) }}</dd>
+@if($u->role === 'admin')
+<dt>住所</dt><dd>{{ postal_address($u->postal_code, $u->address) }}</dd>
+@endif
 <dt>メールアドレス</dt><dd>{{ $u->email }}</dd>
 <dt>立場</dt><dd>{{ lbl('role', $u->role) }}</dd>
 <dt>メールでの通知</dt><dd>{{ $u->mail_opt_in ? '受け取る' : '受け取らない' }}</dd>

@@ -186,10 +186,11 @@ class AdminAccountTest extends TestCase
         $html = $this->as('admin@park.example')->get('/admin/admins')->assertOk()->getContent();
         $this->assertStringContainsString("/admin/admins/$other", $html);
         $this->assertStringContainsString("/admin/admins/$self", $html);
-        $this->assertStringContainsString('>修正</a>', $html);
+        $this->assertStringContainsString('>詳細</a>', $html);
+        $this->assertStringNotContainsString('>修正<', $html);
         $this->assertStringNotContainsString('>直す<', $html);
 
-        $this->get("/admin/admins/$other")->assertOk()->assertSee('管理者の情報の修正')->assertSee('使用中')
+        $this->get("/admin/admins/$other/edit")->assertOk()->assertSee('管理者の編集：別 管理者')->assertSee('使用中')
             ->assertSee('value="別"', false)->assertSee('value="管理者"', false)->assertSee('value="別企業"', false)->assertSee('value="admin2@park.example"', false);
     }
 
@@ -237,7 +238,7 @@ class AdminAccountTest extends TestCase
     public function test_q4_self_email_rejected_and_nothing_saved(): void
     {
         $self = $this->uid('admin@park.example');
-        $this->as('admin@park.example')->get("/admin/admins/$self")->assertOk()->assertSee('disabled', false)->assertSee('ご自分のメールは、ほかの管理者に頼んで変えてもらいます。');
+        $this->as('admin@park.example')->get("/admin/admins/$self/edit")->assertOk()->assertSee('disabled', false)->assertSee('ご自分のメールは、ほかの管理者に頼んで変えてもらいます。');
         $before = (array) DB::table('users')->find($self);
         $this->save($self, ['email' => 'self-new@park.example', 'name_sei' => '書き換え', 'company_name' => '書き換え企業'])
             ->assertSessionHas('flash.type', 'bad')->assertSessionHas('flash.msg', 'ご自分のメールアドレスは変えられません。');
@@ -248,7 +249,7 @@ class AdminAccountTest extends TestCase
     {
         $id = $this->activeAdmin();
         DB::table('users')->where('id', $id)->update(['active' => 0]);
-        $this->as('admin@park.example')->get("/admin/admins/$id")->assertOk()->assertSee('停止')->assertSee('停止中の人のメールアドレスは変えられません。');
+        $this->as('admin@park.example')->get("/admin/admins/$id/edit")->assertOk()->assertSee('停止')->assertSee('停止中の人のメールアドレスは変えられません。');
         $m0 = DB::table('mail_outbox')->count();
         $this->save($id, ['email' => 'moved@park.example'])->assertSessionHas('flash.type', 'bad')->assertSessionHas('flash.msg', '停止中の人のメールアドレスは変えられません。');
         $this->assertSame('admin2@park.example', DB::table('users')->where('id', $id)->value('email'));
@@ -262,7 +263,7 @@ class AdminAccountTest extends TestCase
         $id = $this->pendingAdmin('inv-a@park.example');
         $t0 = DB::table('users')->where('id', $id)->value('token');
         $old = DB::table('mail_outbox')->where('to_email', 'inv-a@park.example')->count();
-        $this->get("/admin/admins/$id")->assertOk()->assertSee('招待中')->assertSee('変えると、新しいアドレスに招待を送り直します。');
+        $this->get("/admin/admins/$id/edit")->assertOk()->assertSee('招待中')->assertSee('変えると、新しいアドレスに招待を送り直します。');
         $this->save($id, ['email' => 'Moved@Park.Example'])->assertRedirect(url("/admin/admins/$id"))
             ->assertSessionHas('flash.type', 'ok')->assertSessionHas('flash.msg', '保存し、新しいメールアドレスに招待を送り直しました。');
         $r = DB::table('users')->find($id);
@@ -282,7 +283,7 @@ class AdminAccountTest extends TestCase
     public function test_q4_active_other_email_rejected_no_mail(): void
     {
         $id = $this->activeAdmin();
-        $this->as('admin@park.example')->get("/admin/admins/$id")->assertOk()->assertSee('使用中の方のメールは変えられません。')->assertSee('disabled', false);
+        $this->as('admin@park.example')->get("/admin/admins/$id/edit")->assertOk()->assertSee('使用中の方のメールは変えられません。')->assertSee('disabled', false);
         $before = (array) DB::table('users')->find($id);
         $m0 = DB::table('mail_outbox')->count(); $a0 = $this->audits('admin-edit');
         $this->save($id, ['email' => 'moved2@park.example', 'name_sei' => '混ぜる姓', 'company_name' => '混ぜる企業'])
@@ -356,12 +357,14 @@ class AdminAccountTest extends TestCase
         $this->as('admin@park.example');
         foreach ([$ses, $eg, 99999] as $id) {
             $this->get("/admin/admins/$id")->assertNotFound();
+            $this->get("/admin/admins/$id/edit")->assertNotFound();
             $this->post("/admin/admins/$id", ['name_sei' => 'あ', 'company_name' => 'い', 'email' => 'x@park.example'])->assertNotFound();
         }
         $this->assertSame('ses1@park.example', DB::table('users')->where('id', $ses)->value('email'));
         $adm = $this->activeAdmin();
         foreach (['ses1@park.example', 'eg1@park.example'] as $who) {
             $this->as($who)->get("/admin/admins/$adm")->assertForbidden();
+            $this->get("/admin/admins/$adm/edit")->assertForbidden();
             $this->post("/admin/admins/$adm", ['name_sei' => '乗っ取り', 'company_name' => '乗っ取り', 'email' => 'admin2@park.example'])->assertForbidden();
             $this->post('/admin/admins', ['name' => '勝手 太郎', 'company_name' => '勝手', 'email' => 'sneak@park.example'])->assertForbidden();
         }

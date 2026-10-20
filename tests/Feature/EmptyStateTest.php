@@ -122,7 +122,7 @@ class EmptyStateTest extends TestCase
         $this->as($a);
         $tabs = ['/admin/ses', '/admin/engineers', '/admin/cases', '/admin/applications', '/admin/contracts', '/admin/invoices', '/admin/messages',
             '/admin/mail', '/admin/reports', '/admin/ai', '/admin/settings', '/admin/admins', '/admin/audit', '/admin/skills', '/manual', '/notifications', '/account', '/account/profile',
-            '/engineers/new?ses=direct', '/cases/new', '/admin/ses/new', '/admin/admins/new'];
+            '/cases/new', '/admin/ses/new', '/admin/admins/new'];
         foreach ($tabs as $t) $this->get($t)->assertOk();
         foreach (['/admin/ses', '/admin/engineers', '/admin/cases', '/admin/contracts', '/admin/invoices', '/admin/messages'] as $t) {
             $this->assertMatchesRegularExpression('/ありません|まだ|ない|0件/u', $this->get($t)->getContent(), $t);
@@ -147,8 +147,9 @@ class EmptyStateTest extends TestCase
     public function test_p1_disappears_with_only_a_case_or_only_an_engineer(): void
     {
         $a = $this->admin();
-        $this->as($a)->post('/engineers', ['ses_id' => 'direct', 'name_sei' => '直属', 'name_mei' => '一郎', 'email' => 'direct-one@example.com'])->assertRedirect();
-        $this->get('/admin')->assertDontSee('PARK をはじめましょう');
+        // 直属は新しく登録できないので、今いる直属の人として直接作る
+        W::createEngineer(W::directSesId(), ['name_sei' => '直属', 'name_mei' => '一郎', 'email' => 'direct-one@example.com'], $a);
+        $this->as($a)->get('/admin')->assertDontSee('PARK をはじめましょう');
         DB::table('engineers')->delete();
         $this->get('/admin')->assertSee('PARK をはじめましょう');
         $this->post('/cases', ['title' => '最初の案件', 'price' => '60', 'status' => 'open'])->assertRedirect();
@@ -228,7 +229,7 @@ class EmptyStateTest extends TestCase
     public function test_p6_engineer_with_project_has_no_guide_card(): void
     {
         $a = $this->admin();
-        $this->as($a)->post('/engineers', ['ses_id' => 'direct', 'name_sei' => '経験', 'name_mei' => '有り', 'email' => 'exp@example.com'])->assertRedirect();
+        W::createEngineer(W::directSesId(), ['name_sei' => '経験', 'name_mei' => '有り', 'email' => 'exp@example.com'], $a);
         $e = DB::table('engineers')->where('name', '経験 有り')->first();
         $uid = DB::table('users')->where('email', 'exp@example.com')->value('id');
         DB::table('users')->where('id', $uid)->update(['password' => bcrypt('abcd1234'), 'profile_completed_at' => now_str()]);
