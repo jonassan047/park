@@ -180,8 +180,9 @@ class EngineerController extends Controller
     public function destroy(Request $r, int $id)
     {
         $e = $this->load($r, $id);
-        if ($e->status === 'left') return $this->go("/engineers/$id", 'すでに退会済です。');
-        if (DB::table('contracts')->where('engineer_id', $id)->where('status', 'active')->exists()) return $this->go("/engineers/$id", '退会にできません。稼働中の契約があります。先に契約を終了してください。', 'bad');
+        $back = $this->backTo($r, $e);
+        if ($e->status === 'left') return $this->go($back, 'すでに退会済です。');
+        if (DB::table('contracts')->where('engineer_id', $id)->where('status', 'active')->exists()) return $this->go($back, '退会にできません。稼働中の契約があります。先に契約を終了してください。', 'bad');
         DB::table('engineers')->where('id', $id)->update(['status' => 'left']);
         DB::table('users')->where('engineer_id', $id)->where('role', 'eg')->update(['active' => 0, 'left_at' => now_str()]);
         // 兼任の人は、エンジニアの紐づけだけ外す（SES 担当者・管理者としては引き続き入れる）
@@ -192,22 +193,31 @@ class EngineerController extends Controller
             foreach ($dualIds as $uid) N::audit($r->user()->id, 'dual-unlink', "#user {$uid} ← エンジニア #{$id}");
         }
         N::audit($r->user()->id, 'engineer-leave', $mark.$e->name);
-        return $this->go("/engineers/$id", 'エンジニア「'.$e->name.'」を退会済にしました。');
+        return $this->go($back, 'エンジニア「'.$e->name.'」を退会済にしました。');
     }
 
     // エンジニアの停止・再開（管理者と所属の SES。権限は load() で確かめる。本人は role ミドルウェアで入れない）
     public function suspend(Request $r, int $id)
     {
-        $this->load($r, $id);
+        $e = $this->load($r, $id);
         $res = W::suspendEngineer($id, $r->user());
-        return $this->go("/engineers/$id", $res['msg'], $res['type']);
+        return $this->go($this->backTo($r, $e), $res['msg'], $res['type']);
     }
 
     public function resume(Request $r, int $id)
     {
-        $this->load($r, $id);
+        $e = $this->load($r, $id);
         $res = W::resumeEngineer($id, $r->user());
-        return $this->go("/engineers/$id", $res['msg'], $res['type']);
+        return $this->go($this->backTo($r, $e), $res['msg'], $res['type']);
+    }
+
+    // 操作のあとの戻り先。管理者が SES の詳細の表から押したときだけ SES の詳細へ。行き先は DB のエンジニアから作る
+    private function backTo(Request $r, object $e): string
+    {
+        if ($r->user()->role === 'admin' && $r->input('back') === 'ses' && DB::table('ses_companies')->where('id', $e->ses_id)->where('kind', 'ses')->exists()) {
+            return "/admin/ses/{$e->ses_id}";
+        }
+        return "/engineers/{$e->id}";
     }
 
     public function skills(Request $r, int $id)

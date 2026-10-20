@@ -156,10 +156,15 @@ class AdminController extends Controller
         // 会社が参加中なのに、使える担当者がいないとき注意を出す。止めている人がいれば「再開」、いなければ「登録」を勧める
         $usable = $users->where('active', 1)->count();
         $noUsable = $s->status === 'active' && $usable === 0 && $users->count() > 0 ? ($users->whereNull('left_at')->count() > 0 ? 'stopped' : 'left') : null;
+        $engs = DB::table('engineers')->where('ses_id', $id)->orderBy('name')->get();
+        $egIds = $engs->pluck('id');
         return view('admin.ses-show', [
             's' => $s,
-            'engs' => DB::table('engineers')->where('ses_id', $id)->orderBy('name')->get(),
+            'engs' => $engs,
             'users' => $users, 'noUsable' => $noUsable,
+            // 停止の確認の文に添える、稼働中の契約と選考中の応募（エンジニアごとに問い合わせず、まとめて取る）
+            'working' => DB::table('contracts')->whereIn('engineer_id', $egIds)->where('status', 'active')->pluck('engineer_id')->flip(),
+            'inSel' => DB::table('applications')->whereIn('engineer_id', $egIds)->whereIn('status', PipelineController::OPEN)->get(['engineer_id'])->groupBy('engineer_id')->map->count(),
             'invs' => DB::table('invoices')->where('ses_id', $id)->orderByDesc('period')->get(),
         ]);
     }
@@ -253,12 +258,24 @@ class AdminController extends Controller
         abort_if($isSes && (int) $u->ses_id !== $id, 404); // 他社の会社は見つからない扱い
         $this->sesOrFail($id);
         $back = $isSes ? '/ses/company' : "/admin/ses/$id";
+        $toDetail = !$isSes && $r->input('back') === 'detail'; // 担当者の詳細の画面から押したとき
         if ($isSes && $uid === (int) $u->id && DB::table('users')->where('id', $uid)->where('ses_id', $id)->where('role', 'ses')->exists()) {
             return $this->go($back, 'ご自身は、停止・再開・退会にできません。別の担当者か管理者にお願いしてください。', 'bad');
         }
         $res = W::$method($id, $uid, $u);
         abort_unless($res, 404);
+        // 詳細の画面から押したときは詳細に戻る。ただし兼任の人の退会で担当者でなくなったときは SES の詳細へ
+        if ($toDetail && DB::table('users')->where('id', $uid)->where('role', 'ses')->where('ses_id', $id)->exists()) $back = "/admin/ses/$id/users/$uid";
         return $this->go($back, $res['msg'], $res['type']);
+    }
+
+    // 担当者の詳細（管理者だけ。その会社の SES 担当者でなければ 404）
+    public function sesUserShow(int $id, int $uid)
+    {
+        $s = $this->sesOrFail($id);
+        $u = DB::table('users')->where('id', $uid)->where('role', 'ses')->where('ses_id', $id)->first();
+        abort_unless($u, 404);
+        return view('admin.ses-user-show', ['s' => $s, 'u' => $u]);
     }
 
     public function sesUserSuspend(Request $r, int $id, int $uid) { return $this->sesUserDo($r, $id, $uid, 'suspendSesUser'); }

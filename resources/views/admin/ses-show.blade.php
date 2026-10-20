@@ -14,7 +14,7 @@
 <p><a class="btn ghost" href="{{ url('/admin/ses') }}">SES の一覧に戻る</a></p>
 </x-card>
 </div><div>
-<x-card title="担当者のアカウント"><x-slot:actions><a class="btn small" href="{{ url('/admin/ses/'.$s->id.'/users/new') }}">担当者を登録</a></x-slot:actions>
+<x-card title="担当者"><x-slot:actions><a class="btn small" href="{{ url('/admin/ses/'.$s->id.'/users/new') }}">担当者を登録</a></x-slot:actions>
 @if($noUsable === 'stopped')<p class="bad-text">使える担当者がいません。止めている担当者を再開するか、担当者を登録してください。</p>@endif
 @if($noUsable === 'left')<p class="bad-text">使える担当者がいません。担当者を登録してください。</p>@endif
 <x-table :head="['名前', 'メール', '状態', '最終ログイン', '']" :count="$users->count()">
@@ -24,12 +24,17 @@ $base = '/admin/ses/'.$s->id.'/users/'.$u->id;
 @endphp<tr><td>{{ $u->name }}@if($u->engineer_id) <a class="badge info" href="{{ url('/engineers/'.$u->engineer_id) }}">エンジニア兼任</a>@endif</td><td>{{ $u->email }}</td><td>{{ $state }}</td>
 <td>{{ fmt_dt($u->last_login) }}</td><td>@if($state === '停止')<x-post :action="$base.'/resume'" label="再開" cls="small" :confirm="$u->name.' さんを再開します。'" />
 @elseif($state !== '退会済')<x-post :action="$base.'/suspend'" label="停止" cls="ghost small" :confirm="$u->name.' さんを停止します。ログインできなくなります（再開できます）。'" />@endif
-@if($state !== '退会済')<x-post :action="$base.'/delete'" label="退会" cls="danger small" :confirm="$u->name.' さんを退会済にします。ログインできなくなり、元に戻せません（記録は残ります）。よろしいですか？'" />@endif</td></tr>@endforeach
+@if($state !== '退会済')<x-post :action="$base.'/delete'" label="退会" cls="danger small" :confirm="$u->name.' さんを退会済にします。ログインできなくなり、元に戻せません（記録は残ります）。よろしいですか？'" />@endif
+<a class="btn small" href="{{ url($base) }}">詳細</a></td></tr>@endforeach
 </x-table>
 </x-card>
 <x-card title="エンジニア">@if($s->status === 'active')<x-slot:actions><a class="btn small" href="{{ url('/engineers/new?ses='.$s->id) }}">エンジニアを登録</a></x-slot:actions> @endif
 <x-table :head="['名前', '状態', '希望', '']" :count="$engs->count()">
-@foreach($engs as $e)<tr><td>{{ $e->name }}</td><td>{{ badge('engStatus', $e->status) }}</td><td>{{ man($e->desired_price) }}</td><td><a class="btn small" href="{{ url('/engineers/'.$e->id) }}">詳細</a></td></tr>@endforeach
+@foreach($engs as $e)@php $egBase = '/engineers/'.$e->id; $back = ['back' => 'ses']; @endphp<tr><td>{{ $e->name }}</td><td>{{ badge('engStatus', $e->status) }}@if($e->suspended_at) <span class="badge mute">停止中</span>@endif</td><td>{{ man($e->desired_price) }}</td>
+<td>@if($e->status !== 'left')@if($e->suspended_at)<x-post :action="$egBase.'/resume'" label="再開" cls="small" :fields="$back" confirm="このエンジニアを再開します。ログインでき、案件の配信の候補にも出るようになります。" />
+@else<x-post :action="$egBase.'/suspend'" label="停止" cls="ghost small" :fields="$back" :confirm="engineer_stop_confirm(isset($working[$e->id]), (int) ($inSel[$e->id] ?? 0))" />@endif
+<x-post :action="$egBase.'/delete'" label="退会" cls="danger small" :fields="$back" confirm="このエンジニアを退会済にします。ログインできなくなり、元に戻せません（記録は残ります）。よろしいですか？" />@endif
+<a class="btn small" href="{{ url($egBase) }}">詳細</a></td></tr>@endforeach
 </x-table></x-card>
 <x-card title="請求"><x-table :head="['月', '合計', '状態', '']" :count="$invs->count()">
 @foreach($invs as $i)<tr><td>{{ $i->period }}</td><td>{{ yen($i->total) }}</td><td>{{ badge('invoiceStatus', $i->status) }}</td><td><a class="btn small" href="{{ url('/invoices/'.$i->id) }}">詳細</a></td></tr>@endforeach

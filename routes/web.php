@@ -152,6 +152,7 @@ Route::middleware('role:admin')->group(function () {
         Route::get('/ses/{id}', [Adm::class, 'sesShow']);
         Route::get('/ses/{id}/edit', [Adm::class, 'sesEdit']);
         Route::get('/ses/{id}/users/new', [Adm::class, 'sesUserNew']);
+        Route::get('/ses/{id}/users/{uid}', [Adm::class, 'sesUserShow'])->whereNumber('uid');
         Route::post('/ses/{id}/delete', [Adm::class, 'sesDelete']);
         Route::post('/ses/{id}', [Adm::class, 'sesUpdate']);
         Route::post('/ses/{id}/approve', [Adm::class, 'sesApprove']);

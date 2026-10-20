@@ -72,6 +72,14 @@ function user_state(?object $u): string
     return $u->password ? '使用中' : '招待中';
 }
 
+// エンジニアを停止するときの確認の文（エンジニアの詳細と SES の詳細で同じ文を使う）
+function engineer_stop_confirm(bool $working, int $inSelection): string
+{
+    return 'このエンジニアを停止します。ログインできなくなり、案件の配信の候補に出なくなります（再開できます）。'
+        .($working ? '稼働中の契約があります。契約・請求はそのまま続きます。' : '')
+        .($inSelection ? "選考中の応募 {$inSelection} 件はそのまま残ります。" : '');
+}
+
 function badge(string $map, ?string $key): HtmlString
 {
     return new HtmlString('<span class="badge '.(PARK_TONE[$key] ?? '').'">'.e(lbl($map, $key)).'</span>');

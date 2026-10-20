@@ -1,3 +1,166 @@
+# PLAN：SES の詳細の「担当者」「エンジニア」の表に 停止・退会・詳細、担当者の詳細画面（2026-10-20）
+
+> この節が今回の計画。下の「兼任ログイン」の節は前の計画（実装済み）で、その下の「テスト期間だけ重複を許す」は保留中の計画。どちらも消さずに残している。
+
+## 背景
+
+tezzo の要求（2026-10-20）：「SES 詳細画面、担当者のアカウントは担当者に変更。担当者・エンジニア共に 停止・退会・詳細 のボタンを設置」。
+
+今（`resources/views/admin/ses-show.blade.php`）：
+- 「担当者のアカウント」の表（17〜29行）：再開／停止・退会はあるが、詳細が無い（担当者の詳細画面・ルートが無い）。
+- 「エンジニア」の表（30〜33行）：詳細だけ。停止・退会は無い（ルート `POST /engineers/{id}/suspend`・`resume`・`delete` はあり、エンジニアの詳細の右上にボタンがある）。
+
+## 仮定（Planner が置いたもの）
+
+- 仮定1：ボタンの並びは、tezzo の文の順「停止（停止中は再開）・退会・詳細」。エンジニアの詳細の右上（停止・退会・編集＝青が最後）と同じ考え方で、青い「詳細」を右端に置く（「決めてほしいこと」の 1）。
+- 仮定2：表のボタンで停止・退会したあとは、**SES の詳細に戻る**（エンジニアの詳細に飛ばない）。担当者の詳細画面のボタンで操作したときは、担当者の詳細に戻る（ただし退会で担当者でなくなった兼任の人は SES の詳細へ）。
+- 仮定3：エンジニアの表の「状態」の列に、エンジニアの詳細と同じ「停止中」の札（`badge mute`）を足す。「再開」が出る理由が見えるようにするため。
+- 仮定4：担当者の詳細には、頼まれた項目に加えて「SES」（会社名）の1行を出す。どの会社の人かが画面だけで分かるようにするため（会社名は個人情報ではない）。
+- 仮定5：管理者の側に SES 担当者の編集画面は無い（ルートは `users/new` だけ）。だから担当者の詳細に「編集」は置かない。担当者ご本人は `/account` で直す（今のまま）。
+- 仮定6：SES の側の会社情報の画面（`/ses/company` の担当者一覧）は今回変えない（頼まれたのは管理者の SES の詳細だけ）。
+
+## 受け入れ条件
+
+- AC1：SES の詳細のカードの題が「担当者」になる。「担当者を登録」のボタン・注意の文（使える担当者がいません…）は今のまま。
+- AC2：「担当者」の表の各行に、停止（停止中は再開）・退会・詳細のボタンが並ぶ。退会済の行は「詳細」だけ。色・大きさ・確認の文は今と同じ（再開＝`small`、停止＝`ghost small`、退会＝`danger small`、詳細＝`btn small`）。
+- AC3：「エンジニア」の表の各行に、停止（停止中は再開）・退会・詳細のボタンが並ぶ。退会済の行は「詳細」だけ。確認の文はエンジニアの詳細と同じ（停止の文は、稼働中の契約・選考中の応募の数を、その人ごとに添える）。
+- AC4：エンジニアの停止・再開・退会は、今の判定のまま動く（退会済は操作できない、稼働中の契約があれば退会を断る、兼任の人の紐づけを外す、相手方へのお知らせ、記録）。押したあとは SES の詳細に戻り、結果の文が出る。
+- AC5：担当者の停止・再開・退会は、今の判定のまま動く（その会社で使える担当者が1人だけなら断る、兼任の人の退会は担当者の役割だけ外す など）。表から押したら SES の詳細に戻る。
+- AC6：担当者の詳細画面 `GET /admin/ses/{id}/users/{uid}` がある。管理者だけが開ける（SES 担当者・エンジニアは 403）。
+- AC7：担当者の詳細に、状態・氏名・ふりがな・メールアドレス・電話番号・所属・役職・最終ログイン・エンジニア兼任（ありならエンジニアの詳細へのリンク）・登録日・SES（会社名）が出る。空の項目は「—」。
+- AC8：その SES の担当者（`role='ses'` かつ `ses_id`＝URL の会社）でなければ 404。ほかの会社の担当者・管理者・エンジニアの行・無い id・直属の入れ物の会社・無い会社は 404。退会済の担当者は開ける。
+- AC9：担当者の詳細に、停止（停止中は再開）・退会のボタン（退会済なら出ない）と、下に「SES の詳細に戻る」。押したあとは担当者の詳細に戻る（兼任の人を退会にして担当者でなくなったときは SES の詳細へ）。「編集」は無い。
+- AC10：管理者兼任の人（`role='admin'` で `engineer_id` あり）は、今までどおり担当者の表に出ない。その人の id で担当者の詳細を開くと 404。
+- AC11：マニュアル（`admin.md`・`admin-steps.md`）が新しい画面に合っている。
+- AC12：既存のテストが全部通る。
+
+## 仕様
+
+### 1. データ
+
+- テーブル・列は変えない（マイグレーションなし）。担当者の詳細の項目は `users` の既存の列（`name`・`kana`・`email`・`phone`・`position`・`last_login`・`engineer_id`・`active`・`password`・`left_at`・`created_at`）。
+
+### 2. 画面：SES の詳細（`resources/views/admin/ses-show.blade.php`）
+
+担当者のカード：
+- 題を `担当者のアカウント` → `担当者`。
+- 最後の列のボタン（左から）：
+  1. `user_state($u)` が `停止` → 「再開」（今の17〜25行の文のまま）。`退会済` 以外 → 「停止」（今の文のまま）。
+  2. `退会済` 以外 → 「退会」（今の文のまま）。
+  3. いつも →「詳細」：`<a class="btn small" href="{{ url($base) }}">詳細</a>`（`$base` は今の `/admin/ses/{s}/users/{u}`）。
+- 名前の横の「エンジニア兼任」の札は今のまま。
+
+エンジニアのカード：
+- 状態の列：`badge('engStatus', ...)` のうしろに、`suspended_at` があれば ` <span class="badge mute">停止中</span>`（仮定3）。
+- 最後の列のボタン（左から）：
+  1. `status !== 'left'` のとき：`suspended_at` あり →「再開」（`cls="small"`、文はエンジニアの詳細7行と同じ）。なし →「停止」（`cls="ghost small"`、文はエンジニアの詳細9〜11行と同じ組み立て。材料はその行のエンジニアの `working`・`inSelection`）。
+  2. `status !== 'left'` のとき：「退会」（`cls="danger small"`、文はエンジニアの詳細13行と同じ）。
+  3. いつも：「詳細」（今のまま）。
+- 停止・再開・退会の `<x-post>` には `:fields="['back' => 'ses']"` を付ける（戻り先。7 を参照）。
+- 停止の文の組み立てがエンジニアの詳細と二重になるので、`app/helpers.php` に `engineer_stop_confirm(bool $working, int $inSelection): string` を作り、両方の画面で使う（文は1字も変えない）。
+
+### 3. 手続き：`AdminController::sesShow`
+
+- 渡すものを足す（エンジニア1人ずつ問い合わせない。まとめて取る）：
+  - `working`：その会社のエンジニアのうち、稼働中の契約（`contracts.status='active'`）がある engineer_id の集合（`pluck('engineer_id')->flip()` など）。
+  - `inSel`：その会社のエンジニアの、選考中の応募（`status` が `PipelineController::OPEN`）の数を engineer_id ごとに（`groupBy('engineer_id')` で `count`）。
+- 担当者の一覧の取り方（`where('ses_id', $id)->where('role', 'ses')`）は変えない（AC10）。
+
+### 4. 新しいルートと画面：担当者の詳細
+
+- ルート（`routes/web.php` の admin の群。`/ses/{id}/users/new` の**下**に）：`Route::get('/ses/{id}/users/{uid}', [Adm::class, 'sesUserShow'])->whereNumber('uid');`（`new` とぶつからないよう数字だけ）。
+- `AdminController::sesUserShow(int $id, int $uid)`：
+  - `$s = $this->sesOrFail($id);`（無い会社・直属の入れ物は 404）
+  - `$u = DB::table('users')->where('id', $uid)->where('role', 'ses')->where('ses_id', $id)->first(); abort_unless($u, 404);`
+  - `view('admin.ses-user-show', ['s' => $s, 'u' => $u])`。
+- Blade `resources/views/admin/ses-user-show.blade.php`（`admin/admin-show.blade.php` と同じ形）：
+  - `@extends('layouts.app', ['title' => $u->name])`
+  - カード「担当者情報」。右上（actions）に、2 の担当者の表と同じ条件・文で「再開」／「停止」と「退会」（`:fields="['back' => 'detail']"`）。「詳細」「編集」は置かない。
+  - `dl`：状態（`user_state($u)`）／SES（`$s->name`）／氏名（`$u->name`）／ふりがな（`kana ?: '—'`）／メールアドレス／電話番号（`phone ?: '—'`）／所属・役職（`position ?: '—'`。管理者の詳細と同じ見出し）／エンジニア兼任（`engineer_id` があれば `<a href="/engineers/{engineer_id}">あり（エンジニアの詳細）</a>`、無ければ「なし」）／最終ログイン（`fmt_dt`）／登録日（`fmt_date($u->created_at)`）。
+  - 下に `<p><a class="btn ghost" href="{{ url('/admin/ses/'.$s->id) }}">SES の詳細に戻る</a></p>`。
+
+### 5. 権限
+
+- 担当者の詳細：admin の群（`role:admin`）に置くので、SES 担当者・エンジニアは 403。兼任の人が SES 担当者・エンジニアの立場で入っているときも 403（いまの立場で判定）。
+- 停止・再開・退会のルートは今のまま（担当者は `role:admin,ses` の群の `sesUserDo`、エンジニアは `EngineerController` の `load()` で所属を確かめる）。新しく増えるのは戻り先だけ。
+
+### 6. 戻り先：担当者（`AdminController::sesUserDo`）
+
+- 今の `$back`（管理者なら `/admin/ses/$id`、SES なら `/ses/company`）はそのまま。
+- 管理者で `$r->input('back') === 'detail'` のとき：操作のあと、その人がまだ `role='ses'`・`ses_id=$id` なら `/admin/ses/$id/users/$uid`、そうでなければ（兼任の退会で `eg` になった）`/admin/ses/$id`。断られたとき（最後の1人など）も同じ決め方。
+- SES が送った `back` は無視する（今のまま `/ses/company`）。
+
+### 7. 戻り先：エンジニア（`EngineerController::suspend`・`resume`・`destroy`）
+
+- 小さな private 関数 `backTo(Request $r, object $e): string` を足す：`$r->user()->role === 'admin'` かつ `$r->input('back') === 'ses'` かつ、エンジニアの会社が `kind='ses'` → `/admin/ses/{$e->ses_id}`。それ以外 → `/engineers/{$e->id}`（今のまま）。
+- 行き先は**送られた値から作らない**（`ses_id` は DB のエンジニアから取る。開いたままの転送先にしない）。
+- `suspend`・`resume` は `load()` の戻り値を受けて `backTo` に渡す。`destroy` は、すでに退会済・稼働中の契約で断る2つの早い戻りも、最後の成功も `backTo` を使う。
+- SES 担当者がエンジニアの詳細で押したときは、`back` を送らないので今のまま。
+
+### 8. 境界の挙動
+
+- 二重の操作：停止済みを停止・退会済を退会 → 今の手続きの文（「すでに停止中です」「すでに退会済です」「退会済の人は操作できません」）で、戻り先は 6・7 のとおり。
+- 稼働中の契約があるエンジニアの退会 → 「退会にできません。稼働中の契約があります…」（`bad`）で SES の詳細に戻る。エンジニアは変わらない。
+- 最後の1人の担当者の停止・退会 → 今の断りの文で戻る。
+- 退会済の会社：エンジニアは全員退会済なので「詳細」だけ。担当者も退会済なら「詳細」だけ。
+- 0件：表の0件の表示は今の `x-table :count` のまま。
+- 担当者の詳細の URL の会社を書き換える（別の会社の id）→ 404。
+
+### 9. マニュアル（正本は `resources/manuals/`）
+
+`admin.md`：
+- 76行：「SES の詳細の「担当者のアカウント」の「担当者を登録」」→「SES の詳細の「担当者」の「担当者を登録」」。
+- 77行：「担当者のアカウント」→「担当者」。ボタンを「その人の行に「停止」（停止中は「再開」）「退会」「詳細」のボタンがあります。退会済の人の行は「詳細」だけです。」に。かっこの中（SES の担当者も自社のほかの担当者を…）は残す。
+- 77行のあとに1項目足す：「**担当者の詳細**：行の「詳細」で、状態・氏名・ふりがな・メールアドレス・電話番号・所属・役職・エンジニア兼任（ありならエンジニアの詳細へ）・最終ログイン・登録日が見られます。この画面の右上でも停止・再開・退会ができ、押すとこの画面に戻ります。直すところはご本人の「アカウント」です（管理者の画面からは直せません）。「SES の詳細に戻る」で戻ります。」
+- 84行の最後（エンジニアだけを退会にするとき）：「エンジニアの詳細の「退会」、または SES の詳細の「エンジニア」の表のその行の「退会」です。」に。
+- 91行のあとに足す：「SES の詳細の「エンジニア」の表でも、行ごとに「停止」（停止中は「再開」）「退会」「詳細」を押せます（押すと SES の詳細に戻ります。退会済の人は「詳細」だけ。停止中の人の状態には「停止中」の札が出ます）。」
+- 109行：「SES の詳細の担当者・管理者の一覧に「エンジニア兼任」の札」→「SES の詳細の「担当者」の表と担当者の詳細、管理者の一覧に「エンジニア兼任」の札」。
+- 219行：「SES の詳細の「担当者を追加して招待」」→「SES の詳細の「担当者」の「担当者を登録」」（今の画面の名前に合わせる）。
+
+`admin-steps.md`：
+- 3-3 のあとに「### 3-4. 担当者・エンジニアを止める・退会にする」を足す（手順を3つ）：1. 「SES」から会社を開く。2. 「担当者」または「エンジニア」の表の、その人の行の「停止」（戻すときは「再開」）か「退会」を押し、確認で「OK」。3. 内容を見たいときは「詳細」。担当者の詳細でも停止・再開・退会ができる。退会は元に戻せないこと、稼働中の契約があるエンジニアは退会にできないこと、使える担当者が1人だけの会社ではその人を止められないことを1行ずつ。
+
+写し（41_Park-Project の `04_Manuals`）は JOE が直す。
+
+## 実装の手順
+
+1. `app/helpers.php` に `engineer_stop_confirm()` を足し、`engineers/show.blade.php` の9〜11行をそれに置き換える（文が同じことをテストで確かめる）。
+2. `AdminController::sesShow` に `working`・`inSel` を足す。
+3. `ses-show.blade.php`：題を「担当者」、担当者の行に「詳細」、エンジニアの行に停止／再開・退会（`back=ses`）と「停止中」の札。
+4. `EngineerController` に `backTo()` を足し、`suspend`・`resume`・`destroy` の戻り先を直す。
+5. `AdminController::sesUserDo` に `back=detail` の戻り先を足す。
+6. ルート・`AdminController::sesUserShow`・`admin/ses-user-show.blade.php` を作る。
+7. `tests/Feature/SesDetailButtonsTest.php`（下）を作り、`php artisan test` で全部通す。
+8. マニュアル（9）を直す。
+9. （JOE）commit・push、`park-deploy.sh` で公開版へ反映（コードだけ。常時の了承の範囲）。04_Manuals の写しを直す。
+
+## テスト（`tests/Feature/SesDetailButtonsTest.php`）
+
+見本のデータ（`SampleSeeder`）で、管理者・SES 担当者を `actingAs` し、`TwoFactor::SESSION_KEY` を入れる（`SuspendLeaveTest`・`AdminAccountTest` と同じ）。担当者が2人いる会社は、テストの中で `users` に1行足して作る（最後の1人の断りに当たらないように）。
+
+- AC1：管理者で `GET /admin/ses/{id}` → 「担当者」が出て、「担当者のアカウント」が出ない。「担当者を登録」が出る。
+- AC2：同じ画面に、担当者の詳細へのリンク `/admin/ses/{id}/users/{uid}` が人数分ある。使用中の人の行に `/users/{uid}/suspend` と `/delete`、停止中の人に `/resume`、退会済の人（`left_at` を入れた行）には `/suspend`・`/resume`・`/delete` が無く、詳細のリンクだけある。
+- AC3：エンジニアの `/engineers/{eid}/suspend` と `/delete` のフォームが出て、`back` の hidden がある。`suspended_at` を入れたエンジニアには `/resume` と「停止中」。`status='left'` のエンジニアには操作のフォームが無く「詳細」だけ。稼働中の契約があるエンジニアの停止の確認の文に「稼働中の契約があります。」が入る（エンジニアの詳細の文と同じ）。
+- AC4：管理者で `POST /engineers/{eid}/suspend`（`back=ses`）→ `/admin/ses/{id}` に戻る、`suspended_at` が入る、本人の `users.active=0`、`audit_log` に `engineer-suspend`。`resume` も同じく戻る。`POST /engineers/{eid}/delete`（`back=ses`、契約なし）→ `/admin/ses/{id}`、`status='left'`。稼働中の契約あり → `/admin/ses/{id}` に戻り、断りの文、`status` は変わらない。`back` なし → 今までどおり `/engineers/{eid}`。SES 担当者が `back=ses` を送っても `/engineers/{eid}`。
+- AC5：管理者で `POST /admin/ses/{id}/users/{uid}/suspend`（`back` なし）→ `/admin/ses/{id}`（今のまま）。使える担当者が1人だけの会社 → 断りの文、`active` は変わらない。
+- AC6：SES 担当者で `GET /admin/ses/{id}/users/{uid}` → 403。エンジニアで → 403。ログインなし → ログイン画面へ。
+- AC7：管理者で開く → 氏名・ふりがな・メールアドレス・電話番号・役職・状態・最終ログイン・登録日・会社名・「SES の詳細に戻る」が出る。兼任の人（`engineer_id` あり）は `/engineers/{engineer_id}` へのリンクと「あり」、そうでない人は「なし」。「編集」は無い。
+- AC8：ほかの会社の担当者の uid を URL の会社で開く → 404。管理者の id → 404。`role='eg'` の id → 404。無い id → 404。直属の入れ物の会社の id → 404。退会済の担当者 → 200、操作のボタンが無い。`/admin/ses/{id}/users/new` は今までどおり登録の画面。
+- AC9：担当者の詳細から `POST .../suspend`（`back=detail`）→ `/admin/ses/{id}/users/{uid}` に戻る。`resume` も同じ。兼任の担当者を `delete`（`back=detail`、ほかに担当者あり）→ `role='eg'` になり、`/admin/ses/{id}` に戻る。兼任でない担当者を `delete` → `left_at` が入り、担当者の詳細に戻る。SES 担当者が `back=detail` を送っても `/ses/company`。
+- AC10：管理者兼任の人（`role='admin'`、`engineer_id` がその会社のエンジニア）がいても、`GET /admin/ses/{id}` の担当者の表に出ない。その人の id で担当者の詳細 → 404。
+- AC11：`GET /manual/admin` に「担当者の詳細」、`GET /manual/admin-steps`（手順書の URL は今のルートに合わせる）に「担当者・エンジニアを止める・退会にする」が出て、「担当者のアカウント」「担当者を追加して招待」が出ない。
+- AC12：既存のテスト（`SuspendLeaveTest`・`DualRoleTest`・`EngineerDetailTest`・`UiUnifyTest` など）が全部通る。
+
+## 決めてほしいこと
+
+**1** 表のボタンの並び
+tezzo さんの文は「停止・退会・詳細」、依頼のメモは「詳細・停止・退会」で、順が2通りありました。ほかの詳細画面は、青いボタン（編集など）を右端に置いています。
+a. 停止（再開）・退会・詳細（青い「詳細」が右端。推奨。この計画はこちらで書いています）
+b. 詳細・停止（再開）・退会
+答え方：「1はa」のように。
+
+---
+
 # PLAN：1つのログインで、エンジニアと SES 担当者・管理者を兼ねる（兼任ログイン）（2026-10-20）
 
 > この節が今回の計画。下の「保留中の別の計画（テスト期間だけ重複を許す）」は、兼任のあとで別に作る計画で、消さずに残している（ぶつかり方は仕様の 12）。
