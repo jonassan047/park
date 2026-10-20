@@ -35,7 +35,7 @@ class AccountProfileTest extends TestCase
         DB::table('users')->where('email', 'admin@park.example')->update(['company_name' => '見本運営株式会社', 'name_sei' => '管理', 'name_mei' => '花子', 'kana_sei' => 'かんり', 'kana_mei' => 'はなこ', 'phone' => '03-0000-0001']);
         $r = $this->as('admin@park.example')->get('/account/profile')->assertOk();
         $r->assertSee('登録情報')->assertSee('管理')->assertSee('花子')->assertSee('かんり')->assertSee('見本運営株式会社')->assertSee('admin@park.example')->assertSee('管理者')->assertSee('03-0000-0001');
-        $r->assertSeeInOrder(['氏名（姓）', '氏名（名）', 'ふりがな（姓）', 'ふりがな（名）', '企業名', '所属・役職', '電話', 'メールアドレス', '立場', 'メールでの通知', '登録した日', '最後のログイン']);
+        $r->assertSeeInOrder(['氏名', '管理 花子', 'ふりがな', 'かんり はなこ', '企業名', '所属・役職', '電話', 'メールアドレス', '立場', 'メールでの通知', '登録した日', '最後のログイン']);
         $this->assertNoFormFields($r->getContent());
         $r->assertDontSee('SES名');
 

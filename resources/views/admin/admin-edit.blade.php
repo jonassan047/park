@@ -1,4 +1,4 @@
-@extends('layouts.app', ['title' => '管理者の情報を直す'])
+@extends('layouts.app', ['title' => '管理者の情報の修正'])
 @section('content')
 @php
     // 姓・名の列がまだ空の人は、つないだ name から分けて出す
@@ -7,10 +7,10 @@
     $self = (int) $u->id === (int) auth()->id();
     $emailFixed = $self || !$u->active || $u->password; // 変えられるのは、招待中の他人だけ
 @endphp
-<x-card title="管理者の情報を直す">
+<x-card>
 <p>状態：{{ $state }}</p>
 <form method="post" action="{{ url('/admin/admins/'.$u->id) }}">@csrf
-<div class="grid2">
+<div class="pair">
 <x-field label="氏名（姓）" name="name_sei" :value="$nameSei" required />
 <x-field label="氏名（名）" name="name_mei" :value="$nameMei" />
 </div>

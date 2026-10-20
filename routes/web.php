@@ -164,6 +164,7 @@ Route::middleware('role:admin')->group(function () {
         Route::post('/settings', [Adm::class, 'saveSettings']);
         Route::post('/settings/testmail', [Adm::class, 'testMail']);
         Route::get('/admins', [Adm::class, 'adminsIndex']);
+        Route::get('/admins/new', [Adm::class, 'adminNew']);
         Route::post('/admins', [Adm::class, 'admins']);
         Route::post('/admins/{id}/reinvite', [Adm::class, 'reinviteAdmin']);
         Route::get('/admins/{id}', [Adm::class, 'adminEdit']);

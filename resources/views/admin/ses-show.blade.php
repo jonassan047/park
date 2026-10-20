@@ -13,12 +13,12 @@
 <x-card title="会社情報の編集">@include('admin.ses-form', ['action' => '/admin/ses/'.$s->id])</x-card>
 </div><div>
 <x-card title="担当者のアカウント"><x-table :head="['名前', 'メール', '状態', '最終ログイン']" :count="$users->count()">
-@foreach($users as $u)<tr><td>{{ $u->name }}</td><td>{{ $u->email }}</td><td>{{ $u->password ? '利用中' : '招待中' }}</td>
+@foreach($users as $u)<tr><td>{{ $u->name }}</td><td>{{ $u->email }}</td><td>{{ $u->password ? '使用中' : '招待中' }}</td>
 <td>{{ fmt_dt($u->last_login) }}</td></tr>@endforeach
 </x-table>
-<form method="post" action="{{ url('/admin/ses/'.$s->id.'/users') }}">@csrf<div class="grid2"><x-field label="氏名（姓）" name="name_sei" required /><x-field label="氏名（名）" name="name_mei" /><x-field label="メール" name="email" type="email" required /></div><button class="btn ghost small">担当者を追加して招待</button></form>
+<form method="post" action="{{ url('/admin/ses/'.$s->id.'/users') }}">@csrf<div class="pair"><x-field label="氏名（姓）" name="name_sei" required /><x-field label="氏名（名）" name="name_mei" /></div><x-field label="メールアドレス" name="email" type="email" required /><button class="btn ghost small">担当者を追加して招待</button></form>
 </x-card>
-<x-card title="エンジニア"><x-slot:actions><a class="btn small" href="{{ url('/engineers/new?ses='.$s->id) }}">エンジニアを登録</a></x-slot:actions>
+<x-card title="エンジニア">@if($s->status === 'active')<x-slot:actions><a class="btn small" href="{{ url('/engineers/new?ses='.$s->id) }}">エンジニアを登録</a></x-slot:actions>@endif
 <x-table :head="['名前', '状態', '希望', '']" :count="$engs->count()">
 @foreach($engs as $e)<tr><td>{{ $e->name }}</td><td>{{ badge('engStatus', $e->status) }}</td><td>{{ man($e->desired_price) }}</td><td><a href="{{ url('/engineers/'.$e->id) }}">詳細</a></td></tr>@endforeach
 </x-table></x-card>

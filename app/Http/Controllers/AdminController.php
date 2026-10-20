@@ -71,9 +71,9 @@ class AdminController extends Controller
         $invites = $this->inviteRows();
         return view('admin.dashboard', [
             'start' => $sesCount === 0 && $engCount === 0 && $caseCount === 0 ? [
-                ['ほかの管理者を招待する（任意）', '/admin/admins', $adminCount >= 2, '管理者を招待する'],
+                ['ほかの管理者を登録する（任意）', '/admin/admins/new', $adminCount >= 2, '管理者を登録する'],
                 ['SES を登録して、ご担当者を招待する', '/admin/ses/new', $sesCount >= 1, 'SES を登録する'],
-                ['エンジニアを登録する（直属・SES の人）', '/engineers/new', $engCount >= 1, 'エンジニアを登録する'],
+                ['エンジニアを登録する（SES を選んでから）', '/admin/ses', $engCount >= 1, 'SES を選ぶ'],
                 ['案件を登録する', '/cases/new', $caseCount >= 1, '案件を登録する'],
             ] : null,
             'invites' => $invites,
@@ -114,22 +114,28 @@ class AdminController extends Controller
             ->selectSub(DB::table('engineers')->whereColumn('ses_id', 's.id')->selectRaw('count(*)'), 'engs')
             ->selectSub(DB::table('contracts')->whereColumn('ses_id', 's.id')->where('status', 'active')->selectRaw('count(*)'), 'working')
             ->orderBy('status')->orderBy('name')->get();
-        return view('admin.ses-index', compact('list'));
+        // 一覧の最後に出す「管理者の直属」の行用（入れ物がまだ無ければ人数 0）
+        $directId = DB::table('ses_companies')->where('kind', 'direct')->value('id');
+        $direct = (object) ['engs' => $directId ? DB::table('engineers')->where('ses_id', $directId)->count() : 0];
+        return view('admin.ses-index', compact('list', 'direct'));
     }
 
     public function sesNew() { return view('admin.ses-new'); }
+
+    public function adminNew() { return view('admin.admin-new'); }
 
     public function sesStore(Request $r)
     {
         if (!str_in($r->input('name'))) return back()->withInput()->with('flash', ['msg' => '会社名を入れてください。', 'type' => 'bad']);
         $email = strtolower((string) str_in($r->input('email')));
-        if ($email && name_parts($r->all(), 'contact', 'contact_name')[0] === null) return back()->withInput()->with('flash', ['msg' => '担当者名を入れてください（招待メールの宛名になります）。', 'type' => 'bad']);
-        if ($email && !filter_var($email, FILTER_VALIDATE_EMAIL)) return back()->withInput()->with('flash', ['msg' => 'メールアドレスを正しく入れてください。', 'type' => 'bad']);
-        if ($email && DB::table('users')->where('email', $email)->exists()) return back()->withInput()->with('flash', ['msg' => 'このメールアドレスはすでに使われています。', 'type' => 'bad']);
-        // 管理者が登録した SES は、承認の手順を省いて、すぐ参加中にする（担当者のメールがあれば招待が届く）
+        // 新しく登録するときは、メールアドレスと担当者名が必須（担当の方に招待メールを送るため）
+        if ($email === '') return back()->withInput()->with('flash', ['msg' => 'メールアドレスを入れてください（担当の方に招待メールを送ります）。', 'type' => 'bad']);
+        if (name_parts($r->all(), 'contact', 'contact_name')[0] === null) return back()->withInput()->with('flash', ['msg' => '担当者名を入れてください（招待メールの宛名になります）。', 'type' => 'bad']);
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) return back()->withInput()->with('flash', ['msg' => 'メールアドレスを正しく入れてください。', 'type' => 'bad']);
+        if (DB::table('users')->where('email', $email)->exists()) return back()->withInput()->with('flash', ['msg' => 'このメールアドレスはすでに使われています。', 'type' => 'bad']);
+        // 管理者が登録した SES は、承認の手順を省いて、すぐ参加中にする（担当者に招待が届く）
         $id = W::applySes($r->all() + ['agree' => 1], $r->user());
         W::approveSes($id, $r->user(), str_in($r->input('name')).' を PARK に登録しました。');
-        if (!$email) return $this->go("/admin/ses/$id", '登録しました（メールアドレスが無いので、招待は送っていません）。', 'warn');
         return $this->go("/admin/ses/$id", '登録し、ご担当者に招待メールを送りました。');
     }
 
@@ -385,7 +391,7 @@ class AdminController extends Controller
         return $this->go('/admin/admins', '登録し、招待メールを送りました。');
     }
 
-    // 管理者の情報を直す画面
+    // 管理者の情報の修正画面
     public function adminEdit(int $id)
     {
         $u = DB::table('users')->where('id', $id)->where('role', 'admin')->first();

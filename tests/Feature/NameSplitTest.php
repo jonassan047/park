@@ -104,7 +104,7 @@ class NameSplitTest extends TestCase
         $this->as('ses1@park.example')->get('/welcome')->assertOk()
             ->assertSeeInOrder(['氏名（姓）', '氏名（名）', 'ふりがな（姓）', 'ふりがな（名）', 'SES名', '所属・役職', '電話']);
         $html = $this->get('/welcome')->getContent();
-        $this->assertStringContainsString('class="grid2"', $html);
+        $this->assertStringContainsString('class="pair"', $html);
         $this->assertStringContainsString('name="name_sei"', $html);
         $this->assertStringContainsString('name="kana_mei"', $html);
         $this->assertStringNotContainsString('name="name"', $html);
@@ -167,7 +167,7 @@ class NameSplitTest extends TestCase
     public function test_m6_register_engineer_with_parts(): void
     {
         $this->as('admin@park.example');
-        $this->post('/engineers', ['ses_id' => 'direct', 'name_sei' => '直属', 'name_mei' => '一郎', 'kana_sei' => 'ちょくぞく', 'kana_mei' => 'いちろう'])->assertRedirect();
+        $this->post('/engineers', ['ses_id' => 'direct', 'name_sei' => '直属', 'name_mei' => '一郎', 'kana_sei' => 'ちょくぞく', 'kana_mei' => 'いちろう', 'email' => 'm6-direct@park.example'])->assertRedirect();
         $e = DB::table('engineers')->where('name', '直属 一郎')->first();
         $this->assertNotNull($e);
         $this->assertSame('ちょくぞく いちろう', $e->kana);
@@ -189,8 +189,8 @@ class NameSplitTest extends TestCase
 
     public function test_m6_form_order_and_hint(): void
     {
-        $this->as('admin@park.example')->get('/engineers/new')->assertOk()
-            ->assertSeeInOrder(['氏名（姓）', '氏名（名）', 'ふりがな（姓）', 'ふりがな（名）', 'スキルシートのイニシャル（T.Y）に使います', '所属', 'メールで呼ぶ名前', 'メールアドレス']);
+        $this->as('admin@park.example')->get('/engineers/new?ses=direct')->assertOk()
+            ->assertSeeInOrder(['所属：管理者の直属（SES なし）', '氏名（姓）', '氏名（名）', 'ふりがな（姓）', 'ふりがな（名）', 'スキルシートのイニシャル（T.Y）に使います', 'メールで呼ぶ名前', 'メールアドレス']);
         $this->get('/engineers/1/edit')->assertOk()->assertSeeInOrder(['氏名（姓）', '氏名（名）', 'ふりがな（姓）', 'ふりがな（名）', 'メールで呼ぶ名前']);
     }
 
@@ -244,7 +244,7 @@ class NameSplitTest extends TestCase
 
     public function test_m8_initials_from_joined_kana(): void
     {
-        $this->as('admin@park.example')->post('/engineers', ['ses_id' => 'direct', 'name_sei' => '山田', 'name_mei' => '次郎', 'kana_sei' => 'やまだ', 'kana_mei' => 'じろう'])->assertRedirect();
+        $this->as('admin@park.example')->post('/engineers', ['ses_id' => 'direct', 'name_sei' => '山田', 'name_mei' => '次郎', 'kana_sei' => 'やまだ', 'kana_mei' => 'じろう', 'email' => 'm8-jiro@park.example'])->assertRedirect();
         $this->assertSame('J.Y', DB::table('engineers')->where('name', '山田 次郎')->value('initials'));
     }
 
@@ -311,7 +311,7 @@ class NameSplitTest extends TestCase
 
     public function test_m11_legacy_engineer_post(): void
     {
-        $this->as('admin@park.example')->post('/engineers', ['ses_id' => 'direct', 'name' => '古い 画面', 'kana' => 'ふるい がめん'])->assertRedirect();
+        $this->as('admin@park.example')->post('/engineers', ['ses_id' => 'direct', 'name' => '古い 画面', 'kana' => 'ふるい がめん', 'email' => 'm11-old@park.example'])->assertRedirect();
         $e = DB::table('engineers')->where('name', '古い 画面')->first();
         $this->assertSame(['古い', '画面', 'ふるい', 'がめん'], [$e->name_sei, $e->name_mei, $e->kana_sei, $e->kana_mei]);
     }

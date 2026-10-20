@@ -11,8 +11,8 @@
 @endphp
 <x-card title="登録情報">
 <dl class="dl">
-<dt>氏名（姓）</dt><dd>{{ $dash($nameSei) }}</dd><dt>氏名（名）</dt><dd>{{ $dash($nameMei) }}</dd>
-<dt>ふりがな（姓）</dt><dd>{{ $dash($kanaSei) }}</dd><dt>ふりがな（名）</dt><dd>{{ $dash($kanaMei) }}</dd>
+<dt>氏名</dt><dd>{{ $dash(join_name($nameSei, $nameMei)) }}</dd>
+<dt>ふりがな</dt><dd>{{ $dash(join_name($kanaSei, $kanaMei)) }}</dd>
 @if($u->role === 'admin')
 <dt>企業名</dt><dd>{{ $dash($u->company_name) }}</dd>
 @elseif($u->role === 'ses')

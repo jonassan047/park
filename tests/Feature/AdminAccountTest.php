@@ -58,7 +58,7 @@ class AdminAccountTest extends TestCase
 
     public function test_p1_form_fields(): void
     {
-        $this->as('admin@park.example')->get('/admin/admins')->assertOk()
+        $this->as('admin@park.example')->get('/admin/admins/new')->assertOk()
             ->assertSee('担当者名')->assertSee('企業名')->assertSee('メールアドレス')->assertSee('登録して招待メールを送る');
     }
 
@@ -186,9 +186,10 @@ class AdminAccountTest extends TestCase
         $html = $this->as('admin@park.example')->get('/admin/admins')->assertOk()->getContent();
         $this->assertStringContainsString("/admin/admins/$other", $html);
         $this->assertStringContainsString("/admin/admins/$self", $html);
-        $this->assertStringContainsString('直す', $html);
+        $this->assertStringContainsString('>修正</a>', $html);
+        $this->assertStringNotContainsString('>直す<', $html);
 
-        $this->get("/admin/admins/$other")->assertOk()->assertSee('管理者の情報を直す')->assertSee('使用中')
+        $this->get("/admin/admins/$other")->assertOk()->assertSee('管理者の情報の修正')->assertSee('使用中')
             ->assertSee('value="別"', false)->assertSee('value="管理者"', false)->assertSee('value="別企業"', false)->assertSee('value="admin2@park.example"', false);
     }
 
@@ -391,8 +392,8 @@ class AdminAccountTest extends TestCase
     public function test_r1_form_labels(): void
     {
         $html = $this->as('admin@park.example')->get('/admin/ses/new')->assertOk()->assertSee('担当者名')->assertDontSee('ご担当者名')
-            ->assertSee('メールアドレスを入れたときは必須です（招待メールの宛名になります）。')->getContent();
-        $this->assertLessThan(strpos($html, 'メールアドレス</'), strpos($html, '担当者名'));
+            ->assertSee('招待メールの宛名になります。')->getContent();
+        $this->assertLessThan(strpos($html, 'メールアドレス<'), strpos($html, '担当者名'));
         auth()->logout();
         $this->flushSession();
         $this->get('/apply')->assertOk()->assertSee('ご担当者名');
@@ -414,12 +415,12 @@ class AdminAccountTest extends TestCase
         $this->assertStringContainsString('登録商事 担当 花 様', DB::table('mail_outbox')->where('to_email', 'reg-r@park.example')->value('body'));
     }
 
-    public function test_r3_no_email_registers_company_only(): void
+    public function test_r3_no_email_is_rejected(): void
     {
         $u0 = $this->users(); $m0 = DB::table('mail_outbox')->count();
-        $this->as('admin@park.example')->post('/admin/ses', ['name' => 'メール無し商事', 'contact_name' => '', 'email' => ''])
-            ->assertSessionHas('flash.type', 'warn');
-        $this->assertSame(1, DB::table('ses_companies')->where('name', 'メール無し商事')->count());
+        $this->as('admin@park.example')->post('/admin/ses', ['name' => 'メール無し商事', 'contact_name' => '担当 者', 'email' => ''])
+            ->assertSessionHas('flash.type', 'bad')->assertSessionHas('flash.msg', 'メールアドレスを入れてください（担当の方に招待メールを送ります）。');
+        $this->assertSame(0, DB::table('ses_companies')->where('name', 'メール無し商事')->count());
         $this->assertSame($u0, $this->users());
         $this->assertSame($m0, DB::table('mail_outbox')->count());
     }

@@ -56,8 +56,8 @@ class EmptyStateTest extends TestCase
         $a = $this->admin();
         $r = $this->as($a)->get('/admin')->assertOk();
         $r->assertSee('PARK をはじめましょう');
-        $r->assertSeeInOrder(['href="'.url('/admin/admins').'"', 'href="'.url('/admin/ses/new').'"', 'href="'.url('/engineers/new').'"', 'href="'.url('/cases/new').'"'], false);
-        $r->assertSee('ほかの管理者を招待する')->assertSee('SES を登録して、ご担当者を招待する')->assertSee('エンジニアを登録する')->assertSee('案件を登録する');
+        $r->assertSeeInOrder(['href="'.url('/admin/admins/new').'"', 'href="'.url('/admin/ses/new').'"', 'href="'.url('/admin/ses').'"', 'href="'.url('/cases/new').'"'], false);
+        $r->assertSee('ほかの管理者を登録する')->assertSee('SES を登録して、ご担当者を招待する')->assertSee('エンジニアを登録する（SES を選んでから）')->assertSee('案件を登録する');
         $r->assertDontSee('<span class="badge ok">済み</span>', false);
     }
 
@@ -122,7 +122,7 @@ class EmptyStateTest extends TestCase
         $this->as($a);
         $tabs = ['/admin/ses', '/admin/engineers', '/admin/cases', '/admin/applications', '/admin/contracts', '/admin/invoices', '/admin/messages',
             '/admin/mail', '/admin/reports', '/admin/ai', '/admin/settings', '/admin/admins', '/admin/audit', '/admin/skills', '/manual', '/notifications', '/account', '/account/profile',
-            '/engineers/new', '/cases/new', '/admin/ses/new'];
+            '/engineers/new?ses=direct', '/cases/new', '/admin/ses/new', '/admin/admins/new'];
         foreach ($tabs as $t) $this->get($t)->assertOk();
         foreach (['/admin/ses', '/admin/engineers', '/admin/cases', '/admin/contracts', '/admin/invoices', '/admin/messages'] as $t) {
             $this->assertMatchesRegularExpression('/ありません|まだ|ない|0件/u', $this->get($t)->getContent(), $t);
@@ -147,7 +147,7 @@ class EmptyStateTest extends TestCase
     public function test_p1_disappears_with_only_a_case_or_only_an_engineer(): void
     {
         $a = $this->admin();
-        $this->as($a)->post('/engineers', ['ses_id' => 'direct', 'name_sei' => '直属', 'name_mei' => '一郎'])->assertRedirect();
+        $this->as($a)->post('/engineers', ['ses_id' => 'direct', 'name_sei' => '直属', 'name_mei' => '一郎', 'email' => 'direct-one@example.com'])->assertRedirect();
         $this->get('/admin')->assertDontSee('PARK をはじめましょう');
         DB::table('engineers')->delete();
         $this->get('/admin')->assertSee('PARK をはじめましょう');
@@ -247,7 +247,7 @@ class EmptyStateTest extends TestCase
         DB::table('users')->where('id', $uid)->update(['password' => bcrypt('abcd1234'), 'profile_completed_at' => now_str()]);
         DB::table('ses_companies')->where('id', $sid)->update(['self_confirmed_at' => now_str()]);
         $this->as('sx@example.com')->get('/ses')->assertSee('エンジニアを登録しましょう');
-        $this->post('/engineers', ['name_sei' => '所属', 'name_mei' => '一人'])->assertRedirect();
+        $this->post('/engineers', ['name_sei' => '所属', 'name_mei' => '一人', 'email' => 'one@example.com'])->assertRedirect();
         $this->get('/ses')->assertDontSee('エンジニアを登録しましょう');
     }
 

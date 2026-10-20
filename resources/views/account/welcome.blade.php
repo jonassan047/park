@@ -2,11 +2,11 @@
 @section('content')
 <p class="muted">はじめに、あなたの情報を登録してください。あとから「アカウント」で直せます。</p>
 <x-card title="あなたの情報"><form method="post" action="{{ url('/welcome') }}">@csrf
-<div class="grid2">
+<div class="pair">
 <x-field label="氏名（姓）" name="name_sei" :value="$v->name_sei" required autofocus />
 <x-field label="氏名（名）" name="name_mei" :value="$v->name_mei" required />
 </div>
-<div class="grid2">
+<div class="pair">
 <x-field label="ふりがな（姓）" name="kana_sei" :value="$v->kana_sei" />
 <x-field label="ふりがな（名）" name="kana_mei" :value="$v->kana_mei" />
 </div>

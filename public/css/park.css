@@ -47,6 +47,8 @@ form.inline { display: inline; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
 .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 16px; }
 .span2 { grid-column: span 2; }
+/* 姓と名は、画面が狭くても同じ行に並べる（grid2 の中では1行ぜんぶを使う） */
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; grid-column: 1 / -1; }
 .cols.wideside { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); }
 @media (max-width: 860px) { .cols, .cols.wideside, .grid2, .grid3 { grid-template-columns: 1fr; } .span2 { grid-column: auto; } }
 

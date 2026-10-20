@@ -45,7 +45,7 @@ class ParkTest extends TestCase
             '/admin/applications', '/admin/contracts', '/admin/invoices', '/admin/messages', '/admin/mail', '/admin/mail/1', '/admin/reports', '/admin/settings', '/admin/admins', '/admin/audit',
             '/cases/1', '/cases/1?all=1', '/cases/2', '/cases/new', '/cases/1/edit', '/engineers/1', '/engineers/1/sheet', '/engineers/1/sheet?case=1&anon=1', '/engineers/1/skills',
             '/engineers/1/projects/new', '/engineers/1/projects/1/edit', '/engineers/2/messages', '/applications/1', '/applications/2', '/interviews/1', '/contracts/1',
-            '/notifications', '/account', '/engineers/new']);
+            '/notifications', '/account', '/engineers/new?ses=direct', '/admin/admins/new']);
 
         $this->post('/admin/ses/4/approve')->assertRedirect();
         $this->assertDatabaseHas('ses_companies', ['id' => 4, 'status' => 'active']);

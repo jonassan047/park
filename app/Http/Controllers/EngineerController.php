@@ -25,11 +25,21 @@ class EngineerController extends Controller
 
     public function create(Request $r)
     {
-        // 管理者の登録画面は、先頭に「管理者の直属」を出す（直属の入れ物は、登録のときに作る）
-        $sesList = $r->user()->role === 'admin'
-            ? ['direct' => '管理者の直属（SES なし）'] + DB::table('ses_companies')->where('kind', 'ses')->where('status', 'active')->orderBy('name')->pluck('name', 'id')->all()
-            : [];
-        return view('engineers.form', ['e' => (object) ['ses_id' => $r->query('ses')], 'action' => '/engineers', 'isNew' => true, 'sesList' => $sesList]);
+        // 管理者は、SES の画面で SES を選んでから登録する（管理者の直属は SES の一覧の「直属」の行から。?ses=direct）
+        $sesFixed = null;
+        $sesId = null;
+        if ($r->user()->role === 'admin') {
+            $ses = (string) $r->query('ses');
+            if ($ses === 'direct') {
+                $sesFixed = ['id' => 'direct', 'name' => '管理者の直属（SES なし）'];
+            } elseif (ctype_digit($ses) && ($row = DB::table('ses_companies')->where('id', (int) $ses)->where('kind', 'ses')->where('status', 'active')->first())) {
+                $sesFixed = ['id' => (string) $row->id, 'name' => $row->name];
+            } else {
+                return redirect('/admin/ses')->with('flash', ['msg' => 'エンジニアは、SES の画面で SES を選んでから登録します。', 'type' => 'warn']);
+            }
+            $sesId = $sesFixed['id'];
+        }
+        return view('engineers.form', ['e' => (object) ['ses_id' => $sesId], 'action' => '/engineers', 'isNew' => true, 'sesFixed' => $sesFixed]);
     }
 
     // 氏名・ふりがなの姓・名を整える（前後の空白は全角も取る）。姓・名の欄が無く name だけ来たら、空白で分ける。
@@ -65,10 +75,12 @@ class EngineerController extends Controller
         }
         if (!$sesId || !$hasName) return back()->withInput()->with('flash', ['msg' => '所属と氏名を入れてください。', 'type' => 'bad']);
         if ($lenErr) return back()->withInput()->with('flash', ['msg' => $lenErr, 'type' => 'bad']);
+        // 新しく登録するときは、メールアドレスが必須（ご本人への招待メールが届かないとログインできないため）
         $email = strtolower((string) str_in($r->input('email')));
-        if ($email && DB::table('users')->where('email', $email)->exists()) return back()->withInput()->with('flash', ['msg' => 'このメールアドレスはすでに使われています。', 'type' => 'bad']);
+        if (!$email || !filter_var($email, FILTER_VALIDATE_EMAIL)) return back()->withInput()->with('flash', ['msg' => 'メールアドレスを正しく入れてください。', 'type' => 'bad']);
+        if (DB::table('users')->where('email', $email)->exists()) return back()->withInput()->with('flash', ['msg' => 'このメールアドレスはすでに使われています。', 'type' => 'bad']);
         $id = W::createEngineer($sesId, $body, $r->user());
-        return $this->go("/engineers/$id", $email ? '登録し、ご本人に招待メールを送りました。' : '登録しました。');
+        return $this->go("/engineers/$id", '登録し、ご本人に招待メールを送りました。');
     }
 
     public function show(Request $r, int $id)
@@ -89,7 +101,7 @@ class EngineerController extends Controller
 
     public function edit(Request $r, int $id)
     {
-        return view('engineers.form', ['e' => $this->load($r, $id), 'action' => "/engineers/$id", 'isNew' => false, 'sesList' => []]);
+        return view('engineers.form', ['e' => $this->load($r, $id), 'action' => "/engineers/$id", 'isNew' => false, 'sesFixed' => null]);
     }
 
     public function update(Request $r, int $id)

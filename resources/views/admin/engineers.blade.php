@@ -2,7 +2,7 @@
 @section('content')
 <form method="get" class="filters"><x-field name="q" :value="$q" placeholder="名前・スキル・SES で探す" />
 <x-field name="status" type="select" :options="PARK_LABELS['engStatus']" blank="すべての状態" :value="$st" /><button class="btn ghost small">絞り込む</button>
-<input type="hidden" name="ses" value="{{ $direct ? 'direct' : '' }}"><a class="btn small" href="{{ url('/engineers/new') }}">エンジニアを登録</a>
+<input type="hidden" name="ses" value="{{ $direct ? 'direct' : '' }}">
 <a class="btn ghost small" href="{{ url('/admin/engineers'.($direct ? '' : '?ses=direct')) }}">{{ $direct ? 'すべて表示' : '直属だけ' }}</a> <a class="btn ghost small" href="{{ url('/admin/skills') }}">技術マスタ</a></form>
 <x-table :head="['名前', 'SES', '状態', 'スキル', '経験票', '希望', '稼働できる日', '']" :count="$list->count()">
 @foreach($list as $e)<tr><td>{{ $e->name }}@if($e->is_operator) <span class="badge warn">管理者</span>@endif</td><td>@if($e->ses_kind === 'direct')<span class="badge info">直属</span>@else{{ $e->ses_name }}@endif</td><td>{{ badge('engStatus', $e->status) }}</td>
