@@ -89,7 +89,7 @@ class EmptyStateTest extends TestCase
     public function test_p3_states_pending_expired_stopped_and_unregistered_ses(): void
     {
         $a = $this->admin();
-        $this->as($a)->post('/admin/settings/admins', ['name' => '招待 一郎', 'email' => 'inv1@example.com'])->assertRedirect();
+        $this->as($a)->post('/admin/settings/admins', ['name' => '招待 一郎', 'company_name' => 'テスト企業', 'email' => 'inv1@example.com'])->assertRedirect();
         $exp = W::createUser('exp@example.com', '期限 切れ', 'admin', 'x');
         DB::table('users')->where('id', $exp)->update(['password' => null, 'token' => 'abc', 'token_expires' => now()->subDay()->format('Y-m-d H:i:s')]);
         $stop = W::createUser('stop@example.com', '停止 中', 'admin', 'x');
@@ -134,7 +134,7 @@ class EmptyStateTest extends TestCase
     public function test_p1_disappears_after_registering_ses_and_p3_shows_invite(): void
     {
         $a = $this->admin();
-        $this->as($a)->post('/admin/ses', ['name' => '新しい SES', 'email' => 'ses-new@example.com'])->assertRedirect();
+        $this->as($a)->post('/admin/ses', ['name' => '新しい SES', 'contact_name' => '担当 者', 'email' => 'ses-new@example.com'])->assertRedirect();
         $this->assertSame(1, DB::table('mail_outbox')->where('kind', 'invite')->count());
         $r = $this->get('/admin')->assertOk();
         $r->assertDontSee('PARK をはじめましょう');
@@ -241,7 +241,7 @@ class EmptyStateTest extends TestCase
     public function test_p5_ses_dashboard_with_engineer_has_no_guide(): void
     {
         $a = $this->admin();
-        $this->as($a)->post('/admin/ses', ['name' => 'SES-X', 'email' => 'sx@example.com'])->assertRedirect();
+        $this->as($a)->post('/admin/ses', ['name' => 'SES-X', 'contact_name' => '担当 者', 'email' => 'sx@example.com'])->assertRedirect();
         $sid = (int) DB::table('ses_companies')->where('name', 'SES-X')->value('id');
         $uid = DB::table('users')->where('email', 'sx@example.com')->value('id');
         DB::table('users')->where('id', $uid)->update(['password' => bcrypt('abcd1234'), 'profile_completed_at' => now_str()]);
@@ -254,7 +254,7 @@ class EmptyStateTest extends TestCase
     public function test_other_roles_cannot_use_admin_screens(): void
     {
         $a = $this->admin();
-        $this->as($a)->post('/admin/ses', ['name' => 'SES-Y', 'email' => 'sy@example.com'])->assertRedirect();
+        $this->as($a)->post('/admin/ses', ['name' => 'SES-Y', 'contact_name' => '担当 者', 'email' => 'sy@example.com'])->assertRedirect();
         $uid = DB::table('users')->where('email', 'sy@example.com')->value('id');
         DB::table('users')->where('id', $uid)->update(['password' => bcrypt('abcd1234'), 'profile_completed_at' => now_str()]);
         $this->as('sy@example.com')->get('/admin')->assertForbidden();

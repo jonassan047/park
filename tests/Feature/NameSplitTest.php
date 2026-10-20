@@ -266,7 +266,7 @@ class NameSplitTest extends TestCase
     public function test_m10_single_field_entrances_split_on_save(): void
     {
         $this->as('admin@park.example');
-        $this->post('/admin/settings/admins', ['name' => '見本 花子', 'email' => 'new-admin@park.example'])->assertRedirect();
+        $this->post('/admin/settings/admins', ['name' => '見本 花子', 'company_name' => 'テスト企業', 'email' => 'new-admin@park.example'])->assertRedirect();
         $u = $this->user('new-admin@park.example');
         $this->assertSame(['見本', '花子', '見本 花子'], [$u->name_sei, $u->name_mei, $u->name]);
 

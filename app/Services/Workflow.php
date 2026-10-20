@@ -60,8 +60,11 @@ class Workflow
         // 未設定の人でも、立場（役割・SES・エンジニア）が依頼と違うなら招待しない（別の立場のリンクを渡さないため）
         if ($u && ($u->role !== $d['role'] || (int) $u->ses_id !== (int) ($d['ses_id'] ?? 0) || (int) $u->engineer_id !== (int) ($d['engineer_id'] ?? 0))) return null;
         if (!$u) {
-            $id = DB::table('users')->insertGetId(['email' => $email] + self::nameCols((string) $d['name']) + ['role' => $d['role'], 'ses_id' => $d['ses_id'] ?? null,
-                'engineer_id' => $d['engineer_id'] ?? null, 'created_at' => now_str(), 'updated_at' => now_str()]);
+            $row = ['email' => $email] + self::nameCols((string) $d['name']) + ['role' => $d['role'], 'ses_id' => $d['ses_id'] ?? null,
+                'engineer_id' => $d['engineer_id'] ?? null, 'created_at' => now_str(), 'updated_at' => now_str()];
+            // 企業名は管理者だけ（宛名に出る）
+            if ($d['role'] === 'admin') $row['company_name'] = clean_name($d['company_name'] ?? null);
+            $id = DB::table('users')->insertGetId($row);
             $u = DB::table('users')->find($id);
         }
         $t = self::issueToken($u->id);
@@ -77,6 +80,57 @@ class Workflow
     {
         return DB::table('users')->insertGetId(['email' => strtolower($email)] + self::nameCols($name) + ['role' => $role, 'password' => Hash::make($password),
             'ses_id' => $extra['ses_id'] ?? null, 'engineer_id' => $extra['engineer_id'] ?? null, 'created_at' => now_str(), 'updated_at' => now_str()]);
+    }
+
+    // 管理者の情報（氏名・企業名・メール）を直す。$d は name_sei・name_mei・company_name・email（メールは無ければ変えない）。
+    // メールを変えられるのは、招待中（パスワード未設定）の他人だけ。変えたら新しいアドレスに招待を送り直す。自分・停止中・使用中の人は変えられない
+    public static function updateAdmin(int $id, array $d, $actor): array
+    {
+        $bad = fn (string $msg) => ['type' => 'bad', 'msg' => $msg];
+        $u = DB::table('users')->where('id', $id)->where('role', 'admin')->first();
+        if (!$u) return $bad('この管理者は見つかりません。');
+
+        $sei = clean_name($d['name_sei'] ?? null); $mei = clean_name($d['name_mei'] ?? null); $company = clean_name($d['company_name'] ?? null);
+        if ($sei === null) return $bad('氏名（姓）を入れてください。');
+        if ($company === null) return $bad('企業名を入れてください。');
+        if (mb_strlen($sei) > 50 || mb_strlen((string) $mei) > 50) return $bad('氏名は姓・名とも50文字までです。');
+        if (mb_strlen($company) > 100) return $bad('企業名は100文字までです。');
+
+        // メール：小文字にそろえて比べる。大文字小文字だけの違いは「変えていない」
+        $old = strtolower((string) $u->email);
+        $new = array_key_exists('email', $d) ? strtolower(trim((string) $d['email'])) : $old;
+        $emailChanged = $new !== $old;
+        if ($emailChanged) {
+            if ((int) $u->id === (int) ($actor->id ?? 0)) return $bad('ご自分のメールアドレスは変えられません。');
+            if (!$u->active) return $bad('停止中の人のメールアドレスは変えられません。');
+            if ($u->password) return $bad('使用中の方のメールアドレスは変えられません。');
+            if ($new === '' || !filter_var($new, FILTER_VALIDATE_EMAIL)) return $bad('メールアドレスを正しく入れてください。');
+            if (DB::table('users')->where('email', $new)->where('id', '!=', $id)->exists()) return $bad('このメールアドレスはすでに使われています。');
+        }
+
+        $name = join_name($sei, $mei);
+        $upd = [];
+        // 姓・名の列が空の古い行は、つないだ name を分けたものを基準にする（何も変えずに保存したら「変化なし」）
+        [$curSei, $curMei] = ($u->name_sei || $u->name_mei) ? [$u->name_sei, $u->name_mei] : split_name($u->name);
+        if ($sei !== $curSei || $mei !== $curMei) $upd += ['name_sei' => $sei, 'name_mei' => $mei, 'name' => $name];
+        if ($company !== $u->company_name) $upd['company_name'] = $company;
+        if ($emailChanged) $upd['email'] = $new;
+        if (!$upd) return ['type' => 'ok', 'msg' => '保存しました。'];
+
+        DB::transaction(fn () => DB::table('users')->where('id', $id)->update($upd + ['updated_at' => now_str()]));
+
+        $msg = '保存しました。';
+        if ($emailChanged) { // ここに来るのは招待中（パスワード未設定）の人だけ
+            self::invite(['email' => $new, 'name' => $name, 'role' => 'admin', 'company_name' => $company], $actor);
+            $msg = '保存し、新しいメールアドレスに招待を送り直しました。';
+        }
+
+        $log = [];
+        if (isset($upd['name'])) $log[] = '氏名：'.$u->name.'→'.$name;
+        if (isset($upd['company_name'])) $log[] = '企業名：'.$u->company_name.'→'.$company;
+        if ($emailChanged) $log[] = "メール：{$old}→{$new}";
+        N::audit($actor->id ?? null, 'admin-edit', mb_substr("#$id ".implode('／', $log), 0, 300));
+        return ['type' => 'ok', 'msg' => $msg];
     }
 
     // ---------- 最初の情報登録 ----------

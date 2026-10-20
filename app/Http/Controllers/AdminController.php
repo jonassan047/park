@@ -123,6 +123,8 @@ class AdminController extends Controller
     {
         if (!str_in($r->input('name'))) return back()->withInput()->with('flash', ['msg' => '会社名を入れてください。', 'type' => 'bad']);
         $email = strtolower((string) str_in($r->input('email')));
+        if ($email && clean_name($r->input('contact_name')) === null) return back()->withInput()->with('flash', ['msg' => '担当者名を入れてください（招待メールの宛名になります）。', 'type' => 'bad']);
+        if ($email && !filter_var($email, FILTER_VALIDATE_EMAIL)) return back()->withInput()->with('flash', ['msg' => 'メールアドレスを正しく入れてください。', 'type' => 'bad']);
         if ($email && DB::table('users')->where('email', $email)->exists()) return back()->withInput()->with('flash', ['msg' => 'このメールアドレスはすでに使われています。', 'type' => 'bad']);
         // 管理者が登録した SES は、承認の手順を省いて、すぐ参加中にする（担当者のメールがあれば招待が届く）
         $id = W::applySes($r->all() + ['agree' => 1], $r->user());
@@ -363,10 +365,34 @@ class AdminController extends Controller
 
     public function admins(Request $r)
     {
-        $email = strtolower((string) str_in($r->input('email')));
-        if (!$email || DB::table('users')->where('email', $email)->exists()) return $this->go('/admin/settings', 'このメールアドレスは使えません（空か、すでに使われています）。', 'bad');
-        W::invite(['email' => $email, 'name' => (string) str_in($r->input('name')), 'role' => 'admin'], $r->user());
-        return $this->go('/admin/settings', '招待メールを送りました。');
+        $name = clean_name($r->input('name')); $company = clean_name($r->input('company_name'));
+        $email = strtolower(trim((string) $r->input('email')));
+        $bad = fn (string $msg) => back()->withInput()->with('flash', ['msg' => $msg, 'type' => 'bad']);
+        if ($name === null) return $bad('担当者名を入れてください。');
+        if ($company === null) return $bad('企業名を入れてください。');
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) return $bad('メールアドレスを正しく入れてください。');
+        [$sei, $mei] = split_name($name); // 姓・名に分けたとき、どちらも50文字まで
+        if (mb_strlen((string) $sei) > 50 || mb_strlen((string) $mei) > 50) return $bad('担当者名は、姓・名とも50文字までです。');
+        if (mb_strlen($company) > 100) return $bad('企業名は100文字までです。');
+        if (DB::table('users')->where('email', $email)->exists()) return $bad('このメールアドレスはすでに使われています。');
+        W::invite(['email' => $email, 'name' => $name, 'role' => 'admin', 'company_name' => $company], $r->user());
+        return $this->go('/admin/settings', '登録し、招待メールを送りました。');
+    }
+
+    // 管理者の情報を直す画面
+    public function adminEdit(int $id)
+    {
+        $u = DB::table('users')->where('id', $id)->where('role', 'admin')->first();
+        abort_unless($u, 404);
+        return view('admin.admin-edit', ['u' => $u, 'self' => $u->id === auth()->id()]);
+    }
+
+    public function adminUpdate(Request $r, int $id)
+    {
+        abort_unless(DB::table('users')->where('id', $id)->where('role', 'admin')->exists(), 404);
+        $res = W::updateAdmin($id, $r->only(['name_sei', 'name_mei', 'company_name', 'email']), $r->user());
+        if ($res['type'] === 'bad') return back()->withInput()->with('flash', ['msg' => $res['msg'], 'type' => 'bad']);
+        return $this->go("/admin/settings/admins/$id", $res['msg'], $res['type']);
     }
 
     // まだパスワードを設定していない管理者に、招待を送り直す（リンクは新しくなり、7日に戻る）

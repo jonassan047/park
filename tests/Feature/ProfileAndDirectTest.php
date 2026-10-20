@@ -207,11 +207,11 @@ class ProfileAndDirectTest extends TestCase
     public function test_c_admin_invite_and_reinvite(): void
     {
         $this->as('admin@park.example');
-        $this->post('/admin/settings/admins', ['name' => '新任 管理', 'email' => 'new-admin@park.example'])->assertRedirect();
+        $this->post('/admin/settings/admins', ['name' => '新任 管理', 'company_name' => 'テスト企業', 'email' => 'new-admin@park.example'])->assertRedirect();
         $nu = DB::table('users')->where('email', 'new-admin@park.example')->first();
         $this->assertSame('admin', $nu->role);
         $this->assertNull($nu->password);
-        $this->get('/admin/settings')->assertOk()->assertSee('管理者を招待')->assertSee('招待中')->assertSee('使用中')->assertSee('招待を送り直す');
+        $this->get('/admin/settings')->assertOk()->assertSee('登録して招待メールを送る')->assertSee('招待中')->assertSee('使用中')->assertSee('招待を送り直す');
         // 送り直しは毎回 token が新しくなる
         $mails = DB::table('mail_outbox')->where('kind', 'invite')->count();
         $t0 = $nu->token;
@@ -241,7 +241,7 @@ class ProfileAndDirectTest extends TestCase
     public function test_c_reinvite_refused_for_stopped_admin(): void
     {
         $this->as('admin@park.example');
-        $this->post('/admin/settings/admins', ['name' => '止める 人', 'email' => 'stop-admin@park.example'])->assertRedirect();
+        $this->post('/admin/settings/admins', ['name' => '止める 人', 'company_name' => 'テスト企業', 'email' => 'stop-admin@park.example'])->assertRedirect();
         $id = DB::table('users')->where('email', 'stop-admin@park.example')->value('id');
         DB::table('users')->where('id', $id)->update(['active' => 0]);
         $token = DB::table('users')->where('id', $id)->value('token');
@@ -291,7 +291,7 @@ class ProfileAndDirectTest extends TestCase
     {
         $this->as('admin@park.example');
         // 招待中（パスワード未設定）の別の立場の人と同じメール
-        $this->post('/admin/settings/admins', ['name' => '招待中 管理', 'email' => 'pending-admin@park.example'])->assertRedirect();
+        $this->post('/admin/settings/admins', ['name' => '招待中 管理', 'company_name' => 'テスト企業', 'email' => 'pending-admin@park.example'])->assertRedirect();
         $ses = DB::table('ses_companies')->count();
         $mails = DB::table('mail_outbox')->count();
         $this->post('/admin/ses', ['name' => '重なる SES', 'contact_name' => '誰か', 'email' => 'pending-admin@park.example'])->assertRedirect()->assertSessionHas('flash.type', 'bad');
