@@ -11,7 +11,7 @@ $stopMsg = 'このエンジニアを停止します。ログインできなく�
     .($inSelection ? "選考中の応募 {$inSelection} 件はそのまま残ります。" : '');
 @endphp<x-post :action="'/engineers/'.$e->id.'/suspend'" label="停止" cls="ghost small" :confirm="$stopMsg" />@endif
 <x-post :action="'/engineers/'.$e->id.'/delete'" label="退会" cls="danger small" confirm="このエンジニアを退会済にします。ログインできなくなり、元に戻せません（記録は残ります）。よろしいですか？" />@endif
-@if(!$mine && $e->email && !($eu && $eu->password) && !$e->suspended_at && $e->status !== 'left')
+@if($u->role === 'ses' && $e->email && !($eu && $eu->password) && !$e->suspended_at && $e->status !== 'left')
 <x-post :action="'/engineers/'.$e->id.'/invite'" label="招待を送る" cls="ghost small" />
 @endif
 <a class="btn small" href="{{ url('/engineers/'.$e->id.'/edit') }}">編集</a>

@@ -17,7 +17,8 @@ class Notifier
     public static function queueMail(?string $to, ?string $name, string $subject, string $body, string $kind = 'general', ?string $replyTo = null, ?string $fromName = null): ?int
     {
         if (!$to) return null;
-        $footer = "\n\n――――――――――\n".($fromName ?: setting('operator_name'))."\n".url('/')."\n※このメールは PARK から自動で送っています。";
+        $footer = "\n\n――――――――――\n".($fromName ?: setting('operator_name'))."\n".url('/')."\n※このメールは PARK から自動で送っています。
+※ご不明な点は、park@jona.jp までご相談ください。";
         $id = DB::table('mail_outbox')->insertGetId([
             'to_email' => $to, 'to_name' => $name ?? '', 'from_name' => $fromName ?: null, 'subject' => '['.setting('app_name').'] '.$subject, 'body' => $body.$footer,
             'kind' => $kind, 'status' => self::canSend() ? 'queued' : 'saved', 'created_at' => now_str(), 'reply_to' => $replyTo,

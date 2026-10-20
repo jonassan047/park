@@ -77,6 +77,12 @@ function badge(string $map, ?string $key): HtmlString
     return new HtmlString('<span class="badge '.(PARK_TONE[$key] ?? '').'">'.e(lbl($map, $key)).'</span>');
 }
 
+// 困ったときの相談先
+function contact_email(): string
+{
+    return 'park@jona.jp';
+}
+
 function setting(string $key): string
 {
     static $cache = null;

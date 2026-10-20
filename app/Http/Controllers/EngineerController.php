@@ -78,8 +78,8 @@ class EngineerController extends Controller
         if (DB::table('users')->where('email', $email)->exists()) return back()->withInput()->with('flash', ['msg' => 'このメールアドレスはすでに使われています。', 'type' => 'bad']);
         $ad = W::addressCols($body, '現住所');
         if (isset($ad['bad'])) return back()->withInput()->with('flash', ['msg' => $ad['bad'], 'type' => 'bad']);
-        $id = W::createEngineer($sesId, $ad['ok'] + $body, $r->user());
-        return $this->go("/engineers/$id", '登録し、ご本人に招待メールを送りました。');
+        $id = W::createEngineer($sesId, $ad['ok'] + $body, $r->user(), $r->user()->role === 'ses');
+        return $this->go("/engineers/$id", $r->user()->role === 'ses' ? '登録し、ご本人に招待メールを送りました。' : '登録しました。招待メールは、所属の SES から送ってもらいます。');
     }
 
     public function show(Request $r, int $id)
@@ -148,6 +148,7 @@ class EngineerController extends Controller
     public function invite(Request $r, int $id)
     {
         $e = $this->load($r, $id);
+        if ($r->user()->role !== 'ses') return $this->go("/engineers/$id", '招待メールは、所属の SES だけが送れます。', 'bad');
         if ($e->status === 'left') return $this->go("/engineers/$id", '退会済のため、招待を送れません。', 'bad');
         if ($e->suspended_at) return $this->go("/engineers/$id", '停止中のため、招待を送れません。', 'bad');
         if (!$e->email) return $this->go("/engineers/$id", 'メールアドレスが登録されていません。', 'bad');

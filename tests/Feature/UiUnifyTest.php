@@ -111,7 +111,7 @@ class UiUnifyTest extends TestCase
     public function test_u3_engineer_new_requires_email_for_admin_and_ses(): void
     {
         $this->admin();
-        $html = $this->get('/engineers/new?ses=1')->assertOk()->assertSee('ご本人に招待メールが届きます')->getContent();
+        $html = $this->get('/engineers/new?ses=1')->assertOk()->assertSee('招待メールは所属の SES が送ります')->getContent();
         $this->assertMatchesRegularExpression('/name="email"[^>]*required/', $html);
         foreach ([
             fn () => $this->admin()->post('/engineers', ['ses_id' => '1', 'name_sei' => '無', 'name_mei' => '一郎', 'email' => '']),
@@ -133,10 +133,12 @@ class UiUnifyTest extends TestCase
         ] as [$who, $extra, $email]) {
             $e0 = $this->rows('engineers'); $m0 = DB::table('mail_outbox')->where('kind', 'invite')->count();
             $this->as($who)->post('/engineers', $extra + ['name_sei' => '登録', 'name_mei' => '太郎', 'email' => $email])
-                ->assertSessionHas('flash.type', 'ok')->assertSessionHas('flash.msg', '登録し、ご本人に招待メールを送りました。');
+                ->assertSessionHas('flash.type', 'ok')->assertSessionHas('flash.msg', $who === 'admin@park.example' ? '登録しました。招待メールは、所属の SES から送ってもらいます。' : '登録し、ご本人に招待メールを送りました。');
             $this->assertSame($e0 + 1, $this->rows('engineers'));
-            $this->assertSame($m0 + 1, DB::table('mail_outbox')->where('kind', 'invite')->count());
-            $this->assertSame('eg', DB::table('users')->where('email', $email)->value('role'));
+            // 招待メールを送れるのは SES だけ（管理者の登録では送らない）
+            $sent = $who === 'admin@park.example' ? 0 : 1;
+            $this->assertSame($m0 + $sent, DB::table('mail_outbox')->where('kind', 'invite')->count());
+            $this->assertSame($sent ? 'eg' : null, DB::table('users')->where('email', $email)->value('role'));
         }
     }
 

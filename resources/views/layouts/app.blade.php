@@ -56,7 +56,7 @@
 @unless($noTitle ?? false)<h1>{{ $title }}</h1>@endunless
 @yield('content')
 </main>
-@unless($print)<footer class="foot"><p><span class="mark">P</span><b>{{ setting('app_name') }}</b></p><p>SES 企業のみなさまと、エンジニアが同じ木の下で。成約したときだけ、成功報酬をいただく仕組みです。</p></footer>@endunless
+@unless($print)<footer class="foot"><p><span class="mark">P</span><b>{{ setting('app_name') }}</b></p><p>SES 企業のみなさまと、エンジニアが同じ木の下で。成約したときだけ、成功報酬をいただく仕組みです。</p><p>困ったときの相談先：<a href="mailto:{{ contact_email() }}">{{ contact_email() }}</a></p></footer>@endunless
 <script src="{{ asset('js/park.js') }}?v={{ filemtime(public_path('js/park.js')) }}"></script>
 </body>
 </html>
