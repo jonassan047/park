@@ -39,6 +39,8 @@ header nav a.on { background: var(--blue); color: #fff; }
 .btn.danger { background: #fff; color: var(--bad); border-color: var(--bad); }
 button.link { background: none; border: 0; color: var(--blue); cursor: pointer; padding: 0; font: inherit; }
 form.inline { display: inline; }
+/* 一覧の操作列：停止・退会が出ない行でも「詳細」を右端にそろえる */
+td:has(> a.btn.small:last-child) { text-align: right; white-space: nowrap; }
 
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
 .card > header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 16px; background: var(--blue2); border-bottom: 1px solid var(--line); }
