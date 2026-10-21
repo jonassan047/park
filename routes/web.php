@@ -157,6 +157,7 @@ Route::middleware('role:admin')->group(function () {
         Route::post('/ses/{id}', [Adm::class, 'sesUpdate']);
         Route::post('/ses/{id}/approve', [Adm::class, 'sesApprove']);
         Route::post('/ses/{id}/suspend', [Adm::class, 'sesSuspend']);
+        Route::post('/ses/{id}/resume', [Adm::class, 'sesResume']);
         Route::post('/ses/{id}/users', [Adm::class, 'sesUsers']);
         Route::get('/engineers', [Adm::class, 'engineers']);
         Route::post('/engineers/operator', [Adm::class, 'operator']);
@@ -181,6 +182,9 @@ Route::middleware('role:admin')->group(function () {
         Route::get('/admins/new', [Adm::class, 'adminNew']);
         Route::post('/admins', [Adm::class, 'admins']);
         Route::post('/admins/{id}/reinvite', [Adm::class, 'reinviteAdmin']);
+        Route::post('/admins/{id}/suspend', [Adm::class, 'adminSuspend']);
+        Route::post('/admins/{id}/resume', [Adm::class, 'adminResume']);
+        Route::post('/admins/{id}/delete', [Adm::class, 'adminDelete']);
         Route::get('/admins/{id}', [Adm::class, 'adminShow']);
         Route::get('/admins/{id}/edit', [Adm::class, 'adminEdit']);
         Route::post('/admins/{id}', [Adm::class, 'adminUpdate']);

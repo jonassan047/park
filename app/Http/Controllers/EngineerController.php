@@ -214,6 +214,11 @@ class EngineerController extends Controller
     // 操作のあとの戻り先。管理者が SES の詳細の表から押したときだけ SES の詳細へ。行き先は DB のエンジニアから作る
     private function backTo(Request $r, object $e): string
     {
+        // 一覧から押したときは、その一覧へ（絞り込みを保つ）。行き先は役割から決め、送られた値から作らない
+        if ($r->input('back') === 'list') {
+            $query = $r->input('back_query');
+            return list_back($r->user()->role === 'admin' ? '/admin/engineers' : '/ses/engineers', is_string($query) ? $query : null);
+        }
         if ($r->user()->role === 'admin' && $r->input('back') === 'ses' && DB::table('ses_companies')->where('id', $e->ses_id)->where('kind', 'ses')->exists()) {
             return "/admin/ses/{$e->ses_id}";
         }

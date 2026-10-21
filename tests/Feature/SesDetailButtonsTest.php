@@ -432,7 +432,7 @@ class SesDetailButtonsTest extends TestCase
         $admin = file_get_contents("$root/admin.md");
         $steps = file_get_contents("$root/admin-steps.md");
         $this->assertStringContainsString('担当者の詳細', $admin);
-        $this->assertStringContainsString('担当者・エンジニアを止める・退会にする', $steps);
+        $this->assertStringContainsString('エンジニア・SES を止める・退会にする', $steps);
         foreach (['担当者のアカウント', '担当者を追加して招待'] as $old) {
             $this->assertStringNotContainsString($old, $admin);
             $this->assertStringNotContainsString($old, $steps);

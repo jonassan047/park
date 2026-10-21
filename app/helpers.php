@@ -80,6 +80,19 @@ function engineer_stop_confirm(bool $working, int $inSelection): string
         .($inSelection ? "選考中の応募 {$inSelection} 件はそのまま残ります。" : '');
 }
 
+// 一覧へ戻る URL。$query は一覧で開いていたときの問い合わせの文字（フォームの hidden で送られる）。
+// 決まった鍵（q・status・ses・page）の短い文字だけを付け直す。パスは呼ぶ側が固定で渡す（送られた値から作らない）
+function list_back(string $path, ?string $query): string
+{
+    parse_str((string) $query, $p);
+    $keep = [];
+    foreach (['q', 'status', 'ses', 'page'] as $k) {
+        if (isset($p[$k]) && is_string($p[$k]) && mb_strlen($p[$k]) <= 200) $keep[$k] = $p[$k];
+    }
+    $qs = http_build_query($keep);
+    return $path.($qs !== '' ? '?'.$qs : '');
+}
+
 function badge(string $map, ?string $key): HtmlString
 {
     return new HtmlString('<span class="badge '.(PARK_TONE[$key] ?? '').'">'.e(lbl($map, $key)).'</span>');

@@ -183,8 +183,9 @@ class AdminController extends Controller
     public function sesDelete(Request $r, int $id)
     {
         $s = $this->sesOrFail($id);
-        if ($s->status === 'left') return $this->go("/admin/ses/$id", 'すでに退会済です。');
-        if (DB::table('contracts')->where('ses_id', $id)->where('status', 'active')->exists()) return $this->go("/admin/ses/$id", '退会にできません。稼働中の契約があります。先に契約を終了してください。', 'bad');
+        $back = $this->sesBack($r, $id);
+        if ($s->status === 'left') return $this->go($back, 'すでに退会済です。');
+        if (DB::table('contracts')->where('ses_id', $id)->where('status', 'active')->exists()) return $this->go($back, '退会にできません。稼働中の契約があります。先に契約を終了してください。', 'bad');
         DB::transaction(function () use ($id, $r) {
             $egIds = DB::table('engineers')->where('ses_id', $id)->pluck('id');
             // 管理者を兼ねる人は、エンジニアの紐づけだけ外す（管理者としては引き続き入れる）
@@ -197,7 +198,7 @@ class AdminController extends Controller
             DB::table('ses_companies')->where('id', $id)->update(['status' => 'left']);
         });
         N::audit($r->user()->id, 'ses-leave', $s->name);
-        return $this->go("/admin/ses/$id", 'SES「'.$s->name.'」と所属エンジニアを退会済にしました。');
+        return $this->go($back, 'SES「'.$s->name.'」と所属エンジニアを退会済にしました。');
     }
 
     public function sesUpdate(Request $r, int $id)
@@ -220,12 +221,34 @@ class AdminController extends Controller
         return $this->go("/admin/ses/$id", '承認し、招待メールを送りました。');
     }
 
+    // SES の停止・再開・退会のあとの戻り先。一覧から押したら一覧へ（絞り込みを保つ）、それ以外は SES の詳細
+    private function sesBack(Request $r, int $id): string
+    {
+        $query = $r->input('back_query');
+        return $r->input('back') === 'list' ? list_back('/admin/ses', is_string($query) ? $query : null) : "/admin/ses/$id";
+    }
+
     public function sesSuspend(Request $r, int $id)
     {
-        $this->sesOrFail($id);
+        $s = $this->sesOrFail($id);
+        $back = $this->sesBack($r, $id);
+        if ($s->status === 'left') return $this->go($back, '退会済の SES は操作できません。', 'bad');
+        if ($s->status === 'suspended') return $this->go($back, 'すでに停止中です。');
+        if ($s->status === 'pending') return $this->go($back, '申込中の SES は停止できません。承認するか、退会にしてください。', 'bad');
         DB::table('ses_companies')->where('id', $id)->update(['status' => 'suspended']);
         N::audit($r->user()->id, 'ses-suspend', (string) $id);
-        return $this->go("/admin/ses/$id", '停止しました。');
+        return $this->go($back, '停止しました。');
+    }
+
+    // 停止中の SES を参加中に戻す（招待メールは送らない）
+    public function sesResume(Request $r, int $id)
+    {
+        $s = $this->sesOrFail($id);
+        $back = $this->sesBack($r, $id);
+        if ($s->status !== 'suspended') return $this->go($back, '停止していません。');
+        DB::table('ses_companies')->where('id', $id)->update(['status' => 'active', 'updated_at' => now_str()]);
+        N::audit($r->user()->id, 'ses-resume', (string) $id);
+        return $this->go($back, '再開しました。');
     }
 
     public function sesUsers(Request $r, int $id)
@@ -296,7 +319,14 @@ class AdminController extends Controller
         if ($q !== '') $list = $list->filter(fn ($e) => str_contains(mb_strtolower(implode(' ', [$e->name, $e->kana, $e->skills, $e->ses_name, $e->strengths])), mb_strtolower($q)));
         // 直属のエンジニアが今いるときだけ、「直属だけ」のボタンを出す（新しく直属を作る入口はない）
         $hasDirect = DB::table('engineers as e')->join('ses_companies as s', 's.id', '=', 'e.ses_id')->where('s.kind', 'direct')->exists();
-        return view('admin.engineers', ['list' => $list->values(), 'q' => $q, 'st' => $st, 'direct' => $direct, 'hasDirect' => $hasDirect]);
+        $list = $list->values();
+        $egIds = $list->pluck('id');
+        return view('admin.engineers', [
+            'list' => $list, 'q' => $q, 'st' => $st, 'direct' => $direct, 'hasDirect' => $hasDirect,
+            // 停止の確認の文に添える、稼働中の契約と選考中の応募（エンジニアごとに問い合わせず、まとめて取る）
+            'working' => DB::table('contracts')->whereIn('engineer_id', $egIds)->where('status', 'active')->pluck('engineer_id')->flip(),
+            'inSel' => DB::table('applications')->whereIn('engineer_id', $egIds)->whereIn('status', PipelineController::OPEN)->get(['engineer_id'])->groupBy('engineer_id')->map->count(),
+        ]);
     }
 
     public function operator(Request $r)
@@ -510,12 +540,15 @@ class AdminController extends Controller
     {
         $u = DB::table('users')->where('id', $id)->where('role', 'admin')->first();
         abort_unless($u, 404);
+        if ($u->left_at) return $this->go("/admin/admins/$id", '退会済の人は直せません。', 'bad');
         return view('admin.admin-edit', ['u' => $u, 'self' => $u->id === auth()->id()]);
     }
 
     public function adminUpdate(Request $r, int $id)
     {
-        abort_unless(DB::table('users')->where('id', $id)->where('role', 'admin')->exists(), 404);
+        $target = DB::table('users')->where('id', $id)->where('role', 'admin')->first();
+        abort_unless($target, 404);
+        if ($target->left_at) return $this->go("/admin/admins/$id", '退会済の人は直せません。', 'bad');
         $res = W::updateAdmin($id, $r->only(['name_sei', 'name_mei', 'kana_sei', 'kana_mei', 'company_name', 'email', 'position', 'phone', 'postal_code', 'address']), $r->user());
         if ($res['type'] === 'bad') return back()->withInput()->with('flash', ['msg' => $res['msg'], 'type' => 'bad']);
         return $this->go("/admin/admins/$id", $res['msg'], $res['type']);
@@ -532,6 +565,22 @@ class AdminController extends Controller
         $to = $back === url("/admin/admins/$id") ? "/admin/admins/$id" : '/admin/admins';
         return $this->go($to, '招待を送り直しました。');
     }
+
+    // 管理者の停止・再開・退会（手続きは Workflow）。一覧から押したら一覧へ、それ以外は管理者の詳細へ。
+    // 兼任の人の退会で管理者でなくなったときは、詳細が開けないので一覧へ
+    private function adminDo(Request $r, int $id, string $method)
+    {
+        $res = W::$method($id, $r->user());
+        abort_unless($res, 404);
+        $query = $r->input('back_query');
+        $back = $r->input('back') === 'list' ? list_back('/admin/admins', is_string($query) ? $query : null) : "/admin/admins/$id";
+        if (!DB::table('users')->where('id', $id)->where('role', 'admin')->exists()) $back = '/admin/admins';
+        return $this->go($back, $res['msg'], $res['type']);
+    }
+
+    public function adminSuspend(Request $r, int $id) { return $this->adminDo($r, $id, 'suspendAdmin'); }
+    public function adminResume(Request $r, int $id) { return $this->adminDo($r, $id, 'resumeAdmin'); }
+    public function adminDelete(Request $r, int $id) { return $this->adminDo($r, $id, 'leaveAdmin'); }
 
     public function audit()
     {

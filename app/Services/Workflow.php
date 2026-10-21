@@ -90,6 +90,72 @@ class Workflow
         return ['type' => 'ok', 'msg' => "{$u->name} さんを退会済にしました。"];
     }
 
+    // ---------- 管理者の停止・再開・退会（管理者だけが押せる） ----------
+    // 戻り値は ['type' => 'ok'|'bad', 'msg' => 文]。対象が管理者でなければ null（呼ぶ側で 404）
+    // $stopping は、停止・退会のとき true（使える管理者が足りなくなる操作を断るため）
+    private static function adminGuard(int $id, $actor, bool $stopping): array|object
+    {
+        // 呼ぶ側のトランザクションの中で使う。同時に2人が押しても「最後の1人」を守れるよう、行をロックして数える
+        $u = DB::table('users')->where('id', $id)->where('role', 'admin')->lockForUpdate()->first();
+        if (!$u) return ['null' => true];
+        if ($id === (int) ($actor->id ?? 0)) return ['type' => 'bad', 'msg' => 'ご自身は、停止・再開・退会にできません。ほかの管理者にお願いしてください。'];
+        if ($u->left_at) return ['type' => 'bad', 'msg' => '退会済の人は操作できません。'];
+        if ($stopping) {
+            $others = DB::table('users')->where('role', 'admin')->where('id', '!=', $id)->where('active', 1)->whereNull('left_at')->whereNotNull('password')->lockForUpdate()->get(['id'])->count();
+            if ($others === 0) return ['type' => 'bad', 'msg' => '使える管理者がほかにいなくなるため、停止・退会にはできません。'];
+        }
+        return $u;
+    }
+
+    public static function suspendAdmin(int $id, $actor): ?array
+    {
+        return DB::transaction(function () use ($id, $actor) {
+            $u = self::adminGuard($id, $actor, true);
+            if (is_array($u)) return isset($u['null']) ? null : $u;
+            if (!$u->active) return ['type' => 'ok', 'msg' => 'すでに停止中です。'];
+            // 招待リンクも使えなくする
+            DB::table('users')->where('id', $id)->update(['active' => 0, 'token' => null, 'token_expires' => null, 'updated_at' => now_str()]);
+            N::audit($actor->id ?? null, 'admin-suspend', "#user {$id}");
+            return ['type' => 'ok', 'msg' => "{$u->name} さんを停止しました。".(self::isDual($u) ? '（エンジニアとしても入れなくなります）' : '')];
+        });
+    }
+
+    public static function resumeAdmin(int $id, $actor): ?array
+    {
+        return DB::transaction(function () use ($id, $actor) {
+            $u = self::adminGuard($id, $actor, false);
+            if (is_array($u)) return isset($u['null']) ? null : $u;
+            if ($u->active) return ['type' => 'ok', 'msg' => 'すでに使えます。'];
+            DB::table('users')->where('id', $id)->update(['active' => 1, 'updated_at' => now_str()]);
+            N::audit($actor->id ?? null, 'admin-resume', "#user {$id}");
+            $msg = "{$u->name} さんを再開しました。";
+            // パスワードを決めていなかった人は、招待のリンクが無いので、送り直す方法を添える
+            if (!$u->password) $msg .= '招待のリンクが無いので、『招待を送り直す』で送ってください。';
+            return ['type' => 'ok', 'msg' => $msg];
+        });
+    }
+
+    public static function leaveAdmin(int $id, $actor): ?array
+    {
+        return DB::transaction(function () use ($id, $actor) {
+            $u = self::adminGuard($id, $actor, true);
+            if (is_array($u)) return isset($u['null']) ? null : $u;
+            // エンジニアを兼ねている人は、管理者の役割だけ外す（エンジニアとしては引き続き入れる）
+            if (self::isDual($u)) {
+                $e = DB::table('engineers')->where('id', $u->engineer_id)->first();
+                if (!$e) return ['type' => 'bad', 'msg' => 'エンジニアの記録が見つからないため、退会にできません。管理者にご確認ください。'];
+                // エンジニアが停止中なら止めたまま、そうでなければ使える状態にする
+                DB::table('users')->where('id', $id)->update(['role' => 'eg', 'ses_id' => $e->ses_id, 'active' => $e->suspended_at ? 0 : 1, 'updated_at' => now_str()]);
+                DB::table('engineers')->where('id', $e->id)->update(['is_operator' => 0]);
+                N::audit($actor->id ?? null, 'admin-leave', "#user {$id}");
+                return ['type' => 'ok', 'msg' => "{$u->name} さんを管理者から外しました。エンジニアとしては引き続き入れます。"];
+            }
+            DB::table('users')->where('id', $id)->update(['active' => 0, 'left_at' => now_str(), 'token' => null, 'token_expires' => null, 'updated_at' => now_str()]);
+            N::audit($actor->id ?? null, 'admin-leave', "#user {$id}");
+            return ['type' => 'ok', 'msg' => "{$u->name} さんを退会済にしました。"];
+        });
+    }
+
     // エンジニアの停止：ログインできなくし、配信の候補から外す（status は変えない）。相手側にアプリ内のお知らせだけ出す
     public static function suspendEngineer(int $id, $actor): array
     {

@@ -1,3 +1,179 @@
+# PLAN：管理者・SES・エンジニアの一覧に 停止・退会 のボタン（2026-10-21）
+
+> この節が今回の計画。下の「SES の詳細の…」「兼任ログイン」は前の計画（実装済み）、その下の「テスト期間だけ重複を許す」は保留中の計画。どれも消さずに残している。計画を書いた時点の park は `33e93cf`。
+
+## 背景
+
+tezzo の要求（2026-10-20）：「全ての管理者一覧・SES一覧・エンジニア一覧に停止・退会ボタンを付ける」。
+
+今：
+- `admin/admins.blade.php`（管理者の一覧）：詳細・招待を送り直す だけ。**管理者の停止・退会の仕組みが無い**。状態は `!active ? '停止' : …`（退会済が出ない）。
+- `admin/ses-index.blade.php`（SES の一覧）：詳細だけ。SES の停止（`POST /admin/ses/{id}/suspend`）・退会（`/delete`）は詳細の右上にある。**SES の再開が無い**（停止中は「承認して招待を送る」で戻している）。
+- `admin/engineers.blade.php`（管理者のエンジニア一覧。絞り込み `q`・`status`・`ses=direct` あり）、`ses/engineers.blade.php`（SES の自社のエンジニア一覧）：詳細だけ。停止・再開・退会（`POST /engineers/{id}/suspend`・`resume`・`delete`）はエンジニアの詳細にある。
+- 手本：`admin/ses-show.blade.php` の表（停止（停止中は再開）・退会・詳細。退会済は詳細だけ。詳細は右端）。戻り先の仕組みは `EngineerController::backTo`（`back=ses`）と `AdminController::sesUserDo`（`back=detail`）。
+- 一覧は今はページ分けしていない（`->get()`）。「ページを保つ」は、問い合わせの文字（`?q=…&page=…`）をそのまま持ち帰る形で満たす（あとでページ分けしても効く）。
+
+## 仮定（Planner が置いたもの）
+
+- 仮定1：ボタンの形・色・確認の文は SES の詳細の表と同じ（再開＝`small`、停止＝`ghost small`、退会＝`danger small`、詳細＝`btn small` で右端）。
+- 仮定2：管理者の停止＝その人のログインが止まる（`users.active=0`、招待リンクも無効）。再開で戻る。退会＝`left_at` を入れ、元に戻せない（記録は残る）。SES 担当者の停止・退会と同じ考え方。
+- 仮定3：エンジニア兼任の管理者（`role='admin'`・`engineer_id` あり）は SES 担当者と同じ扱い。停止はログインそのものが止まる（エンジニアとしても入れない）。退会は**管理者の役割だけ外し**、エンジニアとして残す（`role='eg'`、`ses_id`＝そのエンジニアの会社、`engineers.is_operator=0`。エンジニアが停止中なら `active=0`）。「決めてほしいこと」の 1。
+- 仮定4：管理者は自分自身を停止・退会にできない（ボタンを出さず、送られても断る）。「使える管理者（`active=1`・`left_at` なし・パスワード設定済み）が自分以外にいなくなる」操作も断る。操作する人が使える管理者なので、自分を外すと実際には起きないが、手続きの守りとして入れる。
+- 仮定5：SES の再開を新しく作る（`status` を `suspended`→`active`。招待メールは送らない）。詳細の右上も、停止中は「承認して招待を送る」の代わりに「再開」を出す（承認は申込中だけ）。「決めてほしいこと」の 2。
+- 仮定6：SES の一覧のボタンは詳細の右上と同じ条件（停止＝参加中だけ、再開＝停止中だけ、退会＝退会済以外）。申込中の行は 退会・詳細（承認は詳細の画面で）。
+- 仮定7：管理者の一覧に退会済の人も残す（状態「退会済」、ボタンは詳細だけ）。SES の担当者の表と同じ。「決めてほしいこと」の 3。退会済の管理者の詳細では「編集」「招待を送り直す」を出さず、編集の保存も断る。
+- 仮定8：管理者の詳細の右上にも 停止（再開）・退会 を置く（SES の担当者の詳細と同じ。押すと詳細に戻る。兼任の退会で管理者でなくなったときは一覧へ）。
+- 仮定9：一覧から押したら、その一覧に、押したときの絞り込み（`q`・`status`・`ses`・`page`）を付けて戻る。詳細から押したときの戻り先は今のまま。
+- 仮定10：SES の自社のエンジニア一覧でも、エンジニアの詳細と同じく SES 担当者が停止・再開・退会できる（権限は今の `load()`）。
+- 仮定11：管理者が通知を受けるのは今も `active=1` の人だけ（`Notifier::admins`）なので、停止・退会した管理者には何も届かない。本人にメールは送らない（SES 担当者の停止と同じ）。
+
+## 受け入れ条件
+
+- AC1：管理者の一覧の各行に、停止（停止中は再開）・退会・詳細が並ぶ（招待中の人は「招待を送り直す」も今のまま、停止の左に）。退会済の行は詳細だけ。自分の行は詳細（と招待を送り直す）だけ。状態の列は `user_state()`（使用中・招待中・停止・退会済）。
+- AC2：管理者の停止・再開・退会が動く。自分自身は断る。使える管理者が自分以外にいなくなるなら断る。二重の操作は文で知らせる。記録（`admin-suspend`・`admin-resume`・`admin-leave`）が残る。停止・退会した人はログインできない（入っている途中なら次の画面でログイン画面へ）。
+- AC3：エンジニア兼任の管理者の停止はログインごと止まる（文に「（エンジニアとしても入れなくなります）」）。退会は管理者の役割だけ外れ、エンジニアとして入れる（`role='eg'`、`ses_id`＝エンジニアの会社、運営者の印が外れる）。
+- AC4：SES の一覧の各行に、停止（参加中）／再開（停止中）・退会（退会済以外）・詳細が並ぶ。確認の文は詳細の右上と同じ。退会済の行は詳細だけ。
+- AC5：SES の再開 `POST /admin/ses/{id}/resume` がある（管理者だけ）。停止中→参加中、招待メールは送らない、記録 `ses-resume`。停止中でない会社には「停止していません。」。SES の詳細の右上で、停止中は「再開」が出て、「承認して招待を送る」は申込中だけになる。SES の停止は、参加中でないと断る（退会済・申込中・停止中）。
+- AC6：管理者のエンジニア一覧・SES の自社のエンジニア一覧の各行に、停止（停止中は再開）・退会・詳細が並ぶ。退会済は詳細だけ。停止の確認の文は `engineer_stop_confirm()`（稼働中の契約・選考中の応募の数をその人ごとに）。SES の一覧の状態の「停止中」の札は今のまま。
+- AC7：一覧から押すと、その一覧に戻る。絞り込み（`q`・`status`・`ses`・`page`）がそのまま付く。それ以外の問い合わせの文字・ほかのサイトへの行き先は付かない（開いたままの転送にしない）。結果の文（成功・断り）が出る。
+- AC8：詳細の画面から押したときの戻り先は今のまま（エンジニア＝エンジニアの詳細、SES＝SES の詳細、SES の詳細の表＝SES の詳細、担当者の詳細＝担当者の詳細）。管理者の詳細から押すと管理者の詳細へ（兼任の退会で管理者でなくなったら一覧へ）。
+- AC9：権限は今のまま。管理者の停止・再開・退会と SES の再開は管理者だけ（SES 担当者・エンジニアは 403）。SES は他社のエンジニアを操作できない（403/404 は今の `load()` のまま）。
+- AC10：マニュアル（管理者・SES）が新しい画面に合っている。
+- AC11：既存のテストが全部通る。
+
+## 仕様
+
+### 1. データ
+
+- テーブル・列は変えない（マイグレーションなし）。管理者の停止・退会は `users.active`・`left_at`・`token`・`token_expires` を使う（SES 担当者と同じ）。
+
+### 2. 戻り先の共通の部品（`app/helpers.php`）
+
+```php
+// 一覧へ戻る URL。$query は一覧で開いていたときの問い合わせの文字（フォームの hidden で送られる）。
+// 決まった鍵（q・status・ses・page）の短い文字だけを付け直す。パスは呼ぶ側が固定で渡す（送られた値から作らない）
+function list_back(string $path, ?string $query): string
+```
+
+- `parse_str((string) $query, $p)` → 鍵が `q`・`status`・`ses`・`page` で、値が文字列・200字以内のものだけ残す → `http_build_query` → `$path.($qs ? '?'.$qs : '')`。
+- 一覧のボタンは `:fields="['back' => 'list', 'back_query' => request()->getQueryString()]"` を送る（`x-post` は null を空の文字で出すので、そのままでよい）。
+
+### 3. 管理者の停止・再開・退会
+
+手続き（`app/Services/Workflow.php`。`suspendSesUser` などの並びに）：
+
+- `suspendAdmin(int $id, $actor): ?array`／`resumeAdmin`／`leaveAdmin`。対象が `role='admin'` でなければ null（呼ぶ側で 404）。戻り値は `['type' => 'ok'|'bad', 'msg' => …]`。
+- 共通の断り（この順）：
+  1. 自分（`$id === $actor->id`）→ bad「ご自身は、停止・再開・退会にできません。ほかの管理者にお願いしてください。」
+  2. `left_at` あり → bad「退会済の人は操作できません。」
+  3. （停止・退会のとき）使える管理者が、この人を除いて0人 → bad「使える管理者がほかにいなくなるため、停止・退会にはできません。」（使える＝`role='admin'`・`active=1`・`left_at` なし・`password` あり）
+- 停止：すでに `active=0` → ok「すでに停止中です。」。`active=0`・`token`/`token_expires` を null。記録 `admin-suspend`（`#user {id}`。アドレスは書かない）。文「{name} さんを停止しました。」＋兼任なら「（エンジニアとしても入れなくなります）」。
+- 再開：`active=1` なら ok「すでに使えます。」。`active=1`。記録 `admin-resume`。パスワード未設定の人には「招待のリンクが無いので、『招待を送り直す』で送ってください。」を添える（再開後は一覧・詳細にそのボタンが出る）。
+- 退会：
+  - 兼任（`isDual`）：エンジニアの `ses_id` を取り、`role='eg'`・`ses_id`＝それ・`active`＝（エンジニアが停止中なら 0、ほかは今の値）。`engineers.is_operator=0`。記録 `admin-leave`。文「{name} さんを管理者から外しました。エンジニアとしては引き続き入れます。」
+  - 兼任でない：`active=0`・`left_at=now`・token を null。記録 `admin-leave`。文「{name} さんを退会済にしました。」
+
+コントローラー（`AdminController`）：
+
+- `adminSuspend`・`adminResume`・`adminDelete(Request $r, int $id)` → 共通の private `adminDo($r, $id, $method)`：`W::$method($id, $r->user())`、null なら 404。
+- 戻り先：`back=list` → `list_back('/admin/admins', back_query)`。それ以外 → `/admin/admins/{id}`。ただし操作のあとその人が `role='admin'` でなければ（兼任の退会）`/admin/admins`。
+- ルート（admin の群、`/admins/{id}/reinvite` の並び。`/admins/{id}` の POST より前に）：
+  `Route::post('/admins/{id}/suspend', …)`、`/resume`、`/delete`。
+- `adminEdit`・`adminUpdate`：`left_at` のある人は `/admin/admins/{id}` へ戻して bad「退会済の人は直せません。」。
+- `reinviteAdmin` は今のまま（`active=1` の条件で、停止中・退会済には送れない）。
+
+画面：
+
+- `admin/admins.blade.php`：状態の列を `user_state($u)` に。最後の列（左から）：招待を送り直す（今の条件のまま）→ 自分以外・退会済以外のとき 再開（`!active`）または停止、退会 → 詳細（いつも、右端）。確認の文：
+  - 停止：「{name} さんを停止します。ログインできなくなります（再開できます）。」＋兼任なら「エンジニアとしても入れなくなります。」
+  - 再開：「{name} さんを再開します。」
+  - 退会：兼任でない「{name} さんを退会済にします。ログインできなくなり、元に戻せません（記録は残ります）。よろしいですか？」／兼任「{name} さんを管理者から外します。エンジニアとしては引き続き入れます。よろしいですか？」
+- `admin/admin-show.blade.php`：状態を `user_state($u)` に。右上に、自分以外・退会済以外のとき 再開/停止・退会（同じ文、`back` なし）を「編集」の左に。退会済なら「編集」「招待を送り直す」を出さない。
+
+### 4. SES の停止・再開・退会
+
+- `AdminController::sesResume(Request $r, int $id)`（新規）：`sesOrFail`。`status !== 'suspended'` → ok「停止していません。」。`status='active'`・`updated_at`。記録 `ses-resume`。文「再開しました。」。招待は送らない。ルート `Route::post('/ses/{id}/resume', …)`（admin の群、`/ses/{id}/suspend` の並び。`/ses/{id}` の POST より前に）。
+- `sesSuspend`：`status` が `active` でなければ断る（`left`→bad「退会済の SES は操作できません。」、`suspended`→ok「すでに停止中です。」、`pending`→bad「申込中の SES は停止できません。承認するか、退会にしてください。」）。
+- 戻り先（`sesSuspend`・`sesResume`・`sesDelete` の全ての戻り）：`back=list` → `list_back('/admin/ses', back_query)`、それ以外 → `/admin/ses/{id}`（今のまま）。小さな private `sesBack(Request $r, int $id): string` を作る。
+- `admin/ses-index.blade.php`：最後の列（左から）停止（`active`）／再開（`suspended`、`cls="small"`、確認「この SES を再開します。担当者がログインできるようになります。」）→ 退会（`left` 以外）→ 詳細。停止・退会の確認の文は `ses-show` の4・5行と同じ（文を1か所にするため、`ses-show` と同じ文字列をそのまま使う。二重を避けたければ `helpers.php` に `ses_suspend_confirm()`・`ses_leave_confirm()` を作ってよい）。
+- `admin/ses-show.blade.php`（会社情報の右上）：`suspended` のとき「再開」（`back` なし）。「承認して招待を送る」の条件を `pending` だけに。
+
+### 5. エンジニアの一覧
+
+- `EngineerController::backTo`：先頭に、`$r->input('back') === 'list'` のとき → 管理者なら `list_back('/admin/engineers', back_query)`、SES なら `list_back('/ses/engineers', back_query)`。それ以外は今のまま（`back=ses` の扱いも変えない）。
+- `AdminController::engineers` と `SesController::engineers`：`sesShow` と同じ形で `working`（稼働中の契約の engineer_id の集合）・`inSel`（選考中の応募の数。`PipelineController::OPEN`）を、一覧の id でまとめて取り、画面に渡す。
+- `admin/engineers.blade.php`・`ses/engineers.blade.php`：最後の列を `ses-show` のエンジニアの表（34〜37行）と同じ並び・文にし、`$back = ['back' => 'list', 'back_query' => request()->getQueryString()]`。退会済は詳細だけ。
+- 管理者の一覧の下の「管理者の印」の切り替えフォームは今のまま。
+
+### 6. 境界の挙動
+
+- 二重の操作（停止済みを停止・退会済を退会・停止していないものを再開）：今の文、または上の文で、一覧に戻る。
+- 稼働中の契約があるエンジニア・SES の退会：今の断りの文（bad）で一覧に戻る。何も変わらない。
+- 最後の1人：SES 担当者は今のまま。管理者は 3 の断り。
+- 権限：SES 担当者が `POST /admin/admins/{id}/suspend`・`/admin/ses/{id}/resume` → 403。SES が他社のエンジニアに `POST /engineers/{id}/suspend` → 今の `load()` のまま 403。無い id → 404。
+- 0件：一覧の0件の表示は今のまま。
+- `back_query` に `https://…` や別の鍵を入れても、戻り先は一覧のパスのまま（鍵は4つだけ）。
+
+### 7. マニュアル（正本は `resources/manuals/`）
+
+- `admin.md`：
+  - 管理者の項（51行あたり）に「**管理者の停止・再開・退会**」：一覧・詳細のボタン、自分は操作できない、使える管理者がほかにいなくなる操作はできない、停止はログインが止まる（再開できる。招待中だった人は再開後に「招待を送り直す」）、退会は元に戻せない、エンジニア兼任の人は退会で管理者の役割だけ外れエンジニアとして入れる（停止はエンジニアとしても入れない）。
+  - 77〜85行の SES の項：SES の一覧の各行にも 停止（停止中は再開）・退会・詳細があり、押すと一覧に戻ること。会社ごとの「再開」（招待メールは送らない）。「承認して招待を送る」は申込中だけ。
+  - 91〜95行のエンジニアの項：エンジニアの一覧の各行にも 停止（停止中は再開）・退会・詳細があり、押すと絞り込みを保ったまま一覧に戻ること。
+  - 112〜116行の兼任の「停止と退会」：管理者の停止・退会の場合を1行足す。
+- `admin-steps.md`：管理者の項（51行）に停止・退会の手順を1〜2行。3-4 の題を「担当者・エンジニア・SES を止める・退会にする」にし、一覧からもできること、SES の再開を足す。
+- `ses.md`（134行）・`ses-steps.md`：エンジニアの一覧の各行からも停止・再開・退会ができること。
+- 写し（41_Park-Project の `04_Manuals`）は JOE が直す。
+
+## 実装の手順
+
+1. `helpers.php` に `list_back()` を足す。
+2. `Workflow` に `suspendAdmin`・`resumeAdmin`・`leaveAdmin` を足す。
+3. `AdminController`：`adminSuspend/Resume/Delete`（＋`adminDo`）、`adminEdit`・`adminUpdate` の退会済の断り、`sesResume`、`sesSuspend` の状態の確認、`sesBack` と3つの戻り先、`engineers` に `working`・`inSel`。ルートを足す。
+4. `SesController::engineers` に `working`・`inSel`。`EngineerController::backTo` に `back=list`。
+5. 画面：`admins`・`admin-show`・`ses-index`・`ses-show`（右上の再開・承認の条件）・`admin/engineers`・`ses/engineers`。
+6. `tests/Feature/ListButtonsTest.php`（下）を作り、`php artisan test` で全部通す（`SuspendLeaveTest`・`SesDetailButtonsTest`・`DualRoleTest`・`AdminAccountTest` もそのまま通ること）。
+7. マニュアル（7）を直す。
+8. （JOE）commit・push、`park-deploy.sh` で公開版へ反映（コードだけ。常時の了承の範囲）。04_Manuals の写しを直す。公開版で実際の管理者・SES・エンジニアを停止・退会にするのは tezzo の判断で行う（JOE は押さない）。
+
+## テスト（`tests/Feature/ListButtonsTest.php`）
+
+`SesDetailButtonsTest`・`SuspendLeaveTest` と同じ準備（`SampleSeeder`、`actingAs`、`TwoFactor::SESSION_KEY`）。足りない人はテストの中で `users`・`engineers` に行を足す。
+
+- AC1：管理者 A で `GET /admin/admins` → 管理者 B（使用中）の行に `/admin/admins/{B}/suspend`・`/delete`・`/admin/admins/{B}` がある。A の行に suspend/delete が無い。B を `active=0` → `/resume` と「停止」。B に `left_at` → 「退会済」で操作のフォームが無い。招待中の C に「招待を送り直す」。
+- AC2：A で `POST /admin/admins/{B}/suspend`（`back=list`）→ `/admin/admins` に戻る、B の `active=0`・`token` null、`audit_log` に `admin-suspend`。B で `actingAs` して `GET /admin` → ログイン画面へ。`resume` → `active=1`。`delete` → `left_at` あり、`/admin/admins/{B}` が「退会済」。A が自分に `POST /admin/admins/{A}/suspend` → 断りの文、変わらない。2回目の suspend → 「すでに停止中です。」。`Workflow::suspendAdmin(B, A')`（A' はパスワード未設定の管理者。使える管理者が B だけの状態）→ bad、変わらない。
+- AC3：B に `engineer_id` を付けた兼任で `delete` → `role='eg'`・`ses_id`＝そのエンジニアの会社・`left_at` なし・`active=1`、`engineers.is_operator=0`、`/admin/admins` に戻る（`back` なしでも詳細ではなく一覧）。エンジニアを停止中にしてから退会 → `active=0`。兼任の suspend の文に「エンジニアとしても入れなくなります」。
+- AC4：`GET /admin/ses` → 参加中の会社に `/admin/ses/{id}/suspend`・`/delete`、停止中の会社に `/resume`、申込中に `/delete` だけ（suspend・resume なし）、退会済に操作なし。全部に詳細。
+- AC5：停止中の会社に `POST /admin/ses/{id}/resume`（`back=list`）→ `/admin/ses`、`status='active'`、`mail_outbox` が増えない、`audit_log` に `ses-resume`。参加中に resume → 「停止していません。」。申込中に suspend → 断り、`pending` のまま。`GET /admin/ses/{停止中}` に「再開」があり「承認して招待を送る」が無い。申込中には「承認して招待を送る」がある。
+- AC6：`GET /admin/engineers` と（SES で）`GET /ses/engineers` → 各行に `/engineers/{id}/suspend`・`/delete`・詳細、`suspended_at` の行に `/resume`、`status='left'` の行は詳細だけ。稼働中の契約がある人の停止の確認の文に「稼働中の契約があります。」。
+- AC7：管理者で `POST /engineers/{id}/suspend`（`back=list`、`back_query=q=Java&status=available&ses=direct&page=2&x=1`）→ `/admin/engineers?q=Java&status=available&ses=direct&page=2` に戻る（`x` は付かない）。`back_query=//evil.example` → `/admin/engineers`。SES で同じ → `/ses/engineers?…`。稼働中の契約があるエンジニアに `delete`（`back=list`）→ 一覧に戻り、断りの文、`status` は変わらない。SES の一覧から `sesDelete`（`back=list`）→ `/admin/ses`。
+- AC8：`back` なしの `POST /engineers/{id}/suspend` → `/engineers/{id}`、`back=ses` → `/admin/ses/{ses_id}`（今のまま）。`back` なしの `POST /admin/ses/{id}/suspend` → `/admin/ses/{id}`。`back` なしの `POST /admin/admins/{B}/suspend` → `/admin/admins/{B}`。
+- AC9：SES 担当者で `POST /admin/admins/{B}/suspend`・`POST /admin/ses/{id}/resume` → 403。SES が他社のエンジニアに `POST /engineers/{id}/suspend` → 403。無い管理者の id → 404。
+- AC10：`GET /manual/admin` に「管理者の停止・再開・退会」、`GET /manual/ses` に一覧からの停止の説明が出る。
+- AC11：既存のテストが全部通る。
+
+## 決めてほしいこと
+
+**1** エンジニア兼任の管理者を退会にしたときの扱い
+管理者がエンジニアも兼ねているとき（tezzo さんのような形）、管理者の「退会」で何を止めるかを決める必要があります。SES 担当者の退会は「担当者の役割だけ外し、エンジニアとして残す」にしてあります。
+a. 管理者の役割だけ外し、エンジニアとして残す（SES 担当者と同じ。推奨。この計画はこちら）
+b. エンジニアの立場も含めて、ログインを全部止める
+答え方：「1はa」のように。
+
+**2** 停止中の SES を戻すボタン
+今は、停止中の SES の詳細に「承認して招待を送る」が出て、押すと参加中に戻り、担当の方に招待メールも送ります。一覧に「再開」を置くので、詳細もそろえるかを決める必要があります。
+a. 停止中は「再開」だけ（招待メールは送らない）。「承認して招待を送る」は申込中だけ（推奨。この計画はこちら）
+b. 停止中は「再開」と「承認して招待を送る」の両方を出す
+答え方：「2はa」のように。
+
+**3** 退会済の管理者を一覧に残すか
+SES の担当者の表は、退会済の人も「退会済」で残し、詳細だけ押せます。管理者の一覧も同じにするかです。
+a. 残す（状態「退会済」、詳細だけ。推奨。この計画はこちら）
+b. 一覧から隠す（詳細の URL を直接開けば見られる）
+答え方：「3はa」のように。
+
+---
+
 # PLAN：SES の詳細の「担当者」「エンジニア」の表に 停止・退会・詳細、担当者の詳細画面（2026-10-20）
 
 > この節が今回の計画。下の「兼任ログイン」の節は前の計画（実装済み）で、その下の「テスト期間だけ重複を許す」は保留中の計画。どちらも消さずに残している。

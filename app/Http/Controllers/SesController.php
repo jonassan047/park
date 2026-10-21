@@ -42,7 +42,13 @@ class SesController extends Controller
             $e->skills = implode('、', ($skills[$e->id] ?? collect())->pluck('name')->all());
             $e->account = user_state($users[$e->id] ?? null);
         }
-        return view('ses.engineers', compact('list'));
+        $egIds = $list->pluck('id');
+        return view('ses.engineers', [
+            'list' => $list,
+            // 停止の確認の文に添える、稼働中の契約と選考中の応募（エンジニアごとに問い合わせず、まとめて取る）
+            'working' => DB::table('contracts')->whereIn('engineer_id', $egIds)->where('status', 'active')->pluck('engineer_id')->flip(),
+            'inSel' => DB::table('applications')->whereIn('engineer_id', $egIds)->whereIn('status', PipelineController::OPEN)->get(['engineer_id'])->groupBy('engineer_id')->map->count(),
+        ]);
     }
 
     public function cases(Request $r)

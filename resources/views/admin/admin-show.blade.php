@@ -1,12 +1,18 @@
 @extends('layouts.app', ['title' => $u->name])
 @section('content')
 @php
-    $state = !$u->active ? '停止' : ($u->password ? '使用中' : '招待中');
+    $state = user_state($u);
+    $base = '/admin/admins/'.$u->id;
+    $dual = \App\Services\Workflow::isDual($u);
+    $canDo = $state !== '退会済' && (int) $u->id !== (int) auth()->id();
 @endphp
 <x-card title="管理者情報">
-<x-slot:actions>@if($u->active && !$u->password)<x-post :action="'/admin/admins/'.$u->id.'/reinvite'" label="招待を送り直す" cls="ghost small" />@endif
+<x-slot:actions>@if($state !== '退会済')@if($u->active && !$u->password)<x-post :action="$base.'/reinvite'" label="招待を送り直す" cls="ghost small" />@endif
 @if((int) $u->id === (int) auth()->id())<a class="btn ghost small" href="{{ url('/account#password') }}">パスワード変更</a>@endif
-<a class="btn small" href="{{ url('/admin/admins/'.$u->id.'/edit') }}">編集</a>
+@if($canDo)@if($state === '停止')<x-post :action="$base.'/resume'" label="再開" cls="small" :confirm="$u->name.' さんを再開します。'" />
+@else<x-post :action="$base.'/suspend'" label="停止" cls="ghost small" :confirm="$u->name.' さんを停止します。ログインできなくなります（再開できます）。'.($dual ? 'エンジニアとしても入れなくなります。' : '')" />@endif
+<x-post :action="$base.'/delete'" label="退会" cls="danger small" :confirm="$dual ? $u->name.' さんを管理者から外します。エンジニアとしては引き続き入れます。よろしいですか？' : $u->name.' さんを退会済にします。ログインできなくなり、元に戻せません（記録は残ります）。よろしいですか？'" />@endif
+<a class="btn small" href="{{ url($base.'/edit') }}">編集</a>@endif
 </x-slot:actions>
 <dl class="dl">
 <dt>状態</dt><dd>{{ $state }}</dd>
