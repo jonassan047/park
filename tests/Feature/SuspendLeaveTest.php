@@ -50,7 +50,7 @@ class SuspendLeaveTest extends TestCase
     private function addSesUser(int $sesId, string $email, string $name): int
     {
         $id = W::createUser($email, $name, 'ses', 'park1234', ['ses_id' => $sesId]);
-        DB::table('users')->where('id', $id)->update(['profile_completed_at' => now()]);
+        $this->completeProfile($id);
         return $id;
     }
 
@@ -116,8 +116,8 @@ class SuspendLeaveTest extends TestCase
         // 招待中の人を止めると、止める前のリンクは使えない
         $this->admin()->post("/admin/ses/$sid/users/{$inv->id}/suspend");
         $this->assertNull(DB::table('users')->where('id', $inv->id)->value('token'));
-        $this->post("/invite/$token", ['password' => 'abcd12345', 'password_confirmation' => 'abcd12345'])->assertRedirect('/login');
-        $this->assertSame('リンクの期限が切れています。', $this->flash('msg'));
+        // 使えないリンクは、誰のものかを出さず、どんな理由でも同じ文（台帳 K07）
+        $this->post("/invite/$token", ['password' => 'abcd12345', 'password_confirmation' => 'abcd12345'])->assertOk()->assertSee(\App\Support\RegistrationText::LINK_UNUSABLE);
         $this->assertNull(DB::table('users')->where('id', $inv->id)->value('password'));
     }
 
@@ -141,7 +141,7 @@ class SuspendLeaveTest extends TestCase
         $inv = W::invite(['email' => 'ses1e@park.example', 'name' => '招待 五郎', 'role' => 'ses', 'ses_id' => $sid], User::where('email', 'admin@park.example')->first());
         $this->admin()->post("/admin/ses/$sid/users/{$inv->id}/suspend");
         $this->admin()->post("/admin/ses/$sid/users/{$inv->id}/resume");
-        $this->assertStringContainsString('招待を送り直すには', $this->flash('msg'));
+        $this->assertStringContainsString('送り直し', $this->flash('msg'));
     }
 
     public function test_t4_leave_and_no_more_actions(): void
@@ -475,7 +475,7 @@ class SuspendLeaveTest extends TestCase
         $this->assertStringNotContainsString('緑川 一郎', $html);
         $this->assertMatchesRegularExpression('#<td>みどり情報システム</td>\s*<td>担当者が未登録#', $html);
         $this->assertMatchesRegularExpression('#<td>青木 花子</td>\s*<td>あおぞらテック</td>\s*<td>停止#', $html);
-        $this->assertMatchesRegularExpression('#<td>ひだまりソリューションズ</td>\s*<td>使用中#', $html);
+        $this->assertMatchesRegularExpression('#<td>ひだまりソリューションズ</td>\s*<td>参加中#', $html);
         $this->assertNotSame($s1, $s2);
     }
 

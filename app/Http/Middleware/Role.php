@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Services\Notifier as N;
 use App\Services\Workflow as W;
+use App\Support\Requirements;
 use App\Support\TwoFactor;
 use Illuminate\Support\Facades\DB;
 use Closure;
@@ -55,13 +56,8 @@ class Role
                 }
             }
         }
-        // 最初の情報登録がまだの人は、先に登録の画面へ（アカウントの画面とログアウトはそのまま使える）
-        if (!$u->profile_completed_at && !$request->is('welcome', 'account', 'account/*')) return redirect('/welcome');
-        // エンジニアの立場で、個人情報の取り扱いにまだ同意していない人は、同意の画面へ（最初の情報登録のあと）
-        if ($u->role === 'eg' && $u->engineer_id && !DB::table('engineers')->where('id', $u->engineer_id)->value('consent_at')
-            && !$request->is('eg/consent', 'welcome', 'account', 'account/*')) {
-            return redirect('/eg/consent');
-        }
+        // 必須項目や同意が足りない人は、いまの立場で「足りない項目の画面」だけを通す（判定は立場ごと。ログアウトはそのまま使える）
+        if (!$request->is('register/complete') && Requirements::missing(DB::table('users')->find($u->id), $u->role)) return redirect('/register/complete');
         if ($roles && !in_array($u->role, $roles, true)) abort(403, 'このページを見る権限がありません。');
         return $next($request);
     }

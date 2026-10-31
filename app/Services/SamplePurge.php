@@ -39,6 +39,10 @@ class SamplePurge
         $keptSesUsers = DB::table('users')->whereIn('ses_id', $s)->whereNotIn('id', $u)->where('role', '!=', 'eg')->count(); // SES の担当者などは移さず、止める
         $keptByEng = DB::table('users')->whereIn('engineer_id', $e)->whereNotIn('id', $u)->count(); // 見本のエンジニアにつながる、見本ではないユーザー
         $keptEngs = DB::table('engineers')->whereIn('ses_id', $s)->whereNotIn('id', $e)->pluck('id')->all();
+        // 残る人の「登録した人」が消す人を指していたら、消す前に空にする（空でも本登録の状態は変わらない）
+        $regBy = DB::table('users')->whereNotIn('id', $u)->whereIn('registered_by', $u)->pluck('id')->all();
+        // 見本ではない SES の代表者（または次の代表者）が見本の人なら、会社に代表者がいなくなるので止める
+        $repGuard = DB::table('ses_companies')->whereNotIn('id', $s)->where(fn ($q) => $q->whereIn('rep_user_id', $u)->orWhereIn('next_rep_user_id', $u))->count();
 
         // SES で決まる行は、残す人のものを除く
         $bySes = fn ($q) => $q->whereIn('ses_id', $s)->whereNotIn('engineer_id', $keptEngs);
@@ -69,10 +73,10 @@ class SamplePurge
             'audit_log' => DB::table('audit_log')->whereIn('user_id', $u)->pluck('id')->all(),
         ];
         // 通知：消す人の分と、残る人の通知のうちリンクが消すものを指しているもの
-        $targets = ['engineers' => $e, 'cases' => $c, 'applications' => $a, 'interviews' => $iv, 'contracts' => $k, 'invoices' => $inv, 'admin/ses' => $s];
+        $targets = ['engineers' => $e, 'cases' => $c, 'applications' => $a, 'interviews' => $iv, 'contracts' => $k, 'invoices' => $inv, 'admin/ses' => $s, 'admin/admins' => $u];
         $notif = DB::table('app_notifications')->whereIn('user_id', $u)->pluck('id')->all();
         foreach (DB::table('app_notifications')->whereNotIn('user_id', $u)->whereNotNull('link')->get(['id', 'link']) as $n) {
-            if (preg_match('#^/(engineers|cases|applications|interviews|contracts|invoices|admin/ses)/(\d+)(?:[/?\#]|$)#', $n->link, $m) && in_array((int) $m[2], $targets[$m[1]], true)) $notif[] = $n->id;
+            if (preg_match('#^/(engineers|cases|applications|interviews|contracts|invoices|admin/ses|admin/admins)/(\d+)(?:[/?\#]|$)#', $n->link, $m) && in_array((int) $m[2], $targets[$m[1]], true)) $notif[] = $n->id;
         }
         $del['app_notifications'] = $notif;
 
@@ -93,6 +97,9 @@ class SamplePurge
             $guards[] = '見本の SES に、見本ではない人が入っています（ユーザー '.count($keptUsers).'人・エンジニア '.count($keptEngs).'人）。消す前に tezzo に確かめてください。'
                 .'管理者の直属へ移して続けるときだけ --move-kept-to-direct を付けます。';
         }
+        if ($repGuard) {
+            $guards[] = "見本ではない SES の代表者が、見本の人になっています（{$repGuard}社）。消すと代表者がいなくなるので、止めました。tezzo に確かめてください。";
+        }
         if ($keptSesUsers) {
             $guards[] = "見本の SES に、見本ではない SES の担当者などが {$keptSesUsers}人入っています。オプションを付けても移せないので、止めました。tezzo に確かめてください。";
         }
@@ -109,7 +116,7 @@ class SamplePurge
         }
 
         return ['del' => $del, 'counts' => $counts, 'total' => $total, 'guards' => $guards, 'sets' => ['users' => $u, 'ses' => $s, 'engineers' => $e, 'cases' => $c],
-            'moveUsers' => $keptUsers, 'moveEngs' => $keptEngs, 'files' => $files->pluck('path')->all(), 'caseSrc' => DB::table('cases')->whereIn('source_ses_id', $s)->whereNotIn('id', $c)->pluck('id')->all()];
+            'regBy' => $regBy, 'moveUsers' => $keptUsers, 'moveEngs' => $keptEngs, 'files' => $files->pluck('path')->all(), 'caseSrc' => DB::table('cases')->whereIn('source_ses_id', $s)->whereNotIn('id', $c)->pluck('id')->all()];
     }
 
     // 消す。守りに当たったら例外（何も消さない）。戻り値は [表ごとの件数, バックアップの場所]。消すものが無ければバックアップも作らない
@@ -122,7 +129,7 @@ class SamplePurge
         // 1. 消す行を、全部の列ごと JSON に書き出す（書き出せなければ止まる）
         $dir = storage_path(self::BACKUP_DIR);
         if (!is_dir($dir) && !@mkdir($dir, 0775, true) && !is_dir($dir)) throw new RuntimeException('バックアップの置き場所を作れませんでした。何も消していません。');
-        $backup = ['作成' => now_str(), '表' => [], '変える行' => ['cases.source_ses_id を空にする' => $p['caseSrc'], '直属へ移す users' => $p['moveUsers'], '直属へ移す engineers' => $p['moveEngs']]];
+        $backup = ['作成' => now_str(), '表' => [], '変える行' => ['users.registered_by を空にする' => $p['regBy'], 'cases.source_ses_id を空にする' => $p['caseSrc'], '直属へ移す users' => $p['moveUsers'], '直属へ移す engineers' => $p['moveEngs']]];
         foreach (self::ORDER as $t => $key) {
             $rows = [];
             foreach (array_chunk($p['del'][$t], 500) as $ids) $rows = array_merge($rows, DB::table($t)->whereIn($key, $ids)->get()->all());
@@ -134,6 +141,7 @@ class SamplePurge
 
         // 2. 1つの transaction で消す
         DB::transaction(function () use ($p, $moveKept) {
+            if ($p['regBy']) DB::table('users')->whereIn('id', $p['regBy'])->update(['registered_by' => null]);
             if ($moveKept && ($p['moveUsers'] || $p['moveEngs'])) {
                 $direct = W::directSesId();
                 $from = $p['sets']['ses'];

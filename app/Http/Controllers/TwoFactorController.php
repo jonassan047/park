@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Services\Notifier as N;
+use App\Services\Registration;
+use App\Support\RegistrationText as T;
 use App\Support\TwoFactor as TF;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -57,8 +59,14 @@ class TwoFactorController extends Controller
             return redirect(url('/two-factor/challenge'));
         }
         N::audit($u->id, '2fa-ok', "s={$sid}");
-        TF::pass($r);
+        // 本登録の途中だった人は、ここで保存して完了する。リンクが変わっていたら何も保存せず、ログアウトされる
+        if (!TF::pass($r) || !$r->user()) {
+            return redirect('/login')->with('flash', ['msg' => Registration::notDoneMessage(), 'type' => 'warn']);
+        }
         DB::table('users')->where('id', $u->id)->update(['last_login' => now_str(), 'two_factor_confirmed_at' => now_str()]);
+        if (Registration::$lastResult === 'done') {
+            return redirect(url($u->home()))->with('flash', ['msg' => '本登録が完了しました。'.(Registration::$lastWarn ? Registration::$lastWarn : ''), 'type' => Registration::$lastWarn ? 'warn' : 'ok']);
+        }
         return redirect()->intended(url($u->home()));
     }
 

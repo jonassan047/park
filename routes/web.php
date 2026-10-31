@@ -8,6 +8,7 @@ use App\Http\Controllers\CaseMailController as CMail;
 use App\Http\Controllers\EgController as Eg;
 use App\Http\Controllers\EngineerController as Eng;
 use App\Http\Controllers\ManualController as Man;
+use App\Http\Controllers\PeopleController as People;
 use App\Http\Controllers\PipelineController as Pip;
 use App\Http\Controllers\PublicController as Pub;
 use App\Http\Controllers\ReplyController as Rep;
@@ -28,7 +29,10 @@ Route::post('/setup', [Pub::class, 'setup']);
 Route::get('/apply', [Pub::class, 'applyForm']);
 Route::post('/apply', [Pub::class, 'apply'])->middleware('throttle:5,1');
 Route::get('/invite/{token}', [Pub::class, 'inviteForm']);
-Route::post('/invite/{token}', [Pub::class, 'invite']);
+Route::post('/invite/{token}', [Pub::class, 'invite'])->middleware('throttle:20,1');
+Route::post('/invite/{token}/decline', [Pub::class, 'decline'])->middleware('throttle:10,1');
+Route::get('/reset/{token}', [Pub::class, 'resetForm']);
+Route::post('/reset/{token}', [Pub::class, 'reset'])->middleware('throttle:20,1');
 Route::get('/forgot', [Pub::class, 'forgotForm']);
 Route::post('/forgot', [Pub::class, 'forgot'])->middleware('throttle:5,1');
 // 手元の PC の AI とのやり取り（合言葉で確かめる）
@@ -59,6 +63,9 @@ Route::middleware('role')->group(function () {
     Route::post('/notifications/read-all', [Acc::class, 'readAll']);
     Route::get('/welcome', [Acc::class, 'welcomeForm']);
     Route::post('/welcome', [Acc::class, 'welcome']);
+    // 足りない項目の画面（必須項目や同意が足りない人は、ここだけを通れる）
+    Route::get('/register/complete', [Acc::class, 'completeForm']);
+    Route::post('/register/complete', [Acc::class, 'complete']);
     Route::get('/account', [Acc::class, 'show']);
     Route::post('/account', [Acc::class, 'update']);
     Route::get('/account/profile', [Acc::class, 'profile']);
@@ -110,6 +117,9 @@ Route::middleware('role:admin,ses')->group(function () {
     Route::get('/engineers/new', [Eng::class, 'create']);
     Route::post('/engineers', [Eng::class, 'store']);
     Route::post('/engineers/{id}/invite', [Eng::class, 'invite']);
+    // 仮登録の送り直しと取り消し（権限は Registration::canManage で確かめる）
+    Route::post('/people/{id}/resend', [People::class, 'resend']);
+    Route::post('/people/{id}/cancel', [People::class, 'cancel']);
     Route::post('/engineers/{id}/delete', [Eng::class, 'destroy']);
     Route::post('/engineers/{id}/suspend', [Eng::class, 'suspend']);
     Route::post('/engineers/{id}/resume', [Eng::class, 'resume']);
@@ -155,6 +165,7 @@ Route::middleware('role:admin')->group(function () {
         Route::get('/ses/{id}/users/{uid}', [Adm::class, 'sesUserShow'])->whereNumber('uid');
         Route::post('/ses/{id}/delete', [Adm::class, 'sesDelete']);
         Route::post('/ses/{id}', [Adm::class, 'sesUpdate']);
+        Route::get('/ses/{id}/approve', [Adm::class, 'sesApproveForm']);
         Route::post('/ses/{id}/approve', [Adm::class, 'sesApprove']);
         Route::post('/ses/{id}/suspend', [Adm::class, 'sesSuspend']);
         Route::post('/ses/{id}/resume', [Adm::class, 'sesResume']);

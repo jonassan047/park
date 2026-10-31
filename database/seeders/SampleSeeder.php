@@ -20,14 +20,21 @@ class SampleSeeder extends Seeder
         \App\Support\SkillCatalog::sync(); // 技術マスタの辞書
         $pw = 'park1234';
         $adminId = W::createUser('admin@park.example', '管理者 太郎', 'admin', $pw);
+        // 必須項目（管理者は企業名・電話）を入れて、本登録が済んだ形にする
+        DB::table('users')->where('id', $adminId)->update(['company_name' => '見本運営', 'phone' => '03-0000-0001']);
         $admin = DB::table('users')->find($adminId);
 
         $ses = [];
         foreach ([['みどり情報システム', '緑川 一郎', 'ses1@park.example', 'Java の業務系、テスト'], ['あおぞらテック', '青木 花子', 'ses2@park.example', 'Web 系（PHP・JavaScript）'],
             ['ひだまりソリューションズ', '日向 健', 'ses3@park.example', 'インフラ・クラウド']] as [$name, $contact, $email, $str]) {
-            $id = DB::table('ses_companies')->insertGetId(['name' => $name, 'rep_name' => $contact, 'contact_name' => $contact, 'email' => $email, 'status' => 'active',
+            [$rs, $rm] = split_name($contact);
+            $id = DB::table('ses_companies')->insertGetId(['name' => $name, 'rep_name' => $contact, 'rep_sei' => $rs, 'rep_mei' => $rm, 'contact_name' => $contact, 'email' => $email, 'status' => 'active',
+                'phone' => '03-0000-0002', 'postal_code' => '100-0001', 'address' => '東京都千代田区（見本）',
                 'strengths' => $str, 'agreed_at' => now_str(), 'self_confirmed_at' => now_str(), 'joined_at' => today_str(), 'created_at' => now_str(), 'updated_at' => now_str()]);
-            W::createUser($email, $contact, 'ses', $pw, ['ses_id' => $id]);
+            $uid = W::createUser($email, $contact, 'ses', $pw, ['ses_id' => $id]);
+            // 各社の1人目が代表者。守秘義務も同意済みにする
+            DB::table('users')->where('id', $uid)->update(['secrecy_agreed_at' => now_str(), 'phone' => '03-0000-0003']);
+            DB::table('ses_companies')->where('id', $id)->update(['rep_user_id' => $uid]);
             $ses[] = $id;
         }
         DB::table('ses_companies')->insert(['name' => 'こもれび開発', 'contact_name' => '木下 さくら', 'email' => 'ses4@park.example', 'status' => 'pending',
@@ -60,8 +67,9 @@ class SampleSeeder extends Seeder
         ];
         $engIds = [];
         foreach ($engs as [$sesId, $data, $skills, $projects]) {
-            $id = W::createEngineer($sesId, $data, $admin, false);
-            DB::table('engineers')->where('id', $id)->update(['consent_at' => now_str(), 'self_confirmed_at' => now_str()]);
+            $id = W::createEngineer($sesId, $data + ['phone' => '090-0000-0001', 'postal_code' => '100-0001', 'address' => '東京都千代田区（見本）'], $admin, false);
+            // 本登録が済んだ形（必須項目・同意・本人の確認が済み、候補に出る）
+            DB::table('engineers')->where('id', $id)->update(['consent_at' => now_str(), 'self_confirmed_at' => now_str(), 'registered_at' => now_str()]);
             W::saveSkills($id, ['skill_name' => array_column($skills, 0), 'skill_cat' => array_column($skills, 1), 'skill_years' => array_column($skills, 2), 'skill_level' => array_column($skills, 3)]);
             foreach ($projects as $p) W::saveProject($id, $p);
             if (!empty($data['email'])) W::createUser($data['email'], $data['name'], 'eg', $pw, ['ses_id' => $sesId, 'engineer_id' => $id]);
@@ -93,7 +101,8 @@ class SampleSeeder extends Seeder
         W::makeContract($a3, ['price' => 75, 'start_date' => date('Y-m-01')], $admin);
         DB::table('messages')->insert(['engineer_id' => $engIds[1], 'from_user' => $eg(1)->id, 'body' => "【スキルシートのレビュー依頼】\n予約サービスの成果の書き方を見てほしいです。",
             'created_at' => now_str(), 'read_by_eg' => true, 'read_by_admin' => false]);
-        // 見本の人は、最初の情報登録を済ませたことにする（ログイン後に登録の画面へ回さない）
+        // 見本の人は、最初の情報登録を済ませたことにする（ログイン後に足りない項目の画面へ回さない）
+        DB::table('users')->where('role', 'eg')->update(['phone' => '090-0000-0001']);
         DB::table('users')->whereNull('profile_completed_at')->update(['profile_completed_at' => now_str()]);
     }
 }

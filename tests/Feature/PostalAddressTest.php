@@ -34,7 +34,7 @@ class PostalAddressTest extends TestCase
     private function otherAdmin(array $extra = []): int
     {
         $id = W::createUser('admin2@park.example', '別 管理者', 'admin', 'park1234');
-        DB::table('users')->where('id', $id)->update(['company_name' => '別企業', 'profile_completed_at' => now()] + $extra);
+        $this->completeProfile($id, ['company_name' => '別企業'] + $extra);
         return $id;
     }
 
@@ -123,7 +123,7 @@ class PostalAddressTest extends TestCase
         $other = $this->otherAdmin(['postal_code' => '100-0001', 'address' => '東京都千代田区', 'position' => '営業部 部長', 'phone' => '03-0000-0000']);
         $self = (int) DB::table('users')->where('email', 'admin@park.example')->value('id');
         $this->admin()->get("/admin/admins/$other")->assertOk()->assertSee('別 管理者')->assertSee('管理者情報')
-            ->assertSee('href="'.url("/admin/admins/$other/edit").'"', false)->assertSee('〒100-0001 東京都千代田区')->assertSee('営業部 部長')->assertSee('使用中')
+            ->assertSee('href="'.url("/admin/admins/$other/edit").'"', false)->assertSee('〒100-0001 東京都千代田区')->assertSee('営業部 部長')->assertSee('参加中')
             ->assertDontSee('招待を送り直す');
         $this->get("/admin/admins/$self")->assertOk();
         $this->get('/admin/admins/99999')->assertNotFound();
@@ -139,7 +139,7 @@ class PostalAddressTest extends TestCase
     public function test_v2_detail_pending_shows_reinvite_and_returns_to_detail(): void
     {
         $id = $this->pendingAdmin();
-        $this->admin()->get("/admin/admins/$id")->assertOk()->assertSee('招待中')->assertSee('招待を送り直す');
+        $this->admin()->get("/admin/admins/$id")->assertOk()->assertSee('仮登録')->assertSee('招待を送り直す');
         $m0 = DB::table('mail_outbox')->where('kind', 'invite')->count();
         $this->from("/admin/admins/$id")->post("/admin/admins/$id/reinvite")->assertRedirect(url("/admin/admins/$id"));
         $this->from('/admin/admins')->post("/admin/admins/$id/reinvite")->assertRedirect(url('/admin/admins'));
@@ -171,7 +171,8 @@ class PostalAddressTest extends TestCase
         $other = $this->otherAdmin();
         $this->admin();
         $base = ['name_sei' => '別', 'name_mei' => '管理者', 'company_name' => '別企業', 'email' => 'admin2@park.example'];
-        $this->post("/admin/admins/$other", $base + ['position' => '', 'phone' => '', 'postal_code' => '', 'address' => ''])->assertSessionHas('flash.msg', '保存しました。');
+        // 電話は必須（本登録のあと）なので、今の値のまま送る。任意の欄は空のまま
+        $this->post("/admin/admins/$other", $base + ['position' => '', 'phone' => '03-0000-0009', 'postal_code' => '', 'address' => ''])->assertSessionHas('flash.msg', '保存しました。');
         $this->assertSame(0, DB::table('audit_log')->where('action', 'admin-edit')->count());
         $this->post("/admin/admins/$other", $base + ['phone' => '03-9999-8888', 'postal_code' => '1000001', 'address' => '秘密の住所ビル'])->assertSessionHas('flash.type', 'ok');
         $d = (string) DB::table('audit_log')->where('action', 'admin-edit')->value('detail');
@@ -231,9 +232,9 @@ class PostalAddressTest extends TestCase
 
     public function test_v3_welcome_account_and_profile_for_admin(): void
     {
-        DB::table('users')->where('email', 'admin@park.example')->update(['profile_completed_at' => null]);
-        $this->admin()->get('/welcome')->assertOk()->assertSee('name="postal_code"', false)->assertSee('name="address"', false);
-        $this->post('/welcome', ['name_sei' => '管理', 'name_mei' => '花子', 'company_name' => '社', 'postal_code' => '１００－０００１', 'address' => '東京都千代田区'])->assertRedirect(url('/admin'));
+        // 管理者の郵便番号・住所は任意なので、足りない項目の画面には出ない。アカウントの画面で入れる（全角でも「100-0001」にそろう）
+        $this->admin()->get('/account')->assertOk()->assertSee('name="postal_code"', false)->assertSee('name="address"', false);
+        $this->post('/account', ['name_sei' => '管理', 'name_mei' => '花子', 'company_name' => '社', 'postal_code' => '１００－０００１', 'address' => '東京都千代田区'])->assertRedirect(url('/account'));
         $r = DB::table('users')->where('email', 'admin@park.example')->first();
         $this->assertSame(['100-0001', '東京都千代田区'], [$r->postal_code, $r->address]);
         $this->admin()->get('/account')->assertOk()->assertSee('name="postal_code"', false)->assertSee('value="100-0001"', false);
@@ -252,28 +253,25 @@ class PostalAddressTest extends TestCase
     public function test_v4_5_ses_register_update_company_apply(): void
     {
         $this->admin();
-        $this->get('/admin/ses/new')->assertOk()->assertSee('name="postal_code"', false);
-        $this->post('/admin/ses', ['name' => '郵便商事', 'contact_name' => '担当 花', 'email' => 'pa-ses@park.example', 'postal_code' => '1000001', 'address' => '東京都千代田区'])
+        // 仮登録の画面には、郵便番号・住所の欄はない（本登録で代表者が入れる。台帳 K02）
+        $this->get('/admin/ses/new')->assertOk()->assertDontSee('name="postal_code"', false);
+        $this->post('/admin/ses', ['name' => '郵便商事', 'rep_sei' => '担当', 'rep_mei' => '花', 'email' => 'pa-ses@park.example', 'postal_code' => '1000001', 'address' => '東京都千代田区'])
             ->assertSessionHas('flash.type', 'ok');
         $sid = (int) DB::table('ses_companies')->where('name', '郵便商事')->value('id');
+        $this->assertNull(DB::table('ses_companies')->where('id', $sid)->value('postal_code')); // 送られても入らない
+        // 詳細の編集（本登録のあとの会社。必須の欄はそろえて送る）
+        $sid = 1;
+        $base = ['name' => 'みどり情報システム', 'rep_sei' => '緑川', 'rep_mei' => '一郎', 'phone' => '03-0000-0002', 'address' => '東京都千代田区'];
+        $this->post("/admin/ses/$sid", $base + ['postal_code' => '99'])->assertSessionHas('flash.type', 'bad');
         $this->assertSame('100-0001', DB::table('ses_companies')->where('id', $sid)->value('postal_code'));
-        $this->get("/admin/ses/$sid")->assertOk()->assertSee('〒100-0001 東京都千代田区');
-        // 登録の郵便番号が不正：何も増えない
-        $s0 = $this->rows('ses_companies'); $u0 = $this->rows('users');
-        $this->post('/admin/ses', ['name' => '不正商事', 'contact_name' => '担当 者', 'email' => 'pa-ses2@park.example', 'postal_code' => '99'])
-            ->assertSessionHas('flash.type', 'bad')->assertSessionHas('flash.msg', '郵便番号は7桁の数字で入れてください（例：123-4567）。');
-        $this->assertSame([$s0, $u0], [$this->rows('ses_companies'), $this->rows('users')]);
-        // 詳細の編集
-        $this->post("/admin/ses/$sid", ['name' => '郵便商事', 'postal_code' => '99'])->assertSessionHas('flash.type', 'bad');
-        $this->assertSame('100-0001', DB::table('ses_companies')->where('id', $sid)->value('postal_code'));
-        $this->post("/admin/ses/$sid", ['name' => '郵便商事', 'postal_code' => '1500002', 'address' => str_repeat('あ', 201)])
+        $this->post("/admin/ses/$sid", ['postal_code' => '1500002', 'address' => str_repeat('あ', 201)] + $base)
             ->assertSessionHas('flash.type', 'bad')->assertSessionHas('flash.msg', '所在地は200文字までにしてください。');
-        $this->post("/admin/ses/$sid", ['name' => '郵便商事', 'postal_code' => '1500002', 'address' => '東京都渋谷区'])->assertSessionHas('flash.type', 'ok');
+        $this->post("/admin/ses/$sid", ['postal_code' => '1500002', 'address' => '東京都渋谷区'] + $base)->assertSessionHas('flash.type', 'ok');
         $this->assertSame('150-0002', DB::table('ses_companies')->where('id', $sid)->value('postal_code'));
         // SES の会社情報
         $this->as('ses1@park.example')->get('/ses/company/edit')->assertOk()->assertSee('name="postal_code"', false);
-        $this->post('/ses/company', ['name' => 'みどり情報システム', 'postal_code' => '99'])->assertSessionHas('flash.type', 'bad');
-        $this->post('/ses/company', ['name' => 'みどり情報システム', 'postal_code' => '1000001', 'address' => '自社ビル'])->assertSessionHas('flash.type', 'ok');
+        $this->post('/ses/company', $base + ['postal_code' => '99'])->assertSessionHas('flash.type', 'bad');
+        $this->post('/ses/company', ['postal_code' => '1000001', 'address' => '自社ビル'] + $base)->assertSessionHas('flash.type', 'ok');
         $this->assertSame('100-0001', DB::table('ses_companies')->where('id', 1)->value('postal_code'));
         // 公開の申し込み
         auth()->logout();
@@ -385,6 +383,6 @@ class PostalAddressTest extends TestCase
         $this->assertStringNotContainsString('利用中', $this->get('/engineers/1')->getContent());
         $this->as('ses1@park.example');
         $this->assertStringNotContainsString('利用中', $this->get('/ses/engineers')->getContent());
-        $this->get('/ses/engineers')->assertSee('使用中');
+        $this->get('/ses/engineers')->assertSee('参加中');
     }
 }

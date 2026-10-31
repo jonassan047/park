@@ -50,7 +50,8 @@ class AccountProfileTest extends TestCase
 
     public function test_n2_empty_fields_show_dash_and_notice_setting(): void
     {
-        DB::table('users')->where('email', 'admin@park.example')->update(['phone' => null, 'position' => null, 'company_name' => null, 'last_login' => null, 'mail_opt_in' => 0]);
+        // 必須の項目（企業名・電話）は空にできないので、任意の項目と最終ログインが「—」になることを確かめる
+        DB::table('users')->where('email', 'admin@park.example')->update(['position' => null, 'kana' => null, 'kana_sei' => null, 'kana_mei' => null, 'last_login' => null, 'mail_opt_in' => 0]);
         $html = $this->as('admin@park.example')->get('/account/profile')->assertOk()->assertSee('受け取らない')->getContent();
         $this->assertGreaterThanOrEqual(3, substr_count($html, '<dd>—</dd>'));
         DB::table('users')->where('email', 'admin@park.example')->update(['mail_opt_in' => 1]);
@@ -60,8 +61,10 @@ class AccountProfileTest extends TestCase
     public function test_n2_one_word_name_shows_dash_for_mei(): void
     {
         DB::table('users')->where('email', 'admin@park.example')->update(['name' => '管理者', 'name_sei' => '管理者', 'name_mei' => null]);
-        $html = $this->as('admin@park.example')->get('/account/profile')->assertOk()->getContent();
-        $this->assertMatchesRegularExpression('#<dt>氏名</dt><dd>管理者</dd>#u', $html);
+        // 名はどこでも必須になった（台帳 K19・決定 5章の3）ので、名が空の人は登録情報の画面ではなく、足りない項目の画面に回る。
+        // （以前は「管理者」だけの氏名を出せたが、その状態では画面に入れなくなったため、回ることを確かめる）
+        $this->as('admin@park.example')->get('/account/profile')->assertRedirect(url('/register/complete'));
+        $this->get('/register/complete')->assertOk()->assertSee('氏名（名）');
     }
 
     public function test_n3_role_links(): void

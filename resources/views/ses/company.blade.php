@@ -2,9 +2,9 @@
 @section('content')
 <div class="cols"><div>
 <x-card title="会社情報"><x-slot:actions><a class="btn ghost small" href="{{ url('/account#password') }}">パスワード変更</a>
-<a class="btn small" href="{{ url('/ses/company/edit') }}">編集</a>
+@if($isRep)<a class="btn small" href="{{ url('/ses/company/edit') }}">編集</a>@endif
 </x-slot:actions><dl class="dl">
-<dt>状態</dt><dd>{{ badge('sesStatus', $s->status) }}</dd><dt>代表者</dt><dd>{{ $s->rep_name ?: '—' }}</dd><dt>担当</dt><dd>{{ $s->contact_name ?: '—' }}</dd>
+<dt>状態</dt><dd>{{ badge('sesStatus', $s->status) }}</dd><dt>代表者</dt><dd>{{ $repName ?: '—' }}</dd>
 <dt>メール</dt><dd>{{ $s->email ?: '—' }}</dd><dt>電話</dt><dd>{{ $s->phone ?: '—' }}</dd><dt>所在地</dt><dd>{{ postal_address($s->postal_code, $s->address) }}</dd>
 <dt>人数</dt><dd>{{ $s->employees ?? '—' }}</dd><dt>得意な分野</dt><dd>{{ $s->strengths ?: '—' }}</dd><dt>ひとこと</dt><dd>{!! nl2br(e($s->message)) ?: '—' !!}</dd>
 <dt>守秘義務への同意</dt><dd>{{ fmt_dt($s->agreed_at) }}</dd><dt>参加日</dt><dd>{{ fmt_date($s->joined_at) }}</dd>
@@ -17,7 +17,8 @@ $state = user_state($u);
 $base = '/admin/ses/'.$s->id.'/users/'.$u->id;
 $self = (int) $u->id === (int) auth()->id(); // ご自身の行には操作を出さない
 @endphp<tr><td>{{ $u->name }}@if($u->engineer_id) <a class="badge info" href="{{ url('/engineers/'.$u->engineer_id) }}">エンジニア兼任</a>@endif</td><td>{{ $u->email }}</td><td>{{ $state }}</td>
-<td>{{ fmt_dt($u->last_login) }}</td><td>@if(!$self && $state !== '退会済')@if($state === '停止')<x-post :action="$base.'/resume'" label="再開" cls="small" :confirm="$u->name.' さんを再開します。'" />
+<td>{{ fmt_dt($u->last_login) }}</td><td>@if($isRep && is_provisional_state($state))<x-post :action="'/people/'.$u->id.'/resend'" label="送り直し" cls="ghost small" />@endif
+@if(!$self && $state !== '退会済')@if($state === '停止')<x-post :action="$base.'/resume'" label="再開" cls="small" :confirm="$u->name.' さんを再開します。'" />
 @else<x-post :action="$base.'/suspend'" label="停止" cls="ghost small" :confirm="$u->name.' さんを停止します。ログインできなくなります（再開できます）。'" />@endif
 <x-post :action="$base.'/delete'" label="退会" cls="danger small" :confirm="$u->name.' さんを退会済にします。ログインできなくなり、元に戻せません（記録は残ります）。よろしいですか？'" />@endif</td></tr>@endforeach
 </x-table></x-card>

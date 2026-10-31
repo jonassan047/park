@@ -32,7 +32,7 @@ class UiUnifyTest extends TestCase
     private function otherAdmin(): int
     {
         $id = W::createUser('admin2@park.example', '別 管理者', 'admin', 'park1234');
-        DB::table('users')->where('id', $id)->update(['company_name' => '別企業', 'profile_completed_at' => now()]);
+        $this->completeProfile($id, ['company_name' => '別企業']);
         return $id;
     }
 
@@ -92,7 +92,7 @@ class UiUnifyTest extends TestCase
     {
         $html = $this->admin()->get('/admin/ses/new')->assertOk()->getContent();
         $this->assertMatchesRegularExpression('/name="email"[^>]*required/', $html);
-        $this->assertMatchesRegularExpression('/name="contact_sei"[^>]*required/', $html);
+        $this->assertMatchesRegularExpression('/name="rep_sei"[^>]*required/', $html); // 仮登録は、代表者の姓・名・企業正式名称・メールの4つ（台帳 K15）
         $s0 = $this->rows('ses_companies'); $u0 = $this->rows('users'); $m0 = $this->rows('mail_outbox');
         $this->post('/admin/ses', ['name' => '必須商事', 'contact_name' => '担当 者'])->assertSessionHas('flash.type', 'bad');
         $this->assertSame([$s0, $u0, $m0], [$this->rows('ses_companies'), $this->rows('users'), $this->rows('mail_outbox')]);
@@ -105,7 +105,8 @@ class UiUnifyTest extends TestCase
         $this->assertNotEmpty($m);
         $this->assertDoesNotMatchRegularExpression('/name="email"[^>]*required/', $m[0]);
         $this->assertDoesNotMatchRegularExpression('/name="contact_sei"[^>]*required/', $m[0]);
-        $this->post('/admin/ses/1', ['name' => '会社名そのまま', 'email' => ''])->assertSessionHas('flash.type', 'ok');
+        // 本登録のあとの編集にメールの欄は無い（出すだけ）。必須の欄（企業正式名称・代表者の姓名・電話・郵便番号・住所）がそろえば、メールが無くても保存できる
+        $this->post('/admin/ses/1', ['name' => '会社名そのまま', 'rep_sei' => '緑川', 'rep_mei' => '一郎', 'phone' => '03-0000-0002', 'postal_code' => '100-0001', 'address' => '東京都千代田区（見本）', 'email' => ''])->assertSessionHas('flash.type', 'ok');
     }
 
     public function test_u3_engineer_new_requires_email_for_admin_and_ses(): void
@@ -156,9 +157,9 @@ class UiUnifyTest extends TestCase
         $this->assertPair($this->get('/admin/admins/new')->getContent(), 'name', '管理者の登録');
         $this->assertPair($this->get("/admin/admins/$other/edit")->getContent(), 'name', '管理者の編集');
         $new = $this->get('/admin/ses/new')->getContent();
-        $this->assertPair($new, 'contact', 'SES の登録'); $this->assertPair($new, 'rep', 'SES の登録');
+        $this->assertPair($new, 'rep', 'SES の登録'); // 担当者（contact）の欄は、登録の画面から除いた（台帳 K15）
         $show = $this->get('/admin/ses/1/edit')->getContent();
-        $this->assertPair($show, 'contact', 'SES の編集'); $this->assertPair($show, 'rep', 'SES の編集');
+        $this->assertPair($show, 'rep', 'SES の編集'); // 担当者の欄は、会社の編集から除いた（台帳 B3）
         $this->assertPair($this->get('/admin/ses/1/users/new')->getContent(), 'name', 'SES の担当者追加');
         $eg = $this->get('/engineers/new?ses=1')->getContent();
         $this->assertPair($eg, 'name', 'エンジニアの登録'); $this->assertPair($eg, 'kana', 'エンジニアの登録');
@@ -167,12 +168,14 @@ class UiUnifyTest extends TestCase
         $acc = $this->get('/account')->getContent();
         $this->assertPair($acc, 'name', 'アカウント'); $this->assertPair($acc, 'kana', 'アカウント');
 
-        DB::table('users')->where('email', 'eg1@park.example')->update(['profile_completed_at' => null]);
-        $w = $this->as('eg1@park.example')->get('/welcome')->assertOk()->getContent();
-        $this->assertPair($w, 'name', 'あなたの情報'); $this->assertPair($w, 'kana', 'あなたの情報');
+        // 足りない項目の画面（以前の「あなたの情報」）。氏名が足りない人には、姓・名の欄が同じ行に並ぶ
+        DB::table('users')->where('email', 'admin@park.example')->update(['name_sei' => null, 'name_mei' => null]);
+        $w = $this->as('admin@park.example')->get('/register/complete')->assertOk()->getContent();
+        $this->assertPair($w, 'name', '足りない項目の入力');
+        DB::table('users')->where('email', 'admin@park.example')->update(['name_sei' => '管理', 'name_mei' => '太郎']);
 
         $co = $this->as('ses1@park.example')->get('/ses/company/edit')->assertOk()->getContent();
-        $this->assertPair($co, 'contact', '会社情報'); $this->assertPair($co, 'rep', '会社情報');
+        $this->assertPair($co, 'rep', '会社情報');
     }
 
     public function test_u4_pairs_on_public_screens(): void
@@ -256,7 +259,7 @@ class UiUnifyTest extends TestCase
     public function test_u6_wording(): void
     {
         $this->admin();
-        $show = $this->get('/admin/ses/1')->assertOk()->assertSee('使用中'); $this->get('/admin/ses/1/edit')->assertOk()->assertSee('メールアドレス');
+        $show = $this->get('/admin/ses/1')->assertOk()->assertSee('参加中'); $this->get('/admin/ses/1/edit')->assertOk()->assertSee('メールアドレス');
         $this->assertStringNotContainsString('<span>メール</span>', $show->getContent());
         $this->assertStringNotContainsString('利用中', $show->getContent());
         $this->assertStringNotContainsString('利用中', $this->get('/engineers/1')->getContent());

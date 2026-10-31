@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Services\Billing;
 use App\Services\Notifier as N;
+use App\Services\Registration;
 use App\Services\Workflow as W;
+use App\Support\Requirements;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -37,7 +39,7 @@ class AdminController extends Controller
         return $out;
     }
 
-    // 「招待の状況」の行：管理者と SES の担当者、担当者がまだいない SES
+    // 「登録の状況」の行：管理者と SES の担当者、担当者がまだいない SES
     private function inviteRows(): array
     {
         $rows = [];
@@ -45,19 +47,16 @@ class AdminController extends Controller
         foreach (DB::table('users')->whereIn('role', ['admin', 'ses'])->orderBy('role')->orderBy('id')->get() as $u) {
             if ($u->left_at) continue; // 退会済の人は出さない
             $state = user_state($u); $until = null;
-            if ($state === '招待中') {
-                if ($u->token_expires && $u->token_expires > now_str()) $until = date('n/j', strtotime($u->token_expires));
-                else $state = '期限切れ';
-            }
+            if ($state === '仮登録') $until = date('n/j', strtotime($u->token_expires));
             $isAdmin = $u->role === 'admin';
             $rows[] = ['role' => lbl('role', $u->role).(W::isDual($u) ? '（エンジニア兼任）' : ''), 'name' => $u->name, 'org' => $isAdmin ? $u->company_name : ($sesNames[$u->ses_id] ?? null),
                 'state' => $state, 'until' => $until, 'last_login' => $u->last_login,
-                'reinvite' => $isAdmin && $u->active && !$u->password ? $u->id : null, 'open' => $isAdmin ? null : $u->ses_id];
+                'resend' => is_provisional_state($state) ? $u->id : null, 'open' => $isAdmin ? null : $u->ses_id];
         }
         $noUser = DB::table('ses_companies as s')->where('s.kind', 'ses')->whereIn('s.status', ['active', 'pending'])
             ->whereNotExists(fn ($q) => $q->select(DB::raw(1))->from('users')->whereColumn('users.ses_id', 's.id')->where('users.role', 'ses')->whereNull('users.left_at'))->orderBy('s.id')->get(['s.id', 's.name']);
         foreach ($noUser as $s) {
-            $rows[] = ['role' => 'SES', 'name' => '—', 'org' => $s->name, 'state' => '担当者が未登録', 'until' => null, 'last_login' => null, 'reinvite' => null, 'open' => $s->id];
+            $rows[] = ['role' => 'SES', 'name' => '—', 'org' => $s->name, 'state' => '担当者が未登録', 'until' => null, 'last_login' => null, 'resend' => null, 'open' => $s->id];
         }
         return $rows;
     }
@@ -66,7 +65,7 @@ class AdminController extends Controller
     {
         $limit = date('Y-m-d', strtotime('+31 days'));
         $ses = fn () => DB::table('ses_companies')->where('kind', 'ses');
-        $sesCount = $ses()->whereIn('status', ['active', 'pending'])->count();
+        $sesCount = $ses()->whereIn('status', ['active', 'pending', 'provisional'])->count();
         $engCount = DB::table('engineers')->count();
         $caseCount = DB::table('cases')->count();
         $adminCount = DB::table('users')->where('role', 'admin')->count();
@@ -74,7 +73,7 @@ class AdminController extends Controller
         return view('admin.dashboard', [
             'start' => $sesCount === 0 && $engCount === 0 && $caseCount === 0 ? [
                 ['ほかの管理者を登録する（任意）', '/admin/admins/new', $adminCount >= 2, '管理者を登録する'],
-                ['SES を登録して、ご担当者を招待する', '/admin/ses/new', $sesCount >= 1, 'SES を登録する'],
+                ['SES を仮登録して、代表者にご案内を送る', '/admin/ses/new', $sesCount >= 1, 'SES を仮登録する'],
                 ['エンジニアを登録する（SES を選んでから）', '/admin/ses', $engCount >= 1, 'SES を選ぶ'],
                 ['案件を登録する', '/cases/new', $caseCount >= 1, '案件を登録する'],
             ] : null,
@@ -84,11 +83,11 @@ class AdminController extends Controller
             'counts' => [
                 'ses' => $ses()->where('status', 'active')->count(),
                 'sesPending' => $ses()->where('status', 'pending')->count(),
-                'sesInvited' => DB::table('users')->where('role', 'ses')->where('active', 1)->whereNull('password')->count(),
-                'eng' => $engCount, 'engAvail' => DB::table('engineers')->where('status', 'available')->count(),
+                'sesInvited' => DB::table('users')->where('role', 'ses')->where('active', 1)->whereNull('left_at')->whereNull('registered_at')->count(),
+                'eng' => $engCount, 'engAvail' => Registration::usableEngineers(DB::table('engineers')->where('status', 'available'))->count(),
                 'cases' => DB::table('cases')->where('status', 'open')->count(), 'casesAll' => $caseCount,
                 'invUnpaid' => DB::table('invoices')->where('status', 'issued')->count(),
-                'invited' => DB::table('users')->whereIn('role', ['admin', 'ses', 'eg'])->where('active', 1)->whereNull('password')->count(),
+                'invited' => DB::table('users')->whereIn('role', ['admin', 'ses', 'eg'])->where('active', 1)->whereNull('left_at')->whereNull('registered_at')->count(),
                 'apps' => DB::table('applications')->whereIn('status', ['applied', 'submitted', 'doc_passed', 'interview', 'interviewed'])->count(),
                 'contracts' => DB::table('contracts')->where('status', 'active')->count(),
             ],
@@ -116,29 +115,21 @@ class AdminController extends Controller
             ->selectSub(DB::table('engineers')->whereColumn('ses_id', 's.id')->selectRaw('count(*)'), 'engs')
             ->selectSub(DB::table('contracts')->whereColumn('ses_id', 's.id')->where('status', 'active')->selectRaw('count(*)'), 'working')
             ->orderBy('status')->orderBy('name')->get();
-        return view('admin.ses-index', compact('list'));
+        // 代表者の人（状態を出すため）
+        $reps = DB::table('users')->whereIn('id', $list->pluck('rep_user_id')->filter()->all())->get()->keyBy('id');
+        return view('admin.ses-index', compact('list', 'reps'));
     }
 
-    public function sesNew() { return view('admin.ses-new'); }
+    public function sesNew() { return view('admin.ses-new', ['approve' => null, 'v' => (object) []]); }
 
     public function adminNew() { return view('admin.admin-new'); }
 
+    // 管理者が SES を仮登録する：企業正式名称・代表者の姓・名・メールの4つだけ。登録すると代表者に仮登録のご案内が届く
     public function sesStore(Request $r)
     {
-        if (!str_in($r->input('name'))) return back()->withInput()->with('flash', ['msg' => '会社名を入れてください。', 'type' => 'bad']);
-        $email = strtolower((string) str_in($r->input('email')));
-        // 新しく登録するときは、メールアドレスと担当者名が必須（担当の方に招待メールを送るため）
-        if ($email === '') return back()->withInput()->with('flash', ['msg' => 'メールアドレスを入れてください（担当の方に招待メールを送ります）。', 'type' => 'bad']);
-        if (name_parts($r->all(), 'contact', 'contact_name')[0] === null) return back()->withInput()->with('flash', ['msg' => '担当者名を入れてください（招待メールの宛名になります）。', 'type' => 'bad']);
-        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) return back()->withInput()->with('flash', ['msg' => 'メールアドレスを正しく入れてください。', 'type' => 'bad']);
-        if (DB::table('users')->where('email', $email)->exists()) return back()->withInput()->with('flash', ['msg' => 'このメールアドレスはすでに使われています。', 'type' => 'bad']);
-        $ad = W::addressCols($r->all(), '所在地');
-        if (isset($ad['bad'])) return back()->withInput()->with('flash', ['msg' => $ad['bad'], 'type' => 'bad']);
-        // 管理者が登録した SES は、承認の手順を省いて、すぐ参加中にする（担当者に招待が届く）
-        // 守秘義務への同意は、担当者が最初のログイン（招待）で行う
-        $id = W::applySes($r->all(), $r->user());
-        W::approveSes($id, $r->user(), str_in($r->input('name')).' を PARK に登録しました。');
-        return $this->go("/admin/ses/$id", '登録し、ご担当者に招待メールを送りました。');
+        $res = Registration::provisionalSes(['name' => $r->input('name'), 'sei' => $r->input('rep_sei'), 'mei' => $r->input('rep_mei'), 'email' => $r->input('email')], $r->user());
+        if (isset($res['bad'])) return back()->withInput()->with('flash', ['msg' => $res['bad'], 'type' => 'bad']);
+        return $this->go("/admin/ses/{$res['ses_id']}", '仮登録し、代表者に仮登録のご案内を送りました。');
     }
 
     // SES の画面で扱ってよい会社だけ返す（管理者の直属の入れ物は 404）
@@ -159,7 +150,7 @@ class AdminController extends Controller
         $engs = DB::table('engineers')->where('ses_id', $id)->orderBy('name')->get();
         $egIds = $engs->pluck('id');
         return view('admin.ses-show', [
-            's' => $s,
+            's' => $s, 'repName' => Registration::repName($s)[0],
             'engs' => $engs,
             'users' => $users, 'noUsable' => $noUsable,
             // 停止の確認の文に添える、稼働中の契約と選考中の応募（エンジニアごとに問い合わせず、まとめて取る）
@@ -171,12 +162,16 @@ class AdminController extends Controller
 
     public function sesEdit(int $id)
     {
-        return view('admin.ses-edit', ['s' => $this->sesOrFail($id)]);
+        $s = $this->sesOrFail($id);
+        [, $sei, $mei] = Registration::repName($s);
+        return view('admin.ses-edit', ['s' => $s, 'rep' => ['sei' => $sei, 'mei' => $mei]]);
     }
 
     public function sesUserNew(int $id)
     {
-        return view('admin.ses-user-new', ['s' => $this->sesOrFail($id)]);
+        $s = $this->sesOrFail($id);
+        if ($s->status !== 'active') return $this->go("/admin/ses/$id", '担当者を登録できるのは、参加中の SES だけです。', 'bad');
+        return view('admin.ses-user-new', ['s' => $s]);
     }
 
     // SES を退会済にする（記録は残す）。所属エンジニアも退会済にし、ログインできなくする。稼働中の契約があるときはできない
@@ -203,7 +198,15 @@ class AdminController extends Controller
 
     public function sesUpdate(Request $r, int $id)
     {
-        $this->sesOrFail($id);
+        $s = $this->sesOrFail($id);
+        // 仮登録の間は、企業正式名称・代表者の姓・名・メールの4つだけ直せる（電話・住所などは送られても入れない）
+        if ($s->status === 'provisional') {
+            $res = Registration::editProvisionalSes($s, ['name' => $r->input('name'), 'sei' => $r->input('rep_sei'), 'mei' => $r->input('rep_mei'), 'email' => $r->input('email')], $r->user());
+            if (isset($res['bad'])) return back()->withInput()->with('flash', ['msg' => $res['bad'], 'type' => 'bad']);
+            return $this->go("/admin/ses/$id", $res['ok']);
+        }
+        // 本登録のあと：担当者の欄とメールは出さない。必須の欄は空にできない
+        if ($s->status !== 'pending') return $this->updateRegisteredSes($r, $s);
         $ad = W::addressCols($r->all() + ['postal_code' => null, 'address' => null], '所在地'); // 送られなかった欄は空として扱う（この画面は全欄を送る）
         if (isset($ad['bad'])) return back()->withInput()->with('flash', ['msg' => $ad['bad'], 'type' => 'bad']);
         DB::table('ses_companies')->where('id', $id)->update([
@@ -214,11 +217,40 @@ class AdminController extends Controller
         return $this->go("/admin/ses/$id", '保存しました。');
     }
 
+    // 本登録が済んだ会社の編集（管理者）。企業名・代表者の姓名・電話・住所などを直す。必須の欄は空にできない
+    private function updateRegisteredSes(Request $r, object $s)
+    {
+        $in = Registration::companyInput($r->all());
+        if ($bad = Requirements::checkNotEmpty('ses', true, $in) ?? Registration::checkCompanyInput($in)) return back()->withInput()->with('flash', ['msg' => $bad, 'type' => 'bad']);
+        $ad = W::addressCols($r->all(), '所在地');
+        if (isset($ad['bad'])) return back()->withInput()->with('flash', ['msg' => $ad['bad'], 'type' => 'bad']);
+        $warn = null;
+        DB::transaction(function () use ($r, $s, $in, $ad, &$warn) {
+            $warn = W::renameSes((int) $s->id, (string) $in['ses_name'], $r->user());
+            DB::table('ses_companies')->where('id', $s->id)->update(['phone' => $in['phone'], ...$ad['ok'],
+                'employees' => int_or_null($r->input('employees')), 'strengths' => str_in($r->input('strengths')), 'notes' => str_in($r->input('notes')), 'updated_at' => now_str()]);
+            Registration::syncRepName((int) $s->id, $in['name_sei'], $in['name_mei']);
+        });
+        return $warn ? $this->go("/admin/ses/{$s->id}", '保存しました。'.$warn, 'warn') : $this->go("/admin/ses/{$s->id}", '保存しました。');
+    }
+
+    // 申込中の SES を承認する入力画面：申し込みの内容を入れて出す（申し込みの画面は触らない）
+    public function sesApproveForm(int $id)
+    {
+        $s = $this->sesOrFail($id);
+        if ($s->status !== 'pending') return $this->go("/admin/ses/$id", '申込中の SES だけ、承認できます。', 'bad');
+        [$sei, $mei] = ($s->rep_sei || $s->rep_mei) ? [$s->rep_sei, $s->rep_mei] : (($s->contact_sei || $s->contact_mei) ? [$s->contact_sei, $s->contact_mei] : split_name($s->contact_name ?: $s->rep_name));
+        return view('admin.ses-new', ['approve' => $s, 'v' => (object) ['name' => $s->name, 'rep_sei' => $sei, 'rep_mei' => $mei, 'email' => $s->email]]);
+    }
+
+    // 承認：同じ入力（企業正式名称・代表者の姓名・メール）で仮登録に進める。申し込んだアドレスにも承認を知らせる
     public function sesApprove(Request $r, int $id)
     {
-        $this->sesOrFail($id);
-        if (!W::approveSes($id, $r->user())) return $this->go("/admin/ses/$id", '承認しました。ただし、招待メールは送っていません（メールアドレスがない、担当者がすでに使っている、または停止中・退会済です）。', 'warn');
-        return $this->go("/admin/ses/$id", '承認し、招待メールを送りました。');
+        $s = $this->sesOrFail($id);
+        if ($s->status !== 'pending') return $this->go("/admin/ses/$id", '申込中の SES だけ、承認できます。', 'bad');
+        $res = Registration::provisionalSes(['name' => $r->input('name'), 'sei' => $r->input('rep_sei'), 'mei' => $r->input('rep_mei'), 'email' => $r->input('email')], $r->user(), $s);
+        if (isset($res['bad'])) return back()->withInput()->with('flash', ['msg' => $res['bad'], 'type' => 'bad']);
+        return $this->go("/admin/ses/$id", '承認し、代表者に仮登録のご案内を送りました。');
     }
 
     // SES の停止・再開・退会のあとの戻り先。一覧から押したら一覧へ（絞り込みを保つ）、それ以外は SES の詳細
@@ -235,6 +267,7 @@ class AdminController extends Controller
         if ($s->status === 'left') return $this->go($back, '退会済の SES は操作できません。', 'bad');
         if ($s->status === 'suspended') return $this->go($back, 'すでに停止中です。');
         if ($s->status === 'pending') return $this->go($back, '申込中の SES は停止できません。承認するか、退会にしてください。', 'bad');
+        if ($s->status === 'provisional') return $this->go($back, '仮登録の SES は停止できません。仮登録を取り消すか、退会にしてください。', 'bad');
         DB::table('ses_companies')->where('id', $id)->update(['status' => 'suspended']);
         N::audit($r->user()->id, 'ses-suspend', (string) $id);
         return $this->go($back, '停止しました。');
@@ -253,7 +286,8 @@ class AdminController extends Controller
 
     public function sesUsers(Request $r, int $id)
     {
-        $this->sesOrFail($id);
+        $s = $this->sesOrFail($id);
+        if ($s->status !== 'active') return $this->go("/admin/ses/$id", '担当者を登録できるのは、参加中の SES だけです。', 'bad');
         $email = strtolower((string) str_in($r->input('email')));
         // 同じ SES のエンジニアのアカウントなら、招待ではなく SES 担当者の役割を足す（兼任）
         if ($email && W::sesShareTarget($email, $id)) {
@@ -376,7 +410,7 @@ class AdminController extends Controller
         $period = (string) $r->input('period');
         if (!preg_match('/^\d{4}-\d{2}$/', $period)) return $this->go('/admin/invoices', '対象の月を選んでください。', 'bad');
         $n = 0;
-        foreach (DB::table('ses_companies')->where('kind', 'ses')->where('status', '!=', 'pending')->pluck('id') as $id) if (Billing::build($id, $period)) $n++;
+        foreach (DB::table('ses_companies')->where('kind', 'ses')->whereNotIn('status', ['pending', 'provisional'])->pluck('id') as $id) if (Billing::build($id, $period)) $n++;
         N::audit($r->user()->id, 'invoice-build', $period);
         return $this->go("/admin/invoices?period=$period", $n ? "{$period} の請求書を {$n} 件作りました（下書き）。" : "{$period} に請求するものはありません。");
     }
@@ -434,13 +468,15 @@ class AdminController extends Controller
         if (!$subject || !$body) return $this->go('/admin/mail', '件名と本文を入れてください。', 'bad');
         $q = DB::table('users')->where('active', 1);
         // エンジニアあては、エンジニアを兼ねている人（role を問わない）も含む。使えるエンジニア＝停止中でも退会済でもない
-        $usableEg = DB::table('engineers')->whereNull('suspended_at')->where('status', '!=', 'left')->select('id');
+        // 仮登録のエンジニア・仮登録の人には送らない（条件は Registration::usableEngineers）
+        $q->whereNotNull('registered_at');
+        $usableEg = Registration::usableEngineers(DB::table('engineers'))->select('id');
         // 会社が参加中でない SES 担当者には送らない。エンジニアあては会社で絞らない（兼任の人はエンジニアとして届く）
         $sesOk = fn ($w) => $w->where('role', 'ses')->whereIn('ses_id', DB::table('ses_companies')->where('status', 'active')->select('id'));
         match ($t) {
             'ses' => $q->where($sesOk),
             'eg' => $q->whereIn('engineer_id', $usableEg),
-            'eg_available' => $q->whereIn('engineer_id', DB::table('engineers')->where('status', 'available')->whereNull('suspended_at')->select('id')),
+            'eg_available' => $q->whereIn('engineer_id', Registration::usableEngineers(DB::table('engineers')->where('status', 'available'))->select('id')),
             default => $q->where(fn ($w) => $w->where($sesOk)->orWhereIn('engineer_id', $usableEg)),
         };
         $users = $q->get();

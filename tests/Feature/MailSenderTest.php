@@ -83,7 +83,7 @@ class MailSenderTest extends TestCase
         $this->assertSame(self::CO, $inv->from_name);
         $this->assertSame(self::CO, $this->signature($inv));
         // SES の招待・再招待も
-        $this->post('/admin/ses', ['name' => '新SES', 'email' => 'new-ses@park.example', 'contact_name' => '担当 者'])->assertRedirect();
+        $this->post('/admin/ses', ['name' => '新SES', 'email' => 'new-ses@park.example', 'rep_sei' => '担当', 'rep_mei' => '者'])->assertRedirect();
         $this->assertSame(self::CO, DB::table('mail_outbox')->where('to_email', 'new-ses@park.example')->orderByDesc('id')->value('from_name'));
     }
 
@@ -109,21 +109,19 @@ class MailSenderTest extends TestCase
         $this->assertSame(self::CO, $this->signature($m));
     }
 
+    // 管理者の企業名は必須になった（台帳 K19）。企業名が空の管理者は画面を操作できないので、差出人の決まりだけを確かめる
     public function test_l5_no_company_is_unchanged(): void
     {
-        $this->as('admin@park.example')->post('/admin/settings/testmail', ['to' => 'eg1@park.example'])->assertRedirect();
+        $this->assertNull(admin_sender((object) ['role' => 'admin', 'company_name' => null]));
+        $this->assertNull(admin_sender((object) ['role' => 'admin', 'company_name' => '   ']));
+        N::queueMail('eg1@park.example', 'x', '件名', '本文', 'test');
         $m = $this->last('test');
         $this->assertNull($m->from_name);
         $this->assertSame('PARK 管理者', $this->signature($m));
-        // 空白だけの企業名も無いものとして扱う
-        $this->company('   ');
-        $this->post('/admin/settings/testmail', ['to' => 'eg1@park.example'])->assertRedirect();
-        $this->assertNull($this->last('test')->from_name);
+        // SES が送る案内メールは、管理者の企業名があっても差出人を変えない（L4）
         $cid = $this->openCase();
-        $this->company(null);
-        $this->as('admin@park.example')->post("/cases/$cid/mail/preview", ['mode' => 'same', 'subject' => 'x', 'body' => '送り主：{送り主}', 'engineer_id' => [1]])
-            ->assertOk()->assertSee('送り主：PARK 管理者');
-        $this->post("/cases/$cid/mail/send", ['mode' => 'same', 'to' => [1 => ['send' => 1, 'subject' => 'x', 'body' => 'y']]])->assertRedirect();
+        $this->company();
+        $this->as('ses1@park.example')->post("/cases/$cid/mail/send", ['mode' => 'same', 'to' => [1 => ['send' => 1, 'subject' => 'x', 'body' => 'y']]])->assertRedirect();
         $m = $this->last('case-mail');
         $this->assertNull($m->from_name);
         $this->assertSame('PARK 管理者', $this->signature($m));
@@ -190,6 +188,8 @@ class MailSenderTest extends TestCase
 
     public function test_l8_user_label(): void
     {
+        // 企業名が空の管理者は、運営の名前が頭に付く（管理者の企業名は必須になったので、画面を通さずに確かめる）
+        $this->company(null);
         $admin = User::where('email', 'admin@park.example')->first();
         $this->assertSame('PARK 管理者 管理者 太郎', user_label($admin));
         $this->company();

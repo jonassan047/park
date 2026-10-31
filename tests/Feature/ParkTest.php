@@ -47,8 +47,9 @@ class ParkTest extends TestCase
             '/engineers/1/projects/new', '/engineers/1/projects/1/edit', '/engineers/2/messages', '/applications/1', '/applications/2', '/interviews/1', '/contracts/1',
             '/notifications', '/account', '/engineers/new?ses=1', '/admin/admins/new']);
 
-        $this->post('/admin/ses/4/approve')->assertRedirect();
-        $this->assertDatabaseHas('ses_companies', ['id' => 4, 'status' => 'active']);
+        // 申込中の会社の承認は、仮登録と同じ入力（企業正式名称・代表者の姓名・メール）を通して、仮登録に進む
+        $this->post('/admin/ses/4/approve', ['name' => 'こもれび開発', 'rep_sei' => '木下', 'rep_mei' => 'さくら', 'email' => 'ses4@park.example'])->assertRedirect();
+        $this->assertDatabaseHas('ses_companies', ['id' => 4, 'status' => 'provisional']);
 
         $this->post('/cases/import', ['raw_text' => "【案件名】在庫管理システム開発\n【単価】〜65万円\n【必須】Java、SQL\n【尚可】AWS\n【場所】リモート可\n【開始】12月〜\n【面談】1回"])
             ->assertOk()->assertSee('在庫管理システム開発')->assertSee('65');
@@ -125,8 +126,11 @@ class ParkTest extends TestCase
         $id = W::createEngineer(1, ['name' => '招待 花子', 'email' => 'invite@park.example'], $admin);
         $token = DB::table('users')->where('email', 'invite@park.example')->value('token');
         $this->get("/invite/$token")->assertOk()->assertSee('個人情報の取り扱い');
-        $this->post("/invite/$token", ['password' => 'abcd1234', 'password_confirmation' => 'abcd1234'])->assertSessionHasErrors('consent');
-        $this->post("/invite/$token", ['password' => 'abcd1234', 'password_confirmation' => 'abcd1234', 'consent' => '1'])->assertRedirect(url('/two-factor/challenge'));
+        // 本登録の入力：氏名・ふりがな・電話・郵便番号・住所・パスワード・同意。同意が無いと進めない
+        $reg = ['name_sei' => '招待', 'name_mei' => '花子', 'kana_sei' => 'しょうたい', 'kana_mei' => 'はなこ', 'phone' => '090-0000-0000', 'postal_code' => '100-0001', 'address' => '東京都千代田区',
+            'password' => 'abcd1234', 'password_confirmation' => 'abcd1234'];
+        $this->post("/invite/$token", $reg)->assertSessionHasErrors('consent');
+        $this->post("/invite/$token", $reg + ['consent' => '1'])->assertRedirect(url('/two-factor/challenge'));
         // 初めてのログインも、確認コードを入れるまで中に入れない
         $this->get('/eg')->assertRedirect(url('/two-factor/challenge'));
         $this->post('/two-factor/challenge', ['code' => $this->lastCode('invite@park.example')])->assertRedirect(url('/eg'));

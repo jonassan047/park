@@ -13,6 +13,27 @@ class Status extends Command
     protected $signature = 'park:status {--json}';
     protected $description = 'PARK の状態（メール・AI の仕事・選考・確認待ちなど）を数で出す';
 
+    // 仮登録 → 本登録の状態ごとの人数。名前・メールアドレスは出さない（user_state() の決まりと同じ順で数える）
+    private function registrationCounts(): array
+    {
+        $u = fn () => DB::table('users');
+        $live = fn () => $u()->whereNull('left_at')->where('active', 1);
+        $prov = fn () => $live()->whereNull('registered_at');
+        $expired = fn ($q) => $q->where(fn ($w) => $w->whereNull('token')->orWhereNull('token_expires')->orWhere('token_expires', '<=', now_str()));
+        $declined = $prov()->whereNotNull('reg_declined_at')->count();
+        $expiredN = $expired($prov()->whereNull('reg_declined_at'))->count();
+        return [
+            'アカウント：参加中' => $live()->whereNotNull('registered_at')->count(),
+            'アカウント：仮登録' => $prov()->whereNull('reg_declined_at')->count() - $expiredN,
+            'アカウント：仮登録（期限切れ）' => $expiredN,
+            'アカウント：仮登録（心当たりなし）' => $declined,
+            'アカウント：停止' => $u()->whereNull('left_at')->where('active', 0)->count(),
+            'アカウント：退会済' => $u()->whereNotNull('left_at')->count(),
+            'SES：代表者のいない会社（申込中を除く）' => DB::table('ses_companies')->where('kind', 'ses')->where('status', '!=', 'pending')->whereNull('rep_user_id')->count(),
+            'アカウント：パスワードがあるのに本登録の日時が無い（0 のはず）' => $u()->whereNotNull('password')->whereNull('registered_at')->count(),
+        ];
+    }
+
     public function handle(): int
     {
         $ago = fn (string $s) => date('Y-m-d H:i:s', strtotime($s));
@@ -39,7 +60,7 @@ class Status extends Command
             '兼任（SES 担当者）' => DB::table('users')->where('role', 'ses')->whereNotNull('ses_id')->whereNotNull('engineer_id')->count(),
             '兼任（管理者）' => DB::table('users')->where('role', 'admin')->whereNotNull('engineer_id')->count(),
             '見本データ（@park.example）' => DB::table('users')->where('email', 'like', '%@park.example')->count(),
-        ];
+        ] + $this->registrationCounts();
         if ($this->option('json')) {
             $this->line(json_encode($d, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
             return 0;

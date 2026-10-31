@@ -4,7 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use App\Services\Notifier as N;
+use App\Services\Registration;
 use App\Services\Workflow as W;
+use App\Support\RegistrationText as T;
+use App\Support\Requirements;
 use App\Support\TwoFactor;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -91,54 +94,108 @@ class PublicController extends Controller
         return view('public.message', ['title' => 'お申し込みを受け付けました', 'text' => 'ありがとうございます。管理者が内容を確認のうえ、ご連絡します。']);
     }
 
-    // エンジニアが、まだ個人情報の取り扱いに同意していないか
-    private function needConsent($u): bool
+    // 使えないリンクを開いたとき。誰のものかは出さず、どんな理由でも同じ文
+    private function unusable()
     {
-        return $u->role === 'eg' && $u->engineer_id && !DB::table('engineers')->where('id', $u->engineer_id)->value('consent_at');
+        return view('public.message', ['title' => T::LINK_UNUSABLE_TITLE, 'text' => T::LINK_UNUSABLE]);
     }
 
-    // SES の会社が、まだ守秘義務に同意していないか
-    private function needSecrecy($u): bool
-    {
-        return $u->role === 'ses' && $u->ses_id && !DB::table('ses_companies')->where('id', $u->ses_id)->value('agreed_at');
-    }
-
+    // 本登録の画面（メールのリンクから）。リンクの種類が違うときは、正しい画面へ転送する
     public function inviteForm(string $token)
     {
-        $u = W::userByToken($token);
-        if (!$u) return view('public.message', ['title' => 'リンクの期限切れ', 'text' => 'このリンクは使えません（期限切れか、使用済み）。管理者またはご担当の SES にご連絡ください。']);
-        return view('public.invite', ['u' => $u, 'token' => $token, 'needConsent' => $this->needConsent($u), 'needSecrecy' => $this->needSecrecy($u)]);
+        $row = Registration::tokenRow($token);
+        if ($row && $row->token_kind === 'reset') return redirect("/reset/$token");
+        $u = Registration::userByRegisterToken($token);
+        if (!$u) return $this->unusable();
+        $isRep = Requirements::isRep($u);
+        return view('public.invite', ['u' => $u, 'token' => $token, 'role' => $u->role, 'isRep' => $isRep, 'v' => Requirements::values($u, $u->role, $isRep)]);
     }
 
+    // 本登録の入力を検査して、DB には書かず保留にし、確認コードへ進む。保存は確認コードを通ったとき（Registration::finishPending）
     public function invite(Request $r, string $token)
     {
-        $u = W::userByToken($token);
-        if (!$u) return $this->go('/login', 'リンクの期限が切れています。', 'bad');
-        $rules = ['password' => 'required|min:8|confirmed'];
-        if ($this->needConsent($u)) $rules['consent'] = 'accepted';
-        if ($this->needSecrecy($u)) $rules['agree'] = 'accepted';
-        $r->validate($rules, [], ['password' => 'パスワード', 'consent' => '個人情報の取り扱いへの同意', 'agree' => '守秘義務への同意']);
-        if ($this->needSecrecy($u)) DB::table('ses_companies')->where('id', $u->ses_id)->update(['agreed_at' => now_str()]);
-        if ($this->needConsent($u)) DB::table('engineers')->where('id', $u->engineer_id)->update(['consent_at' => now_str()]);
-        DB::table('users')->where('id', $u->id)->update(['password' => Hash::make($r->input('password')), 'token' => null, 'token_expires' => null, 'last_login' => now_str()]);
-        N::audit($u->id, 'password-set', $u->email);
+        $row = Registration::tokenRow($token);
+        if ($row && $row->token_kind === 'reset') return redirect("/reset/$token");
+        $u = Registration::userByRegisterToken($token);
+        if (!$u) return $this->unusable();
+        $isRep = Requirements::isRep($u);
+        $data = Registration::cleanInput($r->all(), $u->role, $isRep);
+        $r->merge($data);
+        [$rules, $msg, $attr] = Registration::rules($u->role, $isRep);
+        $rules['password'] = 'required|string|min:8|confirmed';
+        $attr['password'] = 'パスワード';
+        $r->validate($rules, $msg, $attr);
+        // 今のログインを外してセッションを作り直し、この人として確認コードの画面へ（保存はまだ）
+        Auth::logout();
+        $r->session()->invalidate();
+        $r->session()->regenerateToken();
         Auth::loginUsingId($u->id);
-        $r->session()->forget('acting_role');
-        // 初めてのログインも、登録のメールアドレスとパスワードに加えて、確認コードで2段階認証を通ってもらう
-        TwoFactor::send($r, 'invite');
-        if (TwoFactor::confirmed($u)) return $this->go(Auth::user()->home(),'パスワードを設定しました。');
-        return $this->go('/two-factor/challenge', 'パスワードを設定しました。メールで届いた確認コードを入れてください。');
+        Registration::stash($r, $u, $token, $data, Hash::make((string) $r->input('password')));
+        TwoFactor::send($r, 'invite'); // 確認コードを省く環境では、ここで完了する
+        if (!$r->user()) return redirect('/login')->with('flash', ['msg' => Registration::notDoneMessage(), 'type' => 'warn']); // 途中でリンクが新しくなった・使えなくなった
+        if ((int) $r->session()->get(TwoFactor::SESSION_KEY) === (int) $r->user()->id) {
+            $warn = Registration::$lastWarn; // 同じ名前の SES がほかにもあるときの注意（確認コードの道と同じ）
+            return $this->go($r->user()->home(), '本登録が完了しました。'.($warn ?: ''), $warn ? 'warn' : 'ok');
+        }
+        return $this->go('/two-factor/challenge', 'メールで届いた確認コードを入れてください。入れると本登録が完了します。');
+    }
+
+    // 「心当たりがない」：リンクを無効にして、登録した人に知らせる
+    public function decline(Request $r, string $token)
+    {
+        $u = Registration::userByRegisterToken($token);
+        if (!$u) return $this->unusable();
+        if ($r->user() && (int) $r->user()->id === (int) $u->id) {
+            Auth::logout();
+            $r->session()->invalidate();
+            $r->session()->regenerateToken();
+        }
+        Registration::decline($u);
+        return view('public.message', ['title' => 'リンクを無効にしました', 'text' => T::DECLINED_DONE]);
     }
 
     public function forgotForm() { return view('public.forgot'); }
 
+    // 画面の文は、登録の有無にかかわらず同じ。本登録が済んでいない人には、再設定ではなく「送り直しの依頼」の案内を送る
     public function forgot(Request $r)
     {
-        $u = DB::table('users')->where('email', strtolower(trim((string) $r->input('email'))))->where('active', 1)->first();
-        if ($u) {
-            $t = W::issueToken($u->id, 1);
-            N::queueMail($u->email, $u->name, 'パスワードの再設定', user_label($u)." 様\n\n次のリンクから、新しいパスワードを設定してください（24時間有効）。\n".url("/invite/$t")."\n\n心当たりがない場合は、このメールを無視してください。", 'reset');
+        $in = $r->input('email');
+        $email = is_string($in) ? strtolower(trim($in)) : ''; // 配列などを送られても落ちない
+        $u = $email === '' ? null : DB::table('users')->where('email', $email)->where('active', 1)->whereNull('left_at')->first();
+        if ($u && !$u->registered_at) {
+            // 同じアドレスへは1時間に1通まで（リンクは変えない）
+            $recent = DB::table('mail_outbox')->where('to_email', $u->email)->where('kind', 'reg-help')->where('created_at', '>', date('Y-m-d H:i:s', time() - 3600))->exists();
+            if (!$recent) N::queueMail($u->email, $u->name, T::HELP_SUBJECT, T::HELP_BODY, 'reg-help');
+        } elseif ($u && Registration::companyAllows($u)) {
+            $t = W::issueToken($u->id, 1, 'reset');
+            N::queueMail($u->email, $u->name, 'パスワードの再設定', user_label($u)." 様\n\n次のリンクから、新しいパスワードを設定してください（24時間有効）。\n".url("/reset/$t")."\n\n心当たりがない場合は、このメールを無視してください。", 'reset');
         }
-        return view('public.message', ['title' => 'メールを送りました', 'text' => '登録があれば、再設定のリンクをメールで送りました。']);
+        return view('public.message', ['title' => 'メールを送りました', 'text' => T::FORGOT_DONE]);
+    }
+
+    // パスワードの再設定（本登録が済んでいる人だけ。パスワードだけを聞く）
+    public function resetForm(string $token)
+    {
+        $row = Registration::tokenRow($token);
+        if ($row && $row->token_kind === 'register') return redirect("/invite/$token");
+        if (!Registration::userByResetToken($token)) return $this->unusable();
+        return view('public.reset', ['token' => $token]);
+    }
+
+    public function reset(Request $r, string $token)
+    {
+        $row = Registration::tokenRow($token);
+        if ($row && $row->token_kind === 'register') return redirect("/invite/$token");
+        $u = Registration::userByResetToken($token);
+        if (!$u) return $this->unusable();
+        $r->validate(['password' => 'required|string|min:8|confirmed'], [], ['password' => 'パスワード']);
+        DB::table('users')->where('id', $u->id)->update(['password' => Hash::make((string) $r->input('password')), 'token' => null, 'token_expires' => null, 'token_kind' => null, 'last_login' => now_str(), 'updated_at' => now_str()]);
+        N::audit($u->id, 'password-reset', '');
+        Auth::loginUsingId($u->id);
+        $r->session()->forget('acting_role');
+        // 確認コードは今までどおり（一度通った人は聞かれない）
+        TwoFactor::send($r, 'reset');
+        if ((int) $r->session()->get(TwoFactor::SESSION_KEY) === (int) $u->id) return $this->go(Auth::user()->home(), 'パスワードを設定しました。');
+        return $this->go('/two-factor/challenge', 'パスワードを設定しました。メールで届いた確認コードを入れてください。');
     }
 }

@@ -1,16 +1,12 @@
-@extends('layouts.app', ['title' => 'パスワードの設定'])
+@extends('layouts.app', ['title' => '本登録'])
 @section('content')
-<p>{{ user_label($u) }} 様、PARK へようこそ。パスワードを設定してください。</p>
+@php $company = \App\Services\Registration::companyOf($u); @endphp
+<p>{{ trim($company.' '.$u->name) }} 様、PARK の{{ \App\Support\Requirements::roleName($role, $isRep) }}として仮登録されています。内容をお確かめのうえ、本登録をお願いします。</p>
 <x-card><form method="post" action="{{ url('/invite/'.$token) }}" class="narrow">@csrf
+@include('partials.register-fields', ['role' => $role, 'isRep' => $isRep, 'v' => $v, 'only' => null])
 <x-field label="パスワード（8文字以上）" name="password" type="password" required autocomplete="new-password" />
 <x-field label="パスワード（確認）" name="password_confirmation" type="password" required autocomplete="new-password" />
-@if($needConsent)
-@include('partials.consent')
-<x-field label="上の取り扱いに同意します" name="consent" type="checkbox" required />
-@endif
-@if($needSecrecy)
-<div class="note"><b>守秘義務</b><br>PARK で知った案件・エンジニアの情報は、グループの外に出さないでください。</div>
-<x-field label="守秘義務を守り、案件・エンジニアの情報をグループの外に出さないことに同意します" name="agree" type="checkbox" required />
-@endif
-<button class="btn">設定して始める</button></form></x-card>
+<button class="btn">本登録する</button></form>
+<form method="post" action="{{ url('/invite/'.$token.'/decline') }}" class="inline" onsubmit="return confirm('このリンクを無効にして、登録した方にお知らせします。よろしいですか？')">@csrf
+<button class="link">心当たりがない</button></form></x-card>
 @endsection

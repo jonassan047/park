@@ -30,21 +30,15 @@ class EgController extends Controller
         ]);
     }
 
-    // 兼任の人が、初めてエンジニアとして入ったときの、個人情報の取り扱いへの同意
+    // 古い入口：同意は「足りない項目の画面」で取る（個人情報の取り扱いへの同意と、登録の内容の確認を兼ねる）
     public function consentForm(Request $r)
     {
-        if (DB::table('engineers')->where('id', $r->user()->engineer_id)->value('consent_at')) return redirect(W::profileHome($r->user())[0]);
-        return view('eg.consent');
+        return redirect('/register/complete');
     }
 
     public function consent(Request $r)
     {
-        if (DB::table('engineers')->where('id', $r->user()->engineer_id)->value('consent_at')) return redirect(W::profileHome($r->user())[0]);
-        $r->validate(['consent' => 'accepted'], [], ['consent' => '個人情報の取り扱いへの同意']);
-        DB::table('engineers')->where('id', $r->user()->engineer_id)->update(['consent_at' => now_str()]);
-        N::audit($r->user()->id, 'consent', '');
-        [$home, $msg] = W::profileHome($r->user());
-        return redirect($home)->with('flash', ['msg' => $msg ?? '同意をいただきました。', 'type' => 'ok']);
+        return redirect('/register/complete');
     }
 
     public function offers(Request $r)

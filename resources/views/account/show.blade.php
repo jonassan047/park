@@ -20,7 +20,7 @@
 @if($u->role === 'admin')
 <x-field label="企業名" name="company_name" :value="$u->company_name" hint="メールの差出人の名前にも使います。" />
 @elseif($u->role === 'ses')
-<x-field label="SES名" name="ses_name" :value="$sesName" hint="変えると、管理者にお知らせが届きます。" />
+<p class="muted">SES名：{{ $sesName }}（企業名は、代表者が「SES」の画面の会社情報で直します）</p>
 @endif
 @unless($u->role === 'eg')
 <x-field label="所属・役職" name="position" :value="$u->position" />

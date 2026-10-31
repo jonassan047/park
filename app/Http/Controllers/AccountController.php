@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Services\Notifier as N;
+use App\Services\Registration;
 use App\Services\Workflow as W;
+use App\Support\Requirements;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -63,8 +65,7 @@ class AccountController extends Controller
         N::audit($u->id, 'login-role', $to);
         $u->role = $to;
         $u->syncOriginalAttribute('role');
-        // intended は使わない（別の立場の画面に送られて 403 になるのを防ぐ）
-        if ($to === 'eg' && !DB::table('engineers')->where('id', $u->engineer_id)->value('consent_at')) return redirect('/eg/consent');
+        // intended は使わない（別の立場の画面に送られて 403 になるのを防ぐ）。足りない項目・同意は、入った先で role ミドルウェアが回す
         [$home, $msg] = W::profileHome($u);
         return $this->go($home, $msg);
     }
@@ -78,11 +79,47 @@ class AccountController extends Controller
     public function update(Request $r)
     {
         $this->trimNames($r);
-        // まだ登録していない人は、ここからの登録でも企業名・SES名を必須にする
-        $r->validate($this->profileRules(!$r->user()->profile_completed_at, $r->user()->role), $this->profileMessages(), $this->profileNames());
-        $warn = W::saveProfile($r->user(), $r->all());
-        DB::table('users')->where('id', $r->user()->id)->update(['mail_opt_in' => $r->boolean('mail_opt_in')]);
+        $u = $r->user();
+        $r->validate($this->profileRules(false, $u->role), $this->profileMessages(), $this->profileNames());
+        // 必須の欄は、本人も空にできない（企業名・SES名は、アカウントの画面からは変えられない）。
+        // 氏名は、姓・名のどちらかが送られたら、両方が入っている必要がある（どちらも空なら、今のまま）
+        $in = $r->only(['kana_sei', 'kana_mei', 'phone', 'company_name', 'postal_code', 'address']);
+        if ($r->input('name_sei') !== null || $r->input('name_mei') !== null) $in += ['name_sei' => $r->input('name_sei'), 'name_mei' => $r->input('name_mei')];
+        if ($bad = Requirements::checkNotEmpty($u->role, Requirements::isRep($u), $in, ['users', 'engineer'])) {
+            return back()->withInput()->with('flash', ['msg' => $bad, 'type' => 'bad']);
+        }
+        $warn = W::saveProfile($u, $r->all());
+        DB::table('users')->where('id', $u->id)->update(['mail_opt_in' => $r->boolean('mail_opt_in')]);
         return $warn ? $this->go('/account', '保存しました。'.$warn, 'warn') : $this->go('/account', '保存しました。');
+    }
+
+    // ---------- 足りない項目の画面（必須項目や同意が足りない人だけが、ここから先へ進める） ----------
+    public function completeForm(Request $r)
+    {
+        $u = $r->user();
+        $row = DB::table('users')->find($u->id);
+        $miss = Requirements::missing($row, $u->role);
+        if (!$miss) return redirect($u->home());
+        $isRep = Requirements::isRep($u);
+        return view('account.complete', ['role' => $u->role, 'isRep' => $isRep, 'only' => $miss, 'v' => Requirements::values($row, $u->role, $isRep)]);
+    }
+
+    public function complete(Request $r)
+    {
+        $u = $r->user();
+        $row = DB::table('users')->find($u->id);
+        $miss = Requirements::missing($row, $u->role);
+        if (!$miss) return redirect($u->home());
+        $isRep = Requirements::isRep($u);
+        // 足りなかった項目だけを受け取る（ほかの項目・企業名は、送られても無視する）。古い送り方（氏名・ふりがなの1欄）は、姓・名に分ける
+        $this->legacyNames($r);
+        $data = Registration::cleanInput($r->all(), $u->role, $isRep, $miss);
+        $r->merge($data);
+        [$rules, $msg, $attr] = Registration::rules($u->role, $isRep, $miss);
+        $r->validate($rules, $msg, $attr);
+        Registration::saveMissing($row, $u->role, $data, $miss);
+        [$home, $note] = W::profileHome($u);
+        return $this->go($home, $note ?? '登録しました。');
     }
 
     // 自分の登録情報を見るだけの画面（入力欄なし）
@@ -97,7 +134,8 @@ class AccountController extends Controller
     private function trimNames(Request $r): void
     {
         $this->legacyNames($r);
-        $r->merge(collect(['name_sei', 'name_mei', 'kana_sei', 'kana_mei', 'company_name', 'ses_name'])->mapWithKeys(fn ($k) => [$k => clean_name($r->input($k))])->all());
+        // 送られてきた欄だけ整える（送られなかった欄は、送られなかったまま。空にしたのか、送らなかったのかを見分けるため）
+        $r->merge(collect(['name_sei', 'name_mei', 'kana_sei', 'kana_mei', 'company_name', 'ses_name'])->filter(fn ($k) => $r->has($k))->mapWithKeys(fn ($k) => [$k => clean_name($r->input($k))])->all());
         // 管理者の郵便番号・住所：郵便番号は「123-4567」にそろえてから検証する（そろえられなければ入れた文字のまま検証に回し、はじく）
         if ($r->user()->role === 'admin') {
             if ($r->has('postal_code')) {
@@ -146,37 +184,15 @@ class AccountController extends Controller
         return ['postal_code' => '郵便番号', 'address' => '住所', 'name_sei' => '氏名（姓）', 'name_mei' => '氏名（名）', 'kana_sei' => 'ふりがな（姓）', 'kana_mei' => 'ふりがな（名）', 'phone' => '電話', 'position' => '所属・役職', 'company_name' => '企業名', 'ses_name' => 'SES名'];
     }
 
-    // 最初のログインで出す「あなたの情報」。済んでいる人は、アカウントの画面へ
+    // 古い入口（/welcome・/eg/consent）：足りない項目の画面へ転送する（足りなければ /register/complete、なければホーム）
     public function welcomeForm(Request $r)
     {
-        $u = $r->user();
-        if ($u->profile_completed_at) return redirect('/account');
-        $v = (object) ['name_sei' => $u->name_sei, 'name_mei' => $u->name_mei, 'kana_sei' => $u->kana_sei, 'kana_mei' => $u->kana_mei,
-            'phone' => $u->phone, 'position' => $u->position,
-            'company_name' => $u->role === 'admin' ? $u->company_name : null,
-            'postal_code' => $u->role === 'admin' ? $u->postal_code : null, 'address' => $u->role === 'admin' ? $u->address : null,
-            'ses_name' => $u->role === 'ses' ? DB::table('ses_companies')->where('id', $u->ses_id)->value('name') : null];
-        // 姓・名の列がまだ空の人は、つないだ name・kana から分ける
-        if (!$v->name_sei && !$v->name_mei) [$v->name_sei, $v->name_mei] = split_name($u->name);
-        if (!$v->kana_sei && !$v->kana_mei) [$v->kana_sei, $v->kana_mei] = split_name($u->kana);
-        if ($u->role === 'eg' && $u->engineer_id) {
-            $e = DB::table('engineers')->find($u->engineer_id);
-            if (!$v->name_sei && $e) {
-                $v->name_sei = $e->name_sei; $v->name_mei = $e->name_mei;
-                $v->kana_sei = $e->kana_sei; $v->kana_mei = $e->kana_mei;
-            }
-        }
-        return view('account.welcome', ['u' => $u, 'v' => $v]);
+        return redirect('/register/complete');
     }
 
     public function welcome(Request $r)
     {
-        $this->trimNames($r);
-        $u = $r->user();
-        $r->validate($this->profileRules(true, $u->role), $this->profileMessages(), $this->profileNames());
-        $warn = W::saveProfile($u, $r->all());
-        [$to, $msg] = W::profileHome($u);
-        return $warn ? $this->go($to, '登録しました。'.$warn, 'warn') : $this->go($to, $msg ?? '登録しました。');
+        return redirect('/register/complete');
     }
 
     public function password(Request $r)

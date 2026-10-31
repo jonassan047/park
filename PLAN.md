@@ -56,8 +56,8 @@
 
 1. `GET /invite/{token}`：`Registration::userByRegisterToken`（種類 register・期限内・active=1・K31 の会社の確認）。使えないときは、誰のものかを出さず同じ文（「このリンクは使えません。登録した方に送り直しをご依頼ください。」）。
 2. `POST /invite/{token}`：検査する。**この時点で DB には書かない。** パスワードはハッシュにし、入力と token を `Crypt::encryptString` してセッションの `reg_pending` に置く（`.env.example` は `SESSION_ENCRYPT=false` で、セッションは DB に残るため）。今のログインを外してセッションを作り直し、`Auth::loginUsingId`、`TwoFactor::send($r, 'invite')`、`/two-factor/challenge` へ。
-3. 確認コードを通ったら（`TwoFactor::pass` の中で `Registration::finishPending($r)` を呼ぶ。確認コードを省く環境の道も `pass` を通るので、ここ1か所でよい）：トランザクションと `lockForUpdate` で、`registered_at` が null で token が同じことを確かめ、全部を保存し、token を消し、K25 の相手に知らせる。
-4. token が変わっていた（途中で送り直された・「心当たりがない」が押された）ら、何も保存せず、ログアウトして「リンクが新しくなりました」の文を出す。`TwoFactorController::challenge` は、`pass` のあとに `$r->user()` が無ければ `/login` へ返す（`two_factor_confirmed_at` は入れない）。
+3. 確認コードを通ったら（`TwoFactor::pass` の中で `Registration::finishPending($r)` を呼ぶ。確認コードを省く環境の道も `pass` を通るので、ここ1か所でよい）：トランザクションと `lockForUpdate` で、`registered_at` が null・token が同じ・`active=1`・K31 の会社の確認が通ることを確かめ、全部を保存し、token を消し、K25 の相手に知らせる。**会社の停止は token を消さない（`sesSuspend`）ので、会社の確認をここでもう一度行う。**
+4. 確かめが通らなかった（途中で送り直された・「心当たりがない」が押された・取り消された・会社が止まった）ら、何も保存せず、ログアウトして「リンクが新しくなりました」の文を出す（行が消えた・会社が止まったときは 1 の共通の文）。`pass` は、ログアウトしたら `SESSION_KEY` を入れずに戻る（今の `pass` は `$r->user()->id` を読むので、そのままだと落ちる）。`TwoFactorController::challenge` は、`pass` のあとに `$r->user()` が無ければ `/login` へ返す（`two_factor_confirmed_at` は入れない）。確認コードを省く道では `send` の中で `pass` が走るので、`PublicController::invite`・`challengeForm`（16・36 行）・`resend` も、`send` のあとに `$r->user()` が無いときを同じように扱う。
 
 これで「途中でやめたら何も残らず、リンクは期限まで使える」（K18）と「完了は確認コードを通ったとき」（K27）が両方成り立つ。
 
@@ -117,11 +117,12 @@
 
 ### 0-11. バージョン
 
-`config/park.php`（`'version' => 'v0.2.0'`）を正本にし、`layouts/app.blade.php` の足元に `{{ config('park.version') }}` を出す。Git のタグ `v0.2.0` は全段階の完了後（Leo）。
+`config/park.php`（`'version' => 'v0.2.0'`）を正本にし、`layouts/app.blade.php` の足元（83 行の `<footer class="foot">`）に `{{ config('park.version') }}` を出す。印刷の画面（`$print`）には足元が無いので出ない。Git のタグ `v0.2.0` は全段階の完了後（Leo）。
 
 ### 0-12. 今のテストへの影響
 
 - `SampleSeeder` を新しい形に直す（各社の代表者・本登録の日時・必須項目）。`W::createUser` は既定で `registered_at` を入れる（パスワードを持って作るのは `/setup`・見本・テストだけのため）。
+- テストが `engineers` を作って候補を確かめる所は、`engineers.registered_at` を入れないと 0-4 で外れる。`tests/TestCase.php` の作り方（SampleSeeder を使う部分を含む）を先に直す。
 - `/invite`・`/welcome`・`/eg/consent` を使うテスト（`ProfileAndDirectTest`・`NameSplitTest`・`DualRoleTest`・`EmptyStateTest`・`UiUnifyTest`・`PostalAddressTest`・`AccountProfileTest`・`AdminAccountTest`・`ParkTest`・`SuspendLeaveTest`・`SeedDummyTest`・`PurgeSamplesTest` ほか）は新しい流れに書き直す。**確かめる中身を消さない。** 消すのは、決定で要らなくなった動きのテストだけで、消したものと理由を完了報告に書く。
 - 確認コードの取り方：`mail_outbox` の最新の件名（`確認コード 123456`）から読む。
 
@@ -131,31 +132,31 @@
 
 | 番号 | 段階とAC | 番号 | 段階とAC |
 |---|---|---|---|
-| K01 | S1-06・S1-07 | K22 | S1-26 |
-| K02 | S1-11・S2-01・S2-02・S3-01（K15 で変更） | K23 | S2-06 |
+| K01 | S1-06・S1-07 | K22 | S1-26・S1-37 |
+| K02 | S1-11・S2-01・S2-02・S3-01（K15 で変更） | K23 | S2-06・S2-31 |
 | K03 | S1-14・S1-32（K14 で変更） | K24 | S1-31・S2-24・S3-08 |
 | K04 | S1-32・S2-09 | K25 | S1-16・S2-11・S3-03 |
 | K05 | S1-32・S3-01・S3-02 | K26 | S1〜S3 の分け方・S3-10 |
 | K06 | S1-19・S1-29 | K27 | S1-15・S1-22・S2-17・S3-05 |
 | K07 | S1-20・S2-14・S3-05 | K28 | S1-27・S1-28 |
-| K08 | S1-08・S2-13 | K29 | S1-20・S1-23・S2-14・S2-15・S3-04・S1-36・S2-30・S3-11（取り消し。L を承認） |
+| K08 | S1-08・S1-39・S2-13・S3-13 | K29 | S1-20・S1-23・S2-14・S2-15・S3-04・S1-36・S2-30・S3-11（取り消し。L を承認） |
 | K09 | S1-26（画面は触らない） | K30 | S1-12・S1-31・S2-18・S3-08 |
-| K10 | S1-16・S2-11・S3-03 | K31 | S1-25・S2-19 |
+| K10 | S1-16・S2-11・S3-03 | K31 | S1-25・S1-37・S1-38・S1-39・S2-19 |
 | K11 | S1-16 | K32 | S1-03・S1-04・S1-05・S1-33 |
 | K12 | S2-01 | K33 | S1-29・S3-06・S3-07 |
 | K13 | S2-03・S2-04・S2-20 | K34 | S1-30・S2-28 |
 | K14 | S1-14・S1-32 | K35 | S1-02 |
 | K15 | S1-11・S2-01〜S2-07・S3-01 | K36 | 下の B1〜B8 のとおり |
 | K16 | S1-18・S2-10・S3-02 | B1 | S2-25・S2-26 |
-| K17 | S1-08・S1-09・S1-10・S2-12 | B2 | S1-32・S2-09 |
+| K17 | S1-08・S1-09・S1-10・S1-39・S2-12 | B2 | S1-32・S2-09 |
 | K18 | S1-13〜S1-15・S1-24・S2-09・S2-16 | B3 | S1-30・S2-13 |
-| K19 | S1-14・S1-32 | B4 | S1-30・S2-22 |
+| K19 | S1-14・S1-32・S2-08・S3-02 | B4 | S1-30・S2-22 |
 | K20 | S1-29・S2-27・S3-09 | B5 | S1-23・S2-15・S3-04 |
 | K21 | S2-20〜S2-23 | B6 | S1-29 |
 | | | B7 | S1-27・S1-28 |
 | | | B8 | S1-06 |
 
-6章の完了条件は S3-10（通し）と S3-12（エビデンス）で確かめる。
+6章の完了条件は S3-10（通し）と S3-12（エビデンス）で確かめる。スコープ 2章の R01・R06 のつながりは S3-13。
 
 ---
 
@@ -166,9 +167,10 @@
 - **管理者**
   - `/admin/ses/new`：企業正式名称・代表者の姓・名・メールの4つだけ（`admin/ses-form` を新しい形と編集の形に分ける）。ボタンは「仮登録してメールを送る」。
   - `/admin/ses`：列の「担当」を「代表者」に替える。状態に「仮登録」「仮登録（期限切れ）」など。仮登録の行に「送り直し」「詳細」。
-  - `/admin/ses/{id}`：仮登録の間は「送り直し」「仮登録の内容を直す」。「停止」は出さない。「代表者」は `rep_*` を出し、「担当」の欄はなくす。
+  - `/admin/ses/{id}`：仮登録の間は「送り直し」「仮登録の内容を直す」「退会」。「停止」は出さない。「代表者」は `rep_*` を出し、「担当」の欄はなくす。
   - `/admin/ses/{id}/edit`：仮登録の間は4つの項目だけ。本登録のあとは今の編集から担当者の欄を除く。メールは出すだけ（B5）。
   - 申込中の SES の承認：`GET /admin/ses/{id}/approve` で同じ入力画面に申し込みの内容を入れて出す（代表者姓名は `rep_*`、無ければ `contact_*`）。`POST` で送る。**申し込みの画面（`/apply`）は触らない（K09）。**
+  - `/admin`：SES の数・「はじめの手順」・招待の状況に、仮登録の会社も数える（今は `active`・`pending` だけを見ている）。
 - **SES（代表者）**：メール → `/invite/{token}` → 1画面で入力 → 確認コード → `/ses`。`/ses/company/edit` は代表者だけ（欄は企業正式名称・代表者姓名・電話・郵便番号・住所・人数・得意な分野。担当者の欄は出さない）。
 - **担当者**：この段階では登録の入口は作らない。今いる担当者は、足りない項目の画面（電話・守秘義務）と、会社情報を見るだけの制限を受ける。
 - **EG**：この段階では登録の入口を変えない。今の入口から出たリンクは新しい本登録の画面に入る。
@@ -204,7 +206,7 @@ K25 の相手の決め方は `Registration::recipientsFor($target)`。登録し�
 **状態**
 
 - **S1-08** K08・K17：一覧と詳細に状態が出る。テスト：`/admin/ses` で、仮登録の会社に「仮登録」と「送り直し」、期限を過去にすると「仮登録（期限切れ）」、本登録のあとは「参加中」で送り直しなし。
-- **S1-09** K17：仮登録の EG は候補などに出ない。テスト：`engineers.registered_at` が null の EG と入っている EG を作る → `Matcher::forCase`、`W::distribute`、推薦（POST `/cases/{id}/recommend`）、一斉メール（POST `/admin/mail/broadcast`）で、null の人が入らない。
+- **S1-09** K17：仮登録の EG は候補・配信・応募・一斉メールに出ない。テスト：`engineers.registered_at` が null の EG と入っている EG を作る → `Matcher::forCase`、`W::distribute`、配信（POST `/cases/{id}/distribute`）、推薦（POST `/cases/{id}/recommend`）、SES からの応募（POST `/cases/{id}/apply`）、一斉メール（POST `/admin/mail/broadcast`）で、null の人が入らない・断られる。
 - **S1-10** K17：仮登録の SES は配信・請求・選ぶ一覧から外れる。テスト：status=provisional の会社で `/cases/new`（管理者）の選択肢に出ない、請求の作成で行ができない、`N::toSes` が仮登録の人に届かない。
 
 **管理者 → SES の流れ**
@@ -245,17 +247,23 @@ K25 の相手の決め方は `Registration::recipientsFor($target)`。登録し�
 - **S1-35** マニュアル（下の 2-5）。テスト：GET `/manual/admin`・`/manual/ses` に「仮登録」「本登録」が出る。
 - **S1-36** K29・L（2026-10-31 TEZZO 承認）：`POST /people/{id}/cancel` で仮登録を取り消せる（条件と記録は 4-4）。管理者が SES の代表者を取り消すと、会社に他の人がいなければ会社の行（status=provisional）も消え、アドレスがまた使える。テスト：取り消して行が消える・audit が残り名前とアドレスが入っていない・同じアドレスで仮登録できる。パスワードまたは `registered_at` のある行、参加中の会社は断る。権限のない人は 403。
 
+**本登録を飛ばす道をふさぐ**
+
+- **S1-37** K22・K31：承認は申込中の会社だけ。今の `sesApprove`・`W::approveSes` は状態を見ないので、POST すると仮登録・停止中・退会済の会社も参加中になってしまう。テスト：`provisional`・`suspended`・`left`・`active` の会社に GET・POST `/admin/ses/{id}/approve` → 断り、status は変わらない、メールなし。
+- **S1-38** K31：確認コードの途中で会社が止まったら、本登録は完了しない。テスト：参加中の会社の担当者の行を仮登録で作る → POST `/invite/{token}` → 管理者が POST `/admin/ses/{id}/suspend` → 正しいコードを入れる → `registered_at` null、ログアウトしている、知らせなし。確認コードを省く環境で、取り消された行の POST でも 500 にならない（0-5 の 4）。
+- **S1-39** K08・K17・K31：仮登録の会社の退会は通り、リンクも使えなくなる。再開は押せない。管理者のホームの数に仮登録が入る。0件でも開く。テスト：provisional で POST `/admin/ses/{id}/delete` → status=left、古い token で GET → 共通の文。POST `/admin/ses/{id}/resume` → status は変わらない。GET `/admin` に仮登録の会社の行が出る。会社が1つも無くても 200。
+
 ### 2-4. 作業の手順
 
 1. `config/park.php` と足元のバージョン（S1-01）。
 2. マイグレーション2つ（列・今いる行）。データ移行は `Registration::migrateExisting()` に置き、SQLite でも動くよう `DB::table` と chunk で書く。
 3. `Requirements`・`RegistrationText`・`Registration`（`issueToken` の種類、`sendLink`、`finishPending`、`recipientsFor`、`canManage`、`usableEngineers`、`companyAllows`）。
 4. `user_state()`・`PARK_LABELS`・`W::isRep`・`W::createUser`（`registered_at` を入れる）。
-5. `SampleSeeder` を直し、今のテストを動かす状態にする。
+5. `SampleSeeder`・`tests/TestCase.php` を直し、今のテストを動かす状態にする。
 6. `Role` ミドルウェアと `/register/complete`、`/welcome`・`/eg/consent` の転送。`saveProfile` から `ses_name` を外す。
-7. `PublicController`：`inviteForm`・`invite`（0-5）、`decline`、`forgot`、`resetForm`・`reset`。`TwoFactor::pass`・`TwoFactorController::challenge`。
+7. `PublicController`：`inviteForm`・`invite`（0-5）、`decline`、`forgot`、`resetForm`・`reset`。`TwoFactor::pass`・`TwoFactorController::challenge`・`challengeForm`・`resend`（0-5 の 4）。
 8. `W::invite` の中身を `Registration` へ（メールは新しい文、`registered_by` を入れる）。`*ShareTarget` に本登録済みの条件。
-9. `AdminController`：`sesStore`・`sesUpdate`・`sesApprove`（GET を足す）・`sesSuspend`。`POST /people/{id}/resend`（`canManage`）。`SesController::saveCompany`・`companyEdit`。`renameSes` の知らせをまとめられるようにする。
+9. `AdminController`：`sesStore`・`sesUpdate`・`sesApprove`（GET を足す。申込中だけ）・`sesSuspend`・`dashboard`・`inviteRows`。`POST /people/{id}/resend`（`canManage`）。`SesController::saveCompany`・`companyEdit`。`renameSes` の知らせをまとめられるようにする。
 10. 画面：`public/invite`（作り直し）、`public/reset`、`partials/register-fields`、`account/complete`、`admin/ses-*`、`ses/company*`、`admin/dashboard`（文の「招待」）。
 11. 0-4 の各所に `usableEngineers` などを入れる。
 12. `DummySeed`：SES に `provisional` を足す（代表者1人だけ・状態 C、エンジニアなし）。人の状態 B を「参加中（必須項目が足りない）」に替える。`rep_user_id`（各社の1人目）・`registered_at`・`registered_by`（null）・`token_kind`・`engineers.registered_at` を入れる。`SamplePurge`：`registered_by` を null にする処理と、代表者の守りを足す。
@@ -309,8 +317,8 @@ K25 の相手の決め方は `Registration::recipientsFor($target)`。登録し�
 - **S2-12** K17：仮登録の EG は候補に出ず、本登録のあと出る。テスト：`Matcher::forCase` の前後。
 - **S2-13** K08・B3：`/ses/company`・`/ses/engineers`・`/admin/engineers`・`/admin/ses/{id}`・`/admin/ses/{id}/users/{uid}` に状態が出る。担当者の姓名は users から出す。0件のときも画面が開く。テスト：各立場で GET して文字を見る。
 - **S2-14** K07・K29：送り直しの権限。管理者は全部、代表者は自社の担当者・EG、担当者は自社の EG。テスト：組み合わせごとに POST `/people/{id}/resend` → 通る／403。他社 → 404。
-- **S2-15** K29・B5：仮登録中の直し。同じ行のまま。EG は `users` と `engineers` の両方のメールがそろい、1人に2行にならない。テスト：メールを直して users の行数、email 2か所、旧 token、新しいアドレスの1通。
-- **S2-16** K18：仮登録中の EG の技術・住所などを上位が入れられない。テスト：POST `/engineers/{id}`・`/profile`・`/skills`・`/projects` → 断り、値は変わらない。本登録のあとは通り、今までどおり `self_confirmed_at` が消える（2026-10-16）。
+- **S2-15** K29・B5：仮登録中の直し。同じ行のまま。EG は `users` と `engineers` の両方のメールがそろい、1人に2行にならない。**所属（企業名）を変えられるのは管理者だけで、参加中の SES にだけ。`users.ses_id` と `engineers.ses_id` がそろう（7章の 1）。** テスト：メールを直して users の行数、email 2か所、旧 token、新しいアドレスの1通。管理者が所属を直す → 2か所が変わる。代表者・担当者が `ses_id` を混ぜて POST → 変わらない。
+- **S2-16** K18：仮登録中の EG の技術・住所などを上位が入れられない。テスト：POST `/engineers/{id}`・`/profile`・`/skills`・`/projects` → 断り、値は変わらない。本登録のあとは通り、今までどおり `self_confirmed_at` が消える（2026-10-16）。本人が直したときは消えない。
 - **S2-17** K27：担当者・EG の「心当たりがない」。テスト：押す → 登録した人に知らせ、リンク無効。
 - **S2-18** K30：SES の人には理由によらず同じ文（「このアドレスでは登録できません」）。回数制限（`throttle`）と記録（`N::audit` の `reg-refused`。アドレスは伏せる）。仮登録中のアドレスに役割を足さない。停止中・退会済のアドレスは断る。テスト：他社の使用中・仮登録中・停止中・退会済で POST → 文が同じ、audit が1行ずつ、制限を超えると 429。同じ SES の本登録済みの人なら兼任になる。
 - **S2-19** K31：担当者・EG の本登録・再設定・送り直しは、会社が参加中のときだけ。テスト：会社を停止して GET `/invite/`・POST `/forgot`・resend → 通らない。再開すると元のリンクが期限内なら使える。
@@ -324,6 +332,7 @@ K25 の相手の決め方は `Registration::recipientsFor($target)`。登録し�
 - **S2-27** K20：EG の必須を空にできない。テスト：本人・代表者・管理者が POST `/engineers/{id}`・`/profile`・`/account` で姓・名・ふりがな・電話・郵便番号・住所を空 → 断り。`EngineerController::update` の「名は空でもよい」をやめる（5章の 3）。
 - **S2-28** K34：担当者の見え方の仕上げ。テスト：担当者で `/ses/company` に編集・担当者の登録・停止のボタンが無く、代表者には出る。
 - **S2-30** K29・L：担当者・EG の取り消し。権限は 0-10 の「登録・送り直し」と同じ（代表者は自社の担当者・EG、担当者は自社の EG、管理者は全部）。EG は応募・配信などの行があれば断る。`engineers` と `users` の両方が消える。テスト：組み合わせごとに POST → 通る／403／他社は 404。
+- **S2-31** K23：今いる管理者の直属の EG。新しくは作れないが、今いる人は同じ決まりを通る。テスト：直属で仮登録の EG に管理者が resend → 本登録の画面で企業名を出さず（`user_label` と同じ）、通すと参加中、知らせは管理者全員（代表者がいないため）。移行済みの直属の EG は `/register/complete` を通せる。
 - **S2-29** マニュアル：`ses.md`・`ses-steps.md`（担当者・エンジニアの登録、代表者と担当者の違い、交代は管理者へ。担当者向けの節を同じファイルに足す）、`engineer.md`・`engineer-steps.md`（本登録、「確認しました」は本登録で済む、氏名は両方に反映）、`admin.md`・`admin-steps.md`（担当者・エンジニアの登録、交代）。テスト：GET `/manual/ses`・`/manual/engineer` に「本登録」が出る。
 
 ### 3-3. 作業の骨子
@@ -358,9 +367,10 @@ K25 の相手の決め方は `Registration::recipientsFor($target)`。登録し�
 - **S3-07** K33：`park:invite-admin` で作った人も、同じ本登録を通る。別の立場の仮登録の行があれば断る。テスト：`artisan` → 行ができる・`token_kind`=register・出力のリンクを開いて S3-02 を通す。役割 eg の仮登録の行 → 終了コード 1。
 - **S3-08** K24・K30：管理者の役割を足せるのは本登録済みの EG だけ。理由を出す。`addAdminRole` は空の値で既にある値を消さない。次のログインで管理者の立場の足りない項目を取る。テスト：仮登録の EG → 断り。本登録済み → 兼任、電話の入っていた行が空で消えない、立場を選ぶと `/register/complete`。
 - **S3-09** K20：管理者の必須（企業名・姓・名・電話）を空にできない。`W::updateAdmin`・`/account`・`/register/complete`。テスト：項目ごとに空で POST → 断り、値は残る。
-- **S3-10** K26・6章：通しのテスト。管理者 → 管理者・SES・担当者・EG、代表者 → 担当者・EG、担当者 → EG の6本で、仮登録メール → 本登録 → 確認コード → 参加中 → 知らせ → 一覧の状態を1本ずつたどる。テスト：`RegistrationFlowsTest.php`（データプロバイダ）。
+- **S3-10** K26・6章：通しのテスト。管理者 → 管理者・SES・担当者・EG、代表者 → 担当者・EG、担当者 → EG の7本で、仮登録メール → 本登録 → 確認コード → 参加中 → 知らせ → 一覧の状態を1本ずつたどる。テスト：`RegistrationFlowsTest.php`（データプロバイダ）。
 - **S3-11** K29・L：管理者の取り消しと画面。テスト：仮登録の管理者を別の管理者が取り消せる。一覧・詳細の仮登録の行に「取り消し」ボタン（確認ダイアログ付き）が権限のある人にだけ出て、本登録済みの行には出ない。
 - **S3-12** エビデンス：Leo のテスト設計書の項目ごとに、公開版の画面と届いたメールの記録を取る（AC の対応表を渡す。テストのアドレスだけを使う）。`resources/manuals` と README に「招待」の古い言い方が残っていない。テスト：GET `/manual/*` に「ご招待」「パスワードを設定してください」が出ない。
+- **S3-13** R01・R06・K08：今ある動きが壊れていない。テスト：参加中の人のログイン → 確認コード → ホーム。一度通した人には聞かない。兼任の人は立場を選ぶ。一覧の 停止・再開・退会・詳細 が、管理者・代表者それぞれで今のまま通る（`SuspendLeaveTest`・`ListButtonsTest`・`DualRoleTest`）。自分自身と最後の使える管理者は不可のまま。
 
 ### 4-3. 作業の骨子
 
@@ -409,6 +419,14 @@ K25 の相手の決め方は `Registration::recipientsFor($target)`。登録し�
 
 - テスト：`.env` は作らない。Git Bash で `APP_KEY=base64:… /d/xampp/php/php.exe artisan test --testsuite=Feature`（`tests/Unit` が無いので `--testsuite=Feature` を付ける）。手元の開始時点は 401 件中 1 件失敗（CLI の PHP に zip 拡張が無いことによる `EngineerDetailTest` の Excel）。
 - MariaDB でのマイグレーションの確認は、捨ててよいテスト用の DB で行い、`jonassan_park` に触らない。
+
+## 7. Leo への確認
+
+勝手に変えず、次の形で計画した。違えば Leo が直す。
+
+1. **仮登録中に所属 SES を直せるか**：K29 は「上位が企業名を直せる」、8章は担当者・EG の企業名が「所属 SES を選ぶ」。K15 では SES の人は自社に固定なので、計画は「管理者だけが、参加中の SES に直せる」と読んだ（S2-15）。
+2. **移行で `rep_*` と代表者本人の名前が違うとき**：B4 は「会社の代表者の欄に同じものを出す」。5章の 1 で既にある列に書かないので、`rep_*` が入っていて本人の姓名と違う会社は、代表者が姓名を保存するか交代するまで、そのまま残る。計画は書き換えない。
+3. **AC とテスト設計書の番号がぶつかる**：`v0.2.0-03-テスト設計書.md`（版 01）も `S1-01` などの番号を使っていて、この計画の AC とは中身が違う（例：設計書の S1-16 はバージョン、計画の S1-16 は本登録の完了）。計画の番号は変えなかった。設計書に「計画の AC」の列を足すか、片方に接頭辞を付けるのを勧める。
 
 ---
 

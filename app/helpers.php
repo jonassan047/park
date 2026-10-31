@@ -6,7 +6,7 @@ use Illuminate\Support\HtmlString;
 
 const PARK_LABELS = [
     'role' => ['admin' => '管理者', 'ses' => 'SES', 'eg' => 'エンジニア'],
-    'sesStatus' => ['pending' => '申込中', 'active' => '参加中', 'suspended' => '停止', 'left' => '退会済'],
+    'sesStatus' => ['pending' => '申込中', 'provisional' => '仮登録', 'active' => '参加中', 'suspended' => '停止', 'left' => '退会済'],
     'engStatus' => ['available' => '待機中', 'proposing' => '提案中', 'working' => '稼働中', 'unavailable' => '休止', 'left' => '退会済'],
     'caseStatus' => ['draft' => '下書き', 'open' => '募集中', 'filled' => '充足', 'closed' => '終了'],
     'offerStatus' => ['sent' => '配信済み', 'viewed' => '既読', 'declined' => '見送り', 'applied' => '応募'],
@@ -23,7 +23,7 @@ const PARK_REJECT_REASONS = ['スキル・経験の不足', '経験年数', '単
 const PARK_FUNNEL = ['applied', 'submitted', 'doc_passed', 'interview', 'interviewed', 'won'];
 const PARK_PHASES = ['要件定義', '基本設計', '詳細設計', '実装', '単体テスト', '結合テスト', '総合テスト', '運用・保守', 'マネジメント'];
 const PARK_TONE = [
-    'pending' => 'warn', 'active' => 'ok', 'suspended' => 'mute', 'left' => 'mute', 'available' => 'ok', 'proposing' => 'info', 'working' => 'strong', 'unavailable' => 'mute',
+    'pending' => 'warn', 'provisional' => 'warn', 'active' => 'ok', 'suspended' => 'mute', 'left' => 'mute', 'available' => 'ok', 'proposing' => 'info', 'working' => 'strong', 'unavailable' => 'mute',
     'draft' => 'mute', 'open' => 'ok', 'filled' => 'strong', 'closed' => 'mute', 'sent' => 'info', 'viewed' => 'info', 'declined' => 'mute',
     'applied' => 'info', 'submitted' => 'info', 'doc_passed' => 'ok', 'interview' => 'warn', 'interviewed' => 'warn', 'won' => 'strong', 'rejected' => 'mute', 'withdrawn' => 'mute',
     'pass' => 'ok', 'fail' => 'mute', 'ended' => 'mute', 'issued' => 'warn', 'paid' => 'ok', 'queued' => 'warn', 'failed' => 'bad', 'saved' => 'mute',
@@ -63,13 +63,25 @@ function user_label(?object $u): string
     return trim(($s->name ?? '').' '.$u->name);
 }
 
-// 担当者・本人のアカウントの状態：退会済・停止・使用中・招待中（1か所で決める）
+// 人のアカウントの状態（1か所で決める。上から順に判定）：退会済・停止・仮登録（心当たりなし／期限切れ）・仮登録・参加中。
+// 「期限切れ」は別の状態ではなく、仮登録の中の表示
 function user_state(?object $u): string
 {
     if (!$u) return 'なし';
     if (!empty($u->left_at)) return '退会済';
     if (!$u->active) return '停止';
-    return $u->password ? '使用中' : '招待中';
+    if (empty($u->registered_at)) {
+        if (!empty($u->reg_declined_at)) return '仮登録（心当たりなし）';
+        if (empty($u->token) || empty($u->token_expires) || $u->token_expires <= now_str()) return '仮登録（期限切れ）';
+        return '仮登録';
+    }
+    return '参加中';
+}
+
+// 仮登録の状態か（「仮登録」で始まる言葉）
+function is_provisional_state(string $state): bool
+{
+    return str_starts_with($state, '仮登録');
 }
 
 // エンジニアを停止するときの確認の文（エンジニアの詳細と SES の詳細で同じ文を使う）

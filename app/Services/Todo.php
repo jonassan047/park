@@ -64,7 +64,7 @@ class Todo
             ->whereNotExists(fn ($q) => $q->select(DB::raw(1))->from('case_mails')->whereColumn('case_mails.case_id', 'c.id'))->get();
         foreach ($cases as $c) $out[] = self::item("新しい案件「{$c->title}」", 'エンジニアに案内する', "/cases/{$c->id}/mail");
         $out = array_merge($out, self::pipeline(self::apps()->where('a.ses_id', $sesId)));
-        foreach (DB::table('engineers')->where('ses_id', $sesId)->whereNull('self_confirmed_at')->get() as $e) {
+        foreach (DB::table('engineers')->where('ses_id', $sesId)->whereNotNull('registered_at')->whereNull('self_confirmed_at')->get() as $e) {
             $out[] = self::item("{$e->name} さんの本人の確認がまだ", 'ご本人に声をかける（確認するまで応募できません）', "/engineers/{$e->id}");
         }
         return $out;

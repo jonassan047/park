@@ -23,9 +23,10 @@ class NameSplitTest extends TestCase
         return $this->actingAs($u->fresh())->withSession([TwoFactor::SESSION_KEY => $u->id]);
     }
 
+    // 氏名・企業名が足りない（足りない項目の画面が出る）状態にする
     private function unfinish(string ...$emails): void
     {
-        DB::table('users')->whereIn('email', $emails)->update(['profile_completed_at' => null]);
+        DB::table('users')->whereIn('email', $emails)->update(['profile_completed_at' => null, 'name_sei' => null, 'name_mei' => null, 'company_name' => null]);
     }
 
     private function user(string $email): object
@@ -84,54 +85,41 @@ class NameSplitTest extends TestCase
         $this->assertSame(0, DB::table('users')->whereNull('name_sei')->count());
     }
 
-    public function test_m3_welcome_saves_joined_name(): void
+    // 最初の情報登録の画面（/welcome）は、足りない項目の画面（/register/complete）に替わった。足りない項目だけを入れる
+    public function test_m3_complete_saves_joined_name(): void
     {
         $this->unfinish('admin@park.example');
-        $this->as('admin@park.example')->post('/welcome', ['name_sei' => ' 山田　', 'name_mei' => '太郎', 'kana_sei' => 'やまだ', 'kana_mei' => 'たろう', 'company_name' => '見本運営株式会社'])->assertRedirect(url('/admin'));
+        $this->as('admin@park.example')->post('/register/complete', ['name_sei' => ' 山田　', 'name_mei' => '太郎', 'company_name' => '見本運営株式会社'])->assertRedirect(url('/admin'));
         $u = $this->user('admin@park.example');
         $this->assertSame('山田 太郎', $u->name);
-        $this->assertSame('やまだ たろう', $u->kana);
-        $this->assertSame(['山田', '太郎', 'やまだ', 'たろう'], [$u->name_sei, $u->name_mei, $u->kana_sei, $u->kana_mei]);
+        $this->assertSame(['山田', '太郎'], [$u->name_sei, $u->name_mei]);
+        $this->assertSame('見本運営株式会社', $u->company_name);
     }
 
-    public function test_m4_welcome_order_of_fields(): void
+    public function test_m4_complete_screen_order_of_fields(): void
     {
-        $this->unfinish('admin@park.example', 'ses1@park.example', 'eg1@park.example');
-        $this->as('eg1@park.example')->get('/welcome')->assertOk()
-            ->assertSeeInOrder(['氏名（姓）', '氏名（名）', 'ふりがな（姓）', 'ふりがな（名）', '電話'])->assertDontSee('所属・役職');
-        $this->as('admin@park.example')->get('/welcome')->assertOk()
-            ->assertSeeInOrder(['氏名（姓）', '氏名（名）', 'ふりがな（姓）', 'ふりがな（名）', '企業名', '所属・役職', '電話']);
-        $this->as('ses1@park.example')->get('/welcome')->assertOk()
-            ->assertSeeInOrder(['氏名（姓）', '氏名（名）', 'ふりがな（姓）', 'ふりがな（名）', 'SES名', '所属・役職', '電話']);
-        $html = $this->get('/welcome')->getContent();
+        $this->unfinish('admin@park.example');
+        DB::table('users')->where('email', 'admin@park.example')->update(['phone' => null]);
+        $html = $this->as('admin@park.example')->get('/register/complete')->assertOk()
+            ->assertSeeInOrder(['企業名', '氏名（姓）', '氏名（名）', '電話番号'])->getContent();
         $this->assertStringContainsString('class="pair"', $html);
         $this->assertStringContainsString('name="name_sei"', $html);
-        $this->assertStringContainsString('name="kana_mei"', $html);
         $this->assertStringNotContainsString('name="name"', $html);
         $this->assertStringNotContainsString('name="kana"', $html);
     }
 
-    public function test_m4_required_both_name_parts_and_optional_kana(): void
+    public function test_m4_required_both_name_parts(): void
     {
         $this->unfinish('admin@park.example');
-        $this->as('admin@park.example')->from('/welcome')->post('/welcome', ['name_sei' => '姓だけ', 'name_mei' => '', 'company_name' => '社'])->assertSessionHasErrors('name_mei');
+        $this->as('admin@park.example')->from('/register/complete')->post('/register/complete', ['name_sei' => '姓だけ', 'name_mei' => '', 'company_name' => '社'])->assertSessionHasErrors('name_mei');
         $this->assertNull($this->user('admin@park.example')->profile_completed_at);
-        $this->post('/welcome', ['name_sei' => '', 'name_mei' => '名だけ', 'company_name' => '社'])->assertSessionHasErrors('name_sei');
+        $this->post('/register/complete', ['name_sei' => '', 'name_mei' => '名だけ', 'company_name' => '社'])->assertSessionHasErrors('name_sei');
         $this->assertNull($this->user('admin@park.example')->profile_completed_at);
-        // ふりがなは任意
-        $this->post('/welcome', ['name_sei' => '姓', 'name_mei' => '名', 'company_name' => '社'])->assertRedirect(url('/admin'));
+        // ふりがなは任意（足りない項目の画面には出ない）
+        $this->post('/register/complete', ['name_sei' => '姓', 'name_mei' => '名', 'company_name' => '社'])->assertRedirect(url('/admin'));
         $u = $this->user('admin@park.example');
         $this->assertNotNull($u->profile_completed_at);
         $this->assertEmpty($u->kana);
-    }
-
-    public function test_m4_initial_values_from_users_then_engineers(): void
-    {
-        $this->unfinish('eg1@park.example');
-        DB::table('users')->where('email', 'eg1@park.example')->update(['name_sei' => '利用', 'name_mei' => '者', 'kana_sei' => 'りよう', 'kana_mei' => 'しゃ']);
-        $this->as('eg1@park.example')->get('/welcome')->assertSee('value="利用"', false)->assertSee('value="者"', false)->assertSee('value="りよう"', false);
-        DB::table('users')->where('email', 'eg1@park.example')->update(['name' => '', 'name_sei' => null, 'name_mei' => null, 'kana' => null, 'kana_sei' => null, 'kana_mei' => null]);
-        $this->as('eg1@park.example')->get('/welcome')->assertSee('value="山田"', false)->assertSee('value="太郎"', false);
     }
 
     public function test_m5_account_keeps_name_when_both_empty(): void
@@ -151,11 +139,11 @@ class NameSplitTest extends TestCase
         $before = $this->user('admin@park.example')->name;
         $this->as('admin@park.example')->from('/account')->post('/account', ['name_mei' => '名だけ'])->assertSessionHasErrors('name_sei');
         $this->assertSame($before, $this->user('admin@park.example')->name);
-        $this->post('/account', ['name_sei' => '管理者'])->assertRedirect(url('/account'));
+        // 名はどこでも必須になったので（台帳 K19・K20）、姓だけの保存は断る（以前は、名を空にできた）
+        $this->post('/account', ['name_sei' => '管理者'])->assertSessionHas('flash.type', 'bad');
         $a = $this->user('admin@park.example');
-        $this->assertSame('管理者', $a->name);
-        $this->assertSame('管理者', $a->name_sei);
-        $this->assertNull($a->name_mei);
+        $this->assertSame($before, $a->name);
+        $this->assertNotNull($a->name_mei);
     }
 
     public function test_m5_account_shows_sei_mei_labels(): void
@@ -223,16 +211,18 @@ class NameSplitTest extends TestCase
     public function test_m7_length_boundary(): void
     {
         $this->unfinish('admin@park.example');
-        $this->as('admin@park.example')->from('/welcome');
-        foreach (['name_sei', 'name_mei', 'kana_sei', 'kana_mei'] as $k) {
+        $this->as('admin@park.example')->from('/register/complete');
+        foreach (['name_sei', 'name_mei'] as $k) {
             $in = ['name_sei' => '姓', 'name_mei' => '名', 'company_name' => '社', $k => str_repeat('あ', 51)];
-            $this->post('/welcome', $in)->assertSessionHasErrors($k);
+            $this->post('/register/complete', $in)->assertSessionHasErrors($k);
             $this->assertNull($this->user('admin@park.example')->profile_completed_at);
         }
-        $this->post('/welcome', ['name_sei' => str_repeat('あ', 50), 'name_mei' => str_repeat('い', 50), 'company_name' => '社'])->assertRedirect(url('/admin'));
+        $this->post('/register/complete', ['name_sei' => str_repeat('あ', 50), 'name_mei' => str_repeat('い', 50), 'company_name' => '社'])->assertRedirect(url('/admin'));
         $u = $this->user('admin@park.example');
         $this->assertSame(str_repeat('あ', 50), $u->name_sei);
         $this->assertSame(str_repeat('い', 50), $u->name_mei);
+        // ふりがなの51文字は、アカウントの画面で断る（足りない項目の画面には、ふりがなは出ない）
+        foreach (['kana_sei', 'kana_mei'] as $k) $this->post('/account', ['name_sei' => '姓', 'name_mei' => '名', $k => str_repeat('あ', 51)])->assertSessionHasErrors($k);
         // エンジニアの登録・編集も 51 文字はだめ
         $this->as('admin@park.example')->post('/engineers', ['ses_id' => '1', 'name_sei' => str_repeat('あ', 51), 'name_mei' => '名'])->assertSessionHas('flash.type', 'bad');
         $this->assertSame(0, DB::table('engineers')->where('name_sei', 'like', str_repeat('あ', 51).'%')->count());
@@ -274,7 +264,7 @@ class NameSplitTest extends TestCase
         $u = $this->user('ses1b@park.example');
         $this->assertSame(['追加', '担当'], [$u->name_sei, $u->name_mei]);
 
-        $this->post('/admin/ses', ['name' => '登録 SES', 'contact_name' => '連絡 太郎', 'email' => 'reg-ses@park.example'])->assertRedirect();
+        $this->post('/admin/ses', ['name' => '登録 SES', 'rep_sei' => '連絡', 'rep_mei' => '太郎', 'email' => 'reg-ses@park.example'])->assertRedirect();
         $u = $this->user('reg-ses@park.example');
         $this->assertSame(['連絡', '太郎'], [$u->name_sei, $u->name_mei]);
 
@@ -298,14 +288,14 @@ class NameSplitTest extends TestCase
     public function test_m11_legacy_name_post_is_split(): void
     {
         $this->unfinish('admin@park.example');
-        $this->as('admin@park.example')->post('/welcome', ['name' => '佐藤 美咲', 'kana' => 'さとう みさき', 'company_name' => '社'])->assertRedirect(url('/admin'));
+        $this->as('admin@park.example')->post('/register/complete', ['name' => '佐藤 美咲', 'company_name' => '社'])->assertRedirect(url('/admin'));
         $u = $this->user('admin@park.example');
-        $this->assertSame(['佐藤', '美咲', 'さとう', 'みさき', '佐藤 美咲'], [$u->name_sei, $u->name_mei, $u->kana_sei, $u->kana_mei, $u->name]);
-        // 空白の無い古い送り方は名が足りず、/welcome ではエラー
+        $this->assertSame(['佐藤', '美咲', '佐藤 美咲'], [$u->name_sei, $u->name_mei, $u->name]);
+        // 空白の無い古い送り方は名が足りず、足りない項目の画面ではエラー
         $this->unfinish('admin@park.example');
-        $this->from('/welcome')->post('/welcome', ['name' => '一語', 'company_name' => '社'])->assertSessionHasErrors('name_mei');
+        $this->from('/register/complete')->post('/register/complete', ['name' => '一語', 'company_name' => '社'])->assertSessionHasErrors('name_mei');
         // 姓・名の欄があれば、古い name は無視される
-        $this->post('/welcome', ['name' => '無視 される', 'name_sei' => '本当', 'name_mei' => '姓名', 'company_name' => '社'])->assertRedirect(url('/admin'));
+        $this->post('/register/complete', ['name' => '無視 される', 'name_sei' => '本当', 'name_mei' => '姓名', 'company_name' => '社'])->assertRedirect(url('/admin'));
         $this->assertSame('本当 姓名', $this->user('admin@park.example')->name);
     }
 
@@ -322,16 +312,22 @@ class NameSplitTest extends TestCase
         $this->post('/admin/admins', ['name_sei' => '招待', 'name_mei' => '次郎', 'company_name' => '企業', 'email' => 'm11a@park.example'])->assertSessionHas('flash.type', 'ok');
         $this->assertSame(['招待', '次郎', '招待 次郎'], [($u = $this->user('m11a@park.example'))->name_sei, $u->name_mei, $u->name]);
 
+        // SES の登録は、企業正式名称・代表者の姓・名・メールの4つだけ（代表者がそのまま登録される人）。担当者の欄は送られても使わない
         $this->post('/admin/ses', ['name' => '分割 SES', 'rep_sei' => '代表', 'rep_mei' => '一', 'contact_sei' => '担当', 'contact_mei' => '二', 'email' => 'm11b@park.example'])->assertSessionHas('flash.type', 'ok');
         $s = DB::table('ses_companies')->where('name', '分割 SES')->first();
-        $this->assertSame(['代表 一', '代表', '一', '担当 二', '担当', '二'], [$s->rep_name, $s->rep_sei, $s->rep_mei, $s->contact_name, $s->contact_sei, $s->contact_mei]);
+        $this->assertSame(['代表 一', '代表', '一'], [$s->rep_name, $s->rep_sei, $s->rep_mei]);
+        $this->assertNull($s->contact_sei);
         $u = $this->user('m11b@park.example');
-        $this->assertSame(['担当', '二'], [$u->name_sei, $u->name_mei]);
+        $this->assertSame(['代表', '一'], [$u->name_sei, $u->name_mei]);
 
+        // 担当者を足せるのは参加中の会社だけ
+        DB::table('ses_companies')->where('id', $s->id)->update(['status' => 'active']);
         $this->post('/admin/ses/'.$s->id.'/users', ['name_sei' => '追加', 'name_mei' => '三', 'email' => 'm11c@park.example'])->assertRedirect();
         $this->assertSame(['追加', '三'], [($u = $this->user('m11c@park.example'))->name_sei, $u->name_mei]);
 
-        $this->post('/admin/ses', ['name' => '宛名なし SES', 'contact_mei' => '名だけ', 'email' => 'm11d@park.example'])->assertSessionHas('flash.type', 'ok');
-        $this->post('/admin/ses', ['name' => '宛名なし SES2', 'email' => 'm11e@park.example'])->assertSessionHas('flash.type', 'bad');
+        // 代表者の姓・名のどちらが欠けても登録できない
+        $this->post('/admin/ses', ['name' => '宛名なし SES', 'rep_mei' => '名だけ', 'email' => 'm11d@park.example'])->assertSessionHas('flash.type', 'bad');
+        $this->post('/admin/ses', ['name' => '宛名なし SES2', 'rep_sei' => '姓だけ', 'email' => 'm11e@park.example'])->assertSessionHas('flash.type', 'bad');
+        $this->assertSame(0, DB::table('ses_companies')->where('name', 'like', '宛名なし%')->count());
     }
 }

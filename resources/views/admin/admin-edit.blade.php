@@ -4,7 +4,7 @@
     // 姓・名の列がまだ空の人は、つないだ name から分けて出す
     [$nameSei, $nameMei] = ($u->name_sei || $u->name_mei) ? [$u->name_sei, $u->name_mei] : split_name($u->name);
     [$kanaSei, $kanaMei] = ($u->kana_sei || $u->kana_mei) ? [$u->kana_sei, $u->kana_mei] : split_name($u->kana);
-    $state = !$u->active ? '停止' : ($u->password ? '使用中' : '招待中');
+    $state = user_state($u);
     $self = (int) $u->id === (int) auth()->id();
     $emailFixed = $self || !$u->active || $u->password; // 変えられるのは、招待中の他人だけ
     // 古い形の郵便番号も、そろえられれば「123-4567」で出す

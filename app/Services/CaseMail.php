@@ -92,7 +92,7 @@ class CaseMail
         $n = 0;
         foreach ($items as $eid => $it) {
             $e = DB::table('engineers')->find((int) $eid);
-            if (!$e || DB::table('case_mails')->where('case_id', $c->id)->where('engineer_id', $e->id)->exists()) continue;
+            if (!$e || !$e->registered_at || DB::table('case_mails')->where('case_id', $c->id)->where('engineer_id', $e->id)->exists()) continue;
             $own = $sesId === null || (int) $e->ses_id === $sesId;
             $score = Matcher::score($c, $e);
             $body = (string) $it['body'];

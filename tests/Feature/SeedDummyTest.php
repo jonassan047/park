@@ -91,7 +91,9 @@ class SeedDummyTest extends TestCase
     {
         [$code, $out] = $this->go(['--ses' => 8, '--staff' => 15, '--eg' => 80, '--seed' => 1]);
         $this->assertSame(0, $code, $out);
-        $this->assertSame(['ses' => 8, 'staff' => 15, 'eg' => 80, 'egu' => 80], $this->dummyCounts());
+        // 担当者は、指定の15人に、仮登録の会社の代表者（1社に1人）を足した数
+        $this->assertSame(1, DB::table('ses_companies')->where('email', 'like', 'ses-d%@park.example')->where('status', 'provisional')->count());
+        $this->assertSame(['ses' => 8, 'staff' => 15 + 1, 'eg' => 80, 'egu' => 80], $this->dummyCounts());
         $direct = DB::table('ses_companies')->where('kind', 'direct')->value('id');
         $this->assertSame(8, DB::table('engineers')->where('email', 'like', 'eg-d%@park.example')->where('ses_id', $direct)->count());
         foreach (DB::table('engineers')->where('email', 'like', 'eg-d%@park.example')->get() as $e) {
@@ -216,7 +218,8 @@ class SeedDummyTest extends TestCase
         $this->assertSame(0, $c, $out);
         $emails = DB::table('users')->where('email', 'like', '%-d%@park.example')->pluck('email')->all();
         $this->assertSame(count($emails), count(array_unique($emails)));
-        $this->assertSame(['ses' => 10, 'staff' => 16, 'eg' => 24, 'egu' => 24], $this->dummyCounts());
+        // 担当者は、指定の8人×2回に、仮登録の会社の代表者（1回に1人）を足した数
+        $this->assertSame(['ses' => 10, 'staff' => 16 + 2, 'eg' => 24, 'egu' => 24], $this->dummyCounts());
         foreach (['ses_companies' => ['ses-d06', 'ses-d10'], 'engineers' => ['eg-d013', 'eg-d024']] as $t => $list) {
             foreach ($list as $l) $this->assertSame(1, DB::table($t)->where('email', "$l@park.example")->count(), $l);
         }

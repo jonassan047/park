@@ -46,12 +46,12 @@ class PurgeSamplesTest extends TestCase
     private function real(): array
     {
         $aid = W::createUser('real-admin@example.com', '実在 管理', 'admin', 'abcd1234');
-        DB::table('users')->where('id', $aid)->update(['profile_completed_at' => now_str(), 'company_name' => '実在運営']);
+        $this->completeProfile($aid, ['company_name' => '実在運営']);
         $admin = User::find($aid);
         $eid = W::createEngineer(W::directSesId(), ['name' => '実在 直属', 'email' => 'real-eg@example.com'], $admin);
         $uid = DB::table('users')->where('email', 'real-eg@example.com')->value('id');
-        DB::table('users')->where('id', $uid)->update(['password' => bcrypt('abcd1234'), 'profile_completed_at' => now_str()]);
-        DB::table('engineers')->where('id', $eid)->update(['consent_at' => now_str()]); // 同意済み（未同意だと /eg/consent へ送られる）
+        DB::table('users')->where('id', $uid)->update(['password' => bcrypt('abcd1234')]);
+        $this->completeProfile($uid); // 必須項目・同意がそろった本登録済みの形（足りないと、足りない項目の画面へ送られる）
         return [$admin, $eid];
     }
 
@@ -211,7 +211,7 @@ class PurgeSamplesTest extends TestCase
 
         // 見本の行が 0、残った管理者でダッシュボードが開く（直属のエンジニアがいるので「はじめましょう」は出ない）
         $this->assertSame(0, $this->parkStatus()['見本データ（@park.example）']);
-        $this->as('real-admin@example.com')->get('/admin')->assertOk()->assertDontSee('PARK をはじめましょう')->assertSee('招待の状況');
+        $this->as('real-admin@example.com')->get('/admin')->assertOk()->assertDontSee('PARK をはじめましょう')->assertSee('登録の状況');
         foreach (['/admin/ses', '/admin/engineers', '/admin/cases', '/admin/applications', '/admin/contracts', '/admin/invoices', '/admin/mail', '/admin/reports', '/admin/settings'] as $t) {
             $this->get($t)->assertOk();
         }
@@ -236,6 +236,18 @@ class PurgeSamplesTest extends TestCase
         $this->assertNotNull(DB::table('app_notifications')->find($keep));
     }
 
+    // 消す管理者の詳細（/admin/admins/{id}）を指す通知も消す。残る管理者を指すものは残す
+    public function test_q7_notifications_pointing_to_a_purged_admin_are_removed(): void
+    {
+        [$admin] = $this->real();
+        $sampleAdmin = (int) User::where('email', 'admin@park.example')->value('id');
+        $gone = N_insert($admin->id, "/admin/admins/$sampleAdmin");
+        $keep = N_insert($admin->id, "/admin/admins/{$admin->id}");
+        $this->assertSame(0, Artisan::call('park:purge-samples', ['--yes' => true]));
+        $this->assertNull(DB::table('app_notifications')->find($gone));
+        $this->assertNotNull(DB::table('app_notifications')->find($keep));
+    }
+
     public function test_q9_second_run_does_nothing(): void
     {
         $this->real();
@@ -257,6 +269,36 @@ class PurgeSamplesTest extends TestCase
         $this->assertNotNull(DB::table('ses_companies')->find($other));
         $this->assertSame(1, DB::table('ses_companies')->where('kind', 'direct')->count());
         $this->assertSame(1, DB::table('ses_companies')->where('kind', 'ses')->count());
+    }
+
+    // v0.2.0：見本ではない会社の代表者が見本の人なら、会社に代表者がいなくなるので止める
+    public function test_q10_non_sample_ses_with_sample_representative_stops(): void
+    {
+        $this->real();
+        $sampleUser = (int) User::where('email', 'ses2@park.example')->value('id');
+        $other = DB::table('ses_companies')->insertGetId(['name' => '実在 SES', 'kind' => 'ses', 'status' => 'active', 'email' => 'real-ses2@example.com', 'rep_user_id' => $sampleUser, 'created_at' => now_str(), 'updated_at' => now_str()]);
+        $before = $this->counts();
+        $this->assertSame(1, Artisan::call('park:purge-samples', ['--yes' => true]));
+        $this->assertSame($before, $this->counts());
+        $this->assertSame([], $this->backups());
+        // 見るだけでも、止まる理由が出る（名前・メールは出さない）
+        $this->assertSame(1, Artisan::call('park:purge-samples'));
+        $this->assertStringNotContainsString('real-ses2@example.com', Artisan::output());
+        $this->assertNotNull(DB::table('ses_companies')->find($other));
+    }
+
+    // v0.2.0：残る人の「登録した人」が消す人を指していたら、消す前に空にする
+    public function test_q11_registered_by_pointing_to_a_purged_person_becomes_null(): void
+    {
+        [$admin] = $this->real();
+        $sampleAdmin = (int) User::where('email', 'admin@park.example')->value('id');
+        $kept = W::createEngineer(W::directSesId(), ['name' => '実在 登録済み', 'email' => 'real-eg3@example.com'], User::find($sampleAdmin));
+        $keptUser = (int) DB::table('users')->where('email', 'real-eg3@example.com')->value('id');
+        $this->assertSame($sampleAdmin, (int) DB::table('users')->find($keptUser)->registered_by);
+        $this->assertSame(0, Artisan::call('park:purge-samples', ['--yes' => true]));
+        $this->assertNull(DB::table('users')->find($keptUser)->registered_by);
+        $this->assertNotNull(DB::table('users')->find($keptUser)); // 人は残る
+        $this->assertNotNull($kept);
     }
 
     public function test_q1_sample_seeder_does_not_run_in_production(): void

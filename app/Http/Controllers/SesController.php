@@ -5,7 +5,9 @@ namespace App\Http\Controllers;
 use App\Services\Billing;
 use App\Services\Matcher;
 use App\Services\Notifier as N;
+use App\Services\Registration;
 use App\Services\Workflow as W;
+use App\Support\Requirements;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -56,7 +58,7 @@ class SesController extends Controller
         $mine = $r->query('mine') === '1';
         $q = DB::table('cases')->orderByDesc('id');
         $mine ? $q->where('source_ses_id', $r->user()->ses_id) : $q->where('status', 'open');
-        $engs = DB::table('engineers')->where('ses_id', $r->user()->ses_id)->whereIn('status', ['available', 'proposing'])->get();
+        $engs = Registration::usableEngineers(DB::table('engineers')->where('ses_id', $r->user()->ses_id)->whereIn('status', ['available', 'proposing']))->get();
         $list = $q->get()->map(function ($c) use ($engs) {
             $best = $engs->map(fn ($e) => ['e' => $e, 's' => Matcher::score($c, $e)['score']])->sortByDesc('s')->first();
             $c->best = $best ? "{$best['e']->name}（{$best['s']}点）" : '—';
@@ -92,8 +94,9 @@ class SesController extends Controller
         $id = $r->user()->ses_id;
         $engs = DB::table('engineers')->where('ses_id', $id)->orderBy('name')->get();
         $egIds = $engs->pluck('id');
+        $s = DB::table('ses_companies')->find($id);
         return view('ses.company', [
-            's' => DB::table('ses_companies')->find($id),
+            's' => $s, 'repName' => Registration::repName($s)[0], 'isRep' => Requirements::isRep($r->user()),
             'users' => DB::table('users')->where('ses_id', $id)->where('role', 'ses')->get(),
             'engs' => $engs,
             'working' => DB::table('contracts')->whereIn('engineer_id', $egIds)->where('status', 'active')->pluck('engineer_id')->flip(),
@@ -102,23 +105,33 @@ class SesController extends Controller
         ]);
     }
 
+    // 会社情報の編集は代表者だけ（担当者は見るだけ。K34）
     public function companyEdit(Request $r)
     {
-        return view('ses.company-edit', ['s' => DB::table('ses_companies')->find($r->user()->ses_id)]);
+        abort_unless(Requirements::isRep($r->user()), 403);
+        $s = DB::table('ses_companies')->find($r->user()->ses_id);
+        [, $sei, $mei] = Registration::repName($s);
+        return view('ses.company-edit', ['s' => $s, 'rep' => ['sei' => $sei, 'mei' => $mei]]);
     }
 
     public function saveCompany(Request $r)
     {
-        // 名前の変更は、三つの入口（最初の登録・アカウント・ここ）で同じ動きにするため Workflow に任せる
-        $r->merge(['name' => clean_name($r->input('name'))]);
-        $r->validate(['name' => 'nullable|max:100'], [], ['name' => 'SES名（会社名）']);
-        $ad = W::addressCols($r->all() + ['postal_code' => null, 'address' => null], '所在地'); // 送られなかった欄は空として扱う（この画面は全欄を送る）
+        abort_unless(Requirements::isRep($r->user()), 403);
+        $in = Registration::companyInput($r->all());
+        // 必須の欄（企業名・代表者の姓名・電話・郵便番号・住所）は、空にできない。長さ・形も確かめる
+        if ($bad = Requirements::checkNotEmpty('ses', true, $in) ?? Registration::checkCompanyInput($in)) return back()->withInput()->with('flash', ['msg' => $bad, 'type' => 'bad']);
+        $ad = W::addressCols($r->all(), '所在地');
         if (isset($ad['bad'])) return back()->withInput()->with('flash', ['msg' => $ad['bad'], 'type' => 'bad']);
-        $warn = ($name = $r->input('name')) ? W::renameSes((int) $r->user()->ses_id, $name, $r->user()) : null;
-        DB::table('ses_companies')->where('id', $r->user()->ses_id)->update([
-            ...W::sesPeopleCols($r->all()), 'phone' => str_in($r->input('phone')),
-            ...$ad['ok'], 'employees' => int_or_null($r->input('employees')), 'strengths' => str_in($r->input('strengths')), 'updated_at' => now_str(),
-        ]);
+        $sesId = (int) $r->user()->ses_id;
+        $warn = null;
+        DB::transaction(function () use ($r, $in, $ad, $sesId, &$warn) {
+            // 名前の変更は、アカウント・管理者の画面と同じ動きにするため Workflow に任せる
+            $warn = W::renameSes($sesId, (string) $in['ses_name'], $r->user());
+            DB::table('ses_companies')->where('id', $sesId)->update([
+                'phone' => $in['phone'], ...$ad['ok'], 'employees' => int_or_null($r->input('employees')), 'strengths' => str_in($r->input('strengths')), 'updated_at' => now_str(),
+            ]);
+            Registration::syncRepName($sesId, $in['name_sei'], $in['name_mei']); // 代表者の姓名は、会社の欄と本人の氏名の両方に
+        });
         return $warn ? $this->go('/ses/company', '保存しました。'.$warn, 'warn') : $this->go('/ses/company', '保存しました。');
     }
 

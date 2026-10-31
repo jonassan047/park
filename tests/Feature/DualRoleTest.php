@@ -58,8 +58,15 @@ class DualRoleTest extends TestCase
         $this->as(self::SES1, 'ses')->post('/engineers', ['name_sei' => '緑川', 'name_mei' => '本人', 'email' => self::SES1])->assertRedirect();
         $eid = (int) $this->row(self::SES1)->engineer_id;
         $this->assertGreaterThan(0, $eid);
-        if ($consent) DB::table('engineers')->where('id', $eid)->update(['consent_at' => now_str(), 'self_confirmed_at' => now_str()]);
+        $this->fillEngineer($eid, $consent);
         return $eid;
+    }
+
+    // エンジニアの必須項目（ふりがな・電話・郵便番号・住所）を入れて候補に出る形にする。$consent が false のときは、同意だけが足りない
+    private function fillEngineer(int $eid, bool $consent): void
+    {
+        DB::table('engineers')->where('id', $eid)->update(['kana_sei' => 'てすと', 'kana_mei' => 'ほんにん', 'phone' => '090-0000-0000', 'postal_code' => '100-0001', 'address' => '東京都（テスト）', 'registered_at' => now_str()]
+            + ($consent ? ['consent_at' => now_str(), 'self_confirmed_at' => now_str()] : []));
     }
 
     // 管理者が自分をエンジニア（直属でなく ses1 所属）として登録 → 管理者兼任
@@ -68,7 +75,7 @@ class DualRoleTest extends TestCase
         $this->as(self::ADMIN, 'admin')->post('/engineers', ['ses_id' => $this->sesId(self::SES1), 'name_sei' => '管理', 'name_mei' => '本人', 'email' => self::ADMIN])->assertRedirect();
         $eid = (int) $this->row(self::ADMIN)->engineer_id;
         $this->assertGreaterThan(0, $eid);
-        if ($consent) DB::table('engineers')->where('id', $eid)->update(['consent_at' => now_str(), 'self_confirmed_at' => now_str()]);
+        $this->fillEngineer($eid, $consent);
         return $eid;
     }
 
@@ -148,7 +155,7 @@ class DualRoleTest extends TestCase
         $u0 = $this->users(); $i0 = $this->invites();
         // 押すのは、同じ会社のほかの担当者
         $b = W::createUser('ses1b@park.example', '緑川 二郎', 'ses', 'park1234', ['ses_id' => $this->sesId(self::SES1)]);
-        DB::table('users')->where('id', $b)->update(['profile_completed_at' => now_str()]);
+        $this->completeProfile($b);
         $u0 = $this->users();
         $this->as('ses1b@park.example', 'ses')->post('/engineers/4/invite')->assertSessionHas('flash.type', 'ok')
             ->assertSessionHas('flash.msg', 'この方のアカウントに、エンジニアの役割を足しました。');
@@ -174,7 +181,7 @@ class DualRoleTest extends TestCase
     public function test_ac3_admin_registers_other_admin_as_engineer_notifies_them(): void
     {
         $id2 = W::createUser('admin2@park.example', '管理者 二郎', 'admin', 'park1234');
-        DB::table('users')->where('id', $id2)->update(['profile_completed_at' => now_str()]);
+        $this->completeProfile($id2);
         $u0 = $this->users();
         $this->as(self::ADMIN, 'admin')->post('/engineers', ['ses_id' => $this->sesId(self::SES1), 'name_sei' => '二郎', 'name_mei' => 'エンジニア', 'email' => 'admin2@park.example'])->assertSessionHas('flash.type', 'ok');
         $this->assertSame($u0, $this->users());
@@ -244,7 +251,7 @@ class DualRoleTest extends TestCase
         $msg = 'このメールアドレスはすでに使われています。';
         // 停止中の担当者
         $extra = W::createUser('ses1b@park.example', '緑川 二郎', 'ses', 'park1234', ['ses_id' => $this->sesId(self::SES1)]);
-        DB::table('users')->where('id', $extra)->update(['active' => 0, 'profile_completed_at' => now_str()]);
+        $this->completeProfile($extra, ['active' => 0]);
         $u0 = $this->users(); $e0 = $this->engineers();
         $this->as(self::SES1, 'ses')->post('/engineers', ['name_sei' => '停止', 'name_mei' => '中', 'email' => 'ses1b@park.example'])->assertSessionHas('flash.msg', $msg);
         // 退会済
@@ -501,37 +508,36 @@ class DualRoleTest extends TestCase
     {
         $eid = $this->dualSes(false);
         $this->login(self::SES1);
-        $this->post('/login/role', ['to' => 'eg'])->assertRedirect('/eg/consent');
-        $this->get('/eg')->assertRedirect('/eg/consent');
-        $this->get("/engineers/$eid")->assertRedirect('/eg/consent');
-        $this->get('/notifications')->assertRedirect('/eg/consent');
-        $this->get('/eg/consent')->assertOk()->assertSee('個人情報')->assertSee('ログアウト');
-        $this->get('/account')->assertOk();
-        $this->post('/eg/consent', [])->assertSessionHasErrors();
+        $this->post('/login/role', ['to' => 'eg'])->assertRedirect();
+        // 同意は「足りない項目の画面」で取る（判定は立場ごと）。足りないうちは、ほかの画面へは行けない
+        $this->get('/eg')->assertRedirect('/register/complete');
+        $this->get("/engineers/$eid")->assertRedirect('/register/complete');
+        $this->get('/notifications')->assertRedirect('/register/complete');
+        $this->get('/register/complete')->assertOk()->assertSee('個人情報')->assertSee('ログアウト');
+        $this->get('/account')->assertRedirect('/register/complete');
+        $this->post('/register/complete', [])->assertSessionHasErrors();
         $this->assertNull(DB::table('engineers')->find($eid)->consent_at);
-        $this->get('/eg')->assertRedirect('/eg/consent');
-        $this->post('/eg/consent', ['consent' => 1])->assertRedirect();
+        $this->get('/eg')->assertRedirect('/register/complete');
+        $this->post('/register/complete', ['consent' => 1])->assertRedirect();
         $this->assertNotNull(DB::table('engineers')->find($eid)->consent_at);
-        $this->assertSame(1, $this->audits('consent'));
         $this->get('/eg')->assertOk();
-        // 同意済みで /eg/consent を開くとホームへ
-        $this->get('/eg/consent')->assertRedirect();
+        // 足りない項目がなくなったら、足りない項目の画面はホームへ回す
+        $this->get('/register/complete')->assertRedirect();
     }
 
-    public function test_ac9_consent_page_forbidden_for_ses_acting_and_no_loop_with_welcome(): void
+    public function test_ac9_old_consent_entrances_go_to_the_complete_screen_and_no_loop(): void
     {
         $eid = $this->dualSes(false);
+        // 古い入口 /eg/consent・/welcome は、足りない項目の画面へ転送される。SES の立場では /eg/consent は開けない
         $this->as(self::SES1, 'ses')->get('/eg/consent')->assertForbidden();
-        // 最初の情報登録が未了でも、/welcome と /eg/consent がぐるぐる回らない
-        DB::table('users')->where('email', self::SES1)->update(['profile_completed_at' => null]);
         $this->as(self::SES1, 'eg');
-        $r = $this->get('/eg');
-        $r->assertRedirect('/welcome');
-        $this->get('/welcome')->assertOk();
-        DB::table('users')->where('email', self::SES1)->update(['profile_completed_at' => now_str()]);
-        $this->as(self::SES1, 'eg');
-        $this->get('/eg')->assertRedirect('/eg/consent');
-        $this->get('/eg/consent')->assertOk();
+        $this->get('/eg')->assertRedirect('/register/complete');
+        $this->get('/eg/consent')->assertRedirect('/register/complete');
+        $this->get('/welcome')->assertRedirect('/register/complete');
+        $this->get('/register/complete')->assertOk();
+        // ふりがなも足りなければ、同じ画面で一緒に取る
+        DB::table('engineers')->where('id', $eid)->update(['kana_sei' => null, 'kana_mei' => null]);
+        $this->get('/register/complete')->assertOk()->assertSee('ふりがな（姓）');
     }
 
     public function test_ac9_non_dual_engineer_with_consent_unaffected(): void
@@ -682,7 +688,7 @@ class DualRoleTest extends TestCase
         $sid = $this->sesId(self::SES1);
         // ほかに担当者がいる（最後の1人でない）
         $other = W::createUser('ses1c@park.example', '緑川 三郎', 'ses', 'park1234', ['ses_id' => $sid]);
-        DB::table('users')->where('id', $other)->update(['profile_completed_at' => now_str(), 'password' => bcrypt('park1234')]);
+        $this->completeProfile($other, ['password' => bcrypt('park1234')]);
         $this->as(self::ADMIN, 'admin')->post("/admin/ses/$sid/users/$uid/delete")
             ->assertSessionHas('flash.msg', '緑川 一郎 さんを SES 担当者から外しました。エンジニアとしては引き続き入れます。');
         $u = $this->row(self::SES1);
@@ -702,7 +708,7 @@ class DualRoleTest extends TestCase
         $uid = $this->uid(self::SES1);
         $sid = $this->sesId(self::SES1);
         $other = W::createUser('ses1c@park.example', '緑川 三郎', 'ses', 'park1234', ['ses_id' => $sid]);
-        DB::table('users')->where('id', $other)->update(['profile_completed_at' => now_str()]);
+        $this->completeProfile($other);
         $this->as(self::ADMIN, 'admin')->post("/admin/ses/$sid/users/$uid/suspend")->assertSessionHas('flash.msg');
         $this->assertSame(0, (int) $this->row(self::SES1)->active);
         $this->flushSession();
@@ -742,7 +748,7 @@ class DualRoleTest extends TestCase
         $eid = $this->dualAdmin();
         $admin = $this->row(self::ADMIN);
         $admin2 = W::createUser('admin3@park.example', '管理者 三郎', 'admin', 'park1234');
-        DB::table('users')->where('id', $admin2)->update(['profile_completed_at' => now_str()]);
+        $this->completeProfile($admin2);
         $aid = W::apply(1, $eid, ['start_ok' => 1, 'price_ok' => 1, 'style_ok' => 1], $this->row(self::ADMIN));
         $this->assertGreaterThan(0, $aid);
         DB::table('audit_log')->delete();

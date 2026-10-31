@@ -35,14 +35,16 @@ class ListButtonsTest extends TestCase
     // 使用中の管理者を足す
     private function addAdmin(string $email, string $name = '管理者 二郎', array $extra = []): int
     {
-        return W::createUser($email, $name, 'admin', 'park1234', $extra);
+        $id = W::createUser($email, $name, 'admin', 'park1234', $extra);
+        $this->completeProfile($id); // 必須項目（企業名・電話）を入れて、足りない項目の画面で止まらないようにする
+        return $id;
     }
 
-    // パスワード未設定（招待中）の管理者
+    // パスワード未設定（仮登録中）の管理者
     private function addInvitedAdmin(string $email): int
     {
         $id = $this->addAdmin($email, '招待 三郎');
-        DB::table('users')->where('id', $id)->update(['password' => null]);
+        DB::table('users')->where('id', $id)->update(['password' => null, 'registered_at' => null, 'token' => 'inv-'.$id, 'token_kind' => 'register', 'token_expires' => date('Y-m-d H:i:s', time() + 86400)]);
         return $id;
     }
 
@@ -290,8 +292,8 @@ class ListButtonsTest extends TestCase
         // 詳細の右上
         DB::table('ses_companies')->where('id', $s2)->update(['status' => 'suspended']);
         $r = $this->admin()->get("/admin/ses/$s2")->assertOk();
-        $r->assertSee("/admin/ses/$s2/resume", false)->assertDontSee('承認して招待を送る');
-        $this->admin()->get("/admin/ses/$pend")->assertOk()->assertSee('承認して招待を送る');
+        $r->assertSee("/admin/ses/$s2/resume", false)->assertDontSee('承認する');
+        $this->admin()->get("/admin/ses/$pend")->assertOk()->assertSee('承認する');
     }
 
     public function test_ses_suspend_guards_and_roles(): void

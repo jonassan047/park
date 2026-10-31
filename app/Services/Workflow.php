@@ -6,24 +6,23 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use App\Services\Notifier as N;
+use App\Support\Requirements;
 use App\Support\SkillCatalog;
 
-// 業務の手続き（招待・登録・配信・応募・選考・成約・延長）。画面（コントローラー）からはここを呼ぶ。
+// 業務の手続き（登録・配信・応募・選考・成約・延長）。画面（コントローラー）からはここを呼ぶ。
 class Workflow
 {
     // ---------- ユーザーと招待 ----------
-    public static function issueToken(int $userId, int $days = 7): string
+    // リンクの発行は Registration に集めている（種類 register＝本登録、reset＝パスワードの再設定）
+    public static function issueToken(int $userId, int $days = 7, string $kind = 'register'): string
     {
-        $t = Str::random(40);
-        DB::table('users')->where('id', $userId)->update(['token' => $t, 'token_expires' => date('Y-m-d H:i:s', time() + $days * 86400)]);
-        return $t;
+        return Registration::issueToken($userId, $days, $kind);
     }
 
-    public static function userByToken(?string $t): ?object
+    // 会社の代表者（または次の代表者）か
+    public static function isRep(?object $u): bool
     {
-        if (!$t) return null;
-        // 停止・退会の人は、古い招待リンクも使えない
-        return DB::table('users')->where('token', $t)->where('token_expires', '>', now_str())->where('active', 1)->first();
+        return Requirements::isRep($u);
     }
 
     // ---------- 担当者の停止・再開・退会（管理者と、自社の SES）と、エンジニアの停止・再開 ----------
@@ -68,7 +67,7 @@ class Workflow
         N::audit($actor->id ?? null, 'ses-user-resume', self::sesCompanyName($sesId).' '.$u->name);
         $msg = "{$u->name} さんを再開しました。";
         // パスワードを決めていなかった人は、招待のリンクが無いので、送り直す方法を添える
-        if (!$u->password) $msg .= '招待を送り直すには、『担当者を登録』で同じメールアドレスを入れてください。';
+        if (!$u->registered_at) $msg .= '仮登録のままなので、『送り直し』でご案内を送ってください。';
         return ['type' => 'ok', 'msg' => $msg];
     }
 
@@ -130,7 +129,7 @@ class Workflow
             N::audit($actor->id ?? null, 'admin-resume', "#user {$id}");
             $msg = "{$u->name} さんを再開しました。";
             // パスワードを決めていなかった人は、招待のリンクが無いので、送り直す方法を添える
-            if (!$u->password) $msg .= '招待のリンクが無いので、『招待を送り直す』で送ってください。';
+            if (!$u->registered_at) $msg .= '仮登録のままなので、『送り直し』でご案内を送ってください。';
             return ['type' => 'ok', 'msg' => $msg];
         });
     }
@@ -300,7 +299,8 @@ class Workflow
 
     private static function usableUserRow(string $email)
     {
-        return DB::table('users')->where('email', strtolower($email))->where('active', 1)->whereNull('left_at');
+        // 役割を足せるのは、本登録が済んだ人だけ（仮登録中は断る。立場が変わってしまうため）
+        return DB::table('users')->where('email', strtolower($email))->where('active', 1)->whereNull('left_at')->whereNotNull('registered_at');
     }
 
     // エンジニアの役割を足せる人：同じ SES の担当者、または（実行者が管理者のとき）管理者。すでに別のエンジニアと兼任している人は除く
@@ -357,8 +357,10 @@ class Workflow
     public static function addAdminRole(int $userId, array $d, $actor): void
     {
         $u = DB::table('users')->find($userId);
-        $upd = ['role' => 'admin', 'ses_id' => null, 'company_name' => clean_name($d['company_name'] ?? null), 'updated_at' => now_str()];
-        foreach (['position', 'phone', 'postal_code', 'address'] as $f) $upd[$f] = str_in($d[$f] ?? '');
+        // 空の値で、既にある値を消さない
+        $upd = ['role' => 'admin', 'ses_id' => null, 'updated_at' => now_str()];
+        if (($c = clean_name($d['company_name'] ?? null)) !== null) $upd['company_name'] = $c;
+        foreach (['position', 'phone', 'postal_code', 'address'] as $f) if (($v = str_in($d[$f] ?? '')) !== null) $upd[$f] = $v;
         DB::table('users')->where('id', $userId)->update($upd);
         if ($u->engineer_id) DB::table('engineers')->where('id', $u->engineer_id)->update(['is_operator' => 1]);
         N::audit($actor->id ?? null, 'dual-add-admin', "#user {$userId}");
@@ -394,12 +396,12 @@ class Workflow
         }
         $u = DB::table('users')->where('email', $email)->first();
         if ($u && !$u->active) return null; // 停止中・退会済の人は招待しない
-        if ($u && $u->password) return $u; // すでに使っている人は招待しない
+        if ($u && ($u->password || $u->registered_at)) return $u; // すでに使っている人には送らない
         // 未設定の人でも、立場（役割・SES・エンジニア）が依頼と違うなら招待しない（別の立場のリンクを渡さないため）
         if ($u && ($u->role !== $d['role'] || (int) $u->ses_id !== (int) ($d['ses_id'] ?? 0) || (int) $u->engineer_id !== (int) ($d['engineer_id'] ?? 0))) return null;
         if (!$u) {
             $row = ['email' => $email] + self::nameCols((string) $d['name'], $d['name_sei'] ?? null, $d['name_mei'] ?? null) + self::kanaCols($d) + ['role' => $d['role'], 'ses_id' => $d['ses_id'] ?? null,
-                'engineer_id' => $d['engineer_id'] ?? null, 'created_at' => now_str(), 'updated_at' => now_str()];
+                'engineer_id' => $d['engineer_id'] ?? null, 'registered_by' => $actor->id ?? null, 'created_at' => now_str(), 'updated_at' => now_str()];
             // 企業名は管理者だけ（宛名に出る）
             // 所属・役職・電話・郵便番号・住所も管理者だけ（呼ぶ側で検査・そろえ済みの値を渡す）
             if ($d['role'] === 'admin') {
@@ -409,19 +411,16 @@ class Workflow
             $id = DB::table('users')->insertGetId($row);
             $u = DB::table('users')->find($id);
         }
-        $t = self::issueToken($u->id);
-        $what = ['eg' => 'エンジニアとして PARK に登録されました。', 'ses' => 'SES のご担当者として PARK にご招待します。', 'admin' => 'PARK の管理者に招待されました。'][$d['role']];
-        N::queueMail($email, $d['name'], 'ご招待：パスワードを設定してください',
-            user_label($u)." 様\n\n{$what}".($note ? "\n$note" : '')."\n\n次のリンクから、パスワードを設定してください（7日間有効）。\n".url("/invite/$t")."\n\n"
-            .($d['role'] === 'eg' ? 'パスワードの設定のときに、個人情報の取り扱いへの同意をお願いしています。スキルシートは、事実にもとづいて一緒に作ります。' : ''), 'invite', null, admin_sender($actor));
-        N::audit($actor->id ?? null, 'invite', lbl('role', $d['role'])." {$d['name']} <$email>");
+        // 仮登録のご案内（リンクと文面は Registration・RegistrationText）
+        Registration::sendLink($u, $actor, $note);
         return $u;
     }
 
+    // パスワードを持つ行を作る。使うのは「はじめの設定」・見本・テストだけ（人を登録するときは仮登録を使う）なので、本登録済みの日時を入れる
     public static function createUser(string $email, string $name, string $role, string $password, array $extra = []): int
     {
         return DB::table('users')->insertGetId(['email' => strtolower($email)] + self::nameCols($name, $extra['sei'] ?? null, $extra['mei'] ?? null) + ['role' => $role, 'password' => Hash::make($password),
-            'ses_id' => $extra['ses_id'] ?? null, 'engineer_id' => $extra['engineer_id'] ?? null, 'created_at' => now_str(), 'updated_at' => now_str()]);
+            'ses_id' => $extra['ses_id'] ?? null, 'engineer_id' => $extra['engineer_id'] ?? null, 'registered_at' => now_str(), 'created_at' => now_str(), 'updated_at' => now_str()]);
     }
 
     // 管理者の情報（氏名・企業名・メール）を直す。$d は name_sei・name_mei・company_name・email（メールは無ければ変えない）。
@@ -445,7 +444,7 @@ class Workflow
         if ($emailChanged) {
             if ((int) $u->id === (int) ($actor->id ?? 0)) return $bad('ご自分のメールアドレスは変えられません。');
             if (!$u->active) return $bad('停止中の人のメールアドレスは変えられません。');
-            if ($u->password) return $bad('使用中の方のメールアドレスは変えられません。');
+            if ($u->password || $u->registered_at) return $bad('使用中の方のメールアドレスは変えられません。');
             if ($new === '' || !filter_var($new, FILTER_VALIDATE_EMAIL)) return $bad('メールアドレスを正しく入れてください。');
             if (DB::table('users')->where('email', $new)->where('id', '!=', $id)->exists()) return $bad('このメールアドレスはすでに使われています。');
         }
@@ -510,12 +509,18 @@ class Workflow
     // 管理者は企業名、SES は SES名（ses_companies.name）も保存する。戻り値は、画面に出す注意（なければ null）
     public static function saveProfile($user, array $d): ?string
     {
-        $ks = clean_name($d['kana_sei'] ?? null); $km = clean_name($d['kana_mei'] ?? null);
-        $upd = ['kana_sei' => $ks, 'kana_mei' => $km, 'kana' => join_name($ks, $km), 'phone' => str_in($d['phone'] ?? ''), 'updated_at' => now_str()];
+        $upd = ['updated_at' => now_str()];
+        // ふりがな・所属／役職も、送られたときだけ更新する（送られなかった欄を空で上書きしない）
+        if (array_key_exists('kana_sei', $d) || array_key_exists('kana_mei', $d)) {
+            $ks = clean_name($d['kana_sei'] ?? null); $km = clean_name($d['kana_mei'] ?? null);
+            $upd += ['kana_sei' => $ks, 'kana_mei' => $km, 'kana' => join_name($ks, $km)];
+        }
+        // 電話は必須なので、送られなかったときは今の値のまま（送られて空なら、呼ぶ側が断っている）
+        if (array_key_exists('phone', $d)) $upd['phone'] = str_in($d['phone'] ?? '');
         // 姓・名がどちらも空なら、今の氏名のまま
         $ns = clean_name($d['name_sei'] ?? null); $nm = clean_name($d['name_mei'] ?? null);
         if ($ns !== null || $nm !== null) $upd += ['name_sei' => $ns, 'name_mei' => $nm, 'name' => join_name($ns, $nm)];
-        if ($user->role !== 'eg') $upd['position'] = str_in($d['position'] ?? '');
+        if ($user->role !== 'eg' && array_key_exists('position', $d)) $upd['position'] = str_in($d['position'] ?? '');
         if ($user->role === 'admin' && ($c = str_in($d['company_name'] ?? '')) !== null) $upd['company_name'] = $c;
         // 管理者の郵便番号・住所（呼ぶ側で検査済み。キーが来たものだけ保存）
         if ($user->role === 'admin') {
@@ -523,9 +528,10 @@ class Workflow
         }
         if (!DB::table('users')->where('id', $user->id)->value('profile_completed_at')) $upd['profile_completed_at'] = now_str();
         $warn = null;
-        DB::transaction(function () use ($user, $upd, $d, &$warn) {
+        DB::transaction(function () use ($user, $upd, $ns, $nm) {
             DB::table('users')->where('id', $user->id)->update($upd);
-            if ($user->role === 'ses' && ($n = str_in($d['ses_name'] ?? '')) !== null) $warn = self::renameSes((int) $user->ses_id, $n, $user);
+            // 代表者が姓名を直したら、会社の代表者の欄も同じにする（企業名はここでは変えられない）
+            if ($user->role === 'ses' && ($ns !== null || $nm !== null) && Requirements::isRep($user)) Registration::syncRepName((int) $user->ses_id, $ns, $nm);
         });
         N::audit($user->id, 'profile', '');
         return $warn;
@@ -589,17 +595,6 @@ class Workflow
         N::toAdmins('SES から参加の申し込みがありました', "{$name}（{$contact} 様）から参加の申し込みがありました。内容を確認し、承認してください。", "/admin/ses/$id", true, 'ses-apply');
         N::queueMail(str_in($d['email'] ?? ''), $contact, '参加のお申し込みを受け付けました', "{$contact} 様\n\nPARK への参加のお申し込みを受け付けました。管理者が内容を確認のうえ、ご連絡します。\n\n会社名：{$name}", 'ses-apply');
         return $id;
-    }
-
-    // 承認して、担当者に招待を出す。戻り値は、招待メールを実際に出したか（すでに使っている人・停止中・退会済・メールなしは false）
-    public static function approveSes(int $sesId, $actor, ?string $note = null): bool
-    {
-        $s = DB::table('ses_companies')->find($sesId);
-        DB::table('ses_companies')->where('id', $sesId)->update(['status' => 'active', 'joined_at' => $s->joined_at ?: today_str(), 'updated_at' => now_str()]);
-        N::audit($actor->id, 'ses-approve', $s->name);
-        if (!$s->email) return false;
-        $u = self::invite(['email' => $s->email, 'name' => $s->contact_name ?: ($s->rep_name ?: $s->name), 'name_sei' => $s->contact_name ? $s->contact_sei : ($s->rep_name ? $s->rep_sei : null), 'name_mei' => $s->contact_name ? $s->contact_mei : ($s->rep_name ? $s->rep_mei : null), 'kana_sei' => $s->contact_kana_sei, 'kana_mei' => $s->contact_kana_mei, 'role' => 'ses', 'ses_id' => $sesId], $actor, $note ?? "{$s->name} の PARK への参加を承認しました。");
-        return $u && !$u->password;
     }
 
     // ---------- エンジニア ----------
@@ -796,8 +791,10 @@ class Workflow
         $c = DB::table('cases')->find($caseId);
         $bySes = []; $count = 0;
         foreach (array_map('intval', $engineerIds) as $eid) {
-            $e = DB::table('engineers')->find($eid);
-            if (!$e || $e->suspended_at || $e->status === 'left' || DB::table('case_offers')->where('case_id', $caseId)->where('engineer_id', $eid)->exists()) continue; // 停止中・退会済は飛ばす
+            // 仮登録・停止中・退会済は飛ばす。所属の会社が参加中（active。直属の入れ物も active）でなければ飛ばす
+            $e = Registration::usableEngineers(DB::table('engineers')->where('id', $eid)
+                ->whereExists(fn ($q) => $q->select(DB::raw(1))->from('ses_companies')->whereColumn('ses_companies.id', 'engineers.ses_id')->where('ses_companies.status', 'active')))->first();
+            if (!$e || DB::table('case_offers')->where('case_id', $caseId)->where('engineer_id', $eid)->exists()) continue;
             $s = Matcher::score($c, $e);
             DB::table('case_offers')->insert(['case_id' => $caseId, 'engineer_id' => $eid, 'score' => $s['score'], 'reasons' => implode(' / ', $s['reasons']),
                 'missing' => implode(' / ', $s['missing']), 'sent_by' => $actor->id, 'sent_at' => now_str()]);
@@ -832,6 +829,7 @@ class Workflow
         if ($c->status !== 'open') throw new \RuntimeException('この案件は募集を終えています');
         if ($e->status === 'left') throw new \RuntimeException('このエンジニアは退会済のため、応募できません。');
         if ($e->suspended_at) throw new \RuntimeException('このエンジニアは停止中のため、応募できません。');
+        if (!$e->registered_at) throw new \RuntimeException('このエンジニアは、本登録がまだ済んでいないため、応募できません。');
         if (!$e->self_confirmed_at) throw new \RuntimeException('エンジニアご本人が、まだ登録の内容を確認していません。ご本人がホームの「登録の内容の確認」を済ませてから応募してください');
         // GP の中での二重応募は受け付けない（同じ人が別の SES 経由で出るのを防ぐ）
         if (DB::table('applications')->where('case_id', $caseId)->where('engineer_id', $engineerId)->exists()) throw new \RuntimeException('この案件には応募済みです');

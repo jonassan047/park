@@ -49,7 +49,7 @@ class SesDetailButtonsTest extends TestCase
     private function addSesUser(int $sesId, string $email, string $name): int
     {
         $id = W::createUser($email, $name, 'ses', 'park1234', ['ses_id' => $sesId]);
-        DB::table('users')->where('id', $id)->update(['profile_completed_at' => now()]);
+        $this->completeProfile($id);
         return $id;
     }
 

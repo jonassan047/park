@@ -3,7 +3,9 @@
 namespace App\Support;
 
 use App\Services\Notifier as N;
+use App\Services\Registration;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 // 2要素認証（メールの確認コード）。パスワードのあと、登録のメールアドレスに6桁のコードを送り、入れてもらう。
 // コードはセッションにだけ（ハッシュで）置く。10分で切れ、5回まちがえたら送り直してもらう
@@ -58,7 +60,7 @@ class TwoFactor
         $skip = self::skipped($u);
         if ($skip || self::confirmed($u)) {
             N::audit($u->id, '2fa-skip', "from={$from} ".($skip ? 'skipped' : 'confirmed'));
-            self::pass($r);
+            self::pass($r); // 本登録の途中のリンクが変わっていたときは、ログアウトされる（呼ぶ側で $r->user() を確かめる）
             return;
         }
         $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
@@ -106,11 +108,20 @@ class TwoFactor
     }
 
     // 2要素認証を通ったことにする（確認コードのほか、メールで届いた招待・再設定のリンクから来たとき）
-    public static function pass(Request $r): void
+    // 本登録の途中だった人は、ここで保存して完了する（確認コードを省く環境の道もここを通るので、1か所でよい）。
+    // 戻り値：通したら true。本登録のリンクが変わっていた（送り直し・「心当たりがない」）ときは、何も保存せずログアウトして false
+    public static function pass(Request $r): bool
     {
+        if (in_array(Registration::finishPending($r), ['renewed', 'unusable'], true)) {
+            Auth::logout();
+            $r->session()->invalidate();
+            $r->session()->regenerateToken();
+            return false;
+        }
         $r->session()->forget([self::PENDING_KEY, self::DEV_KEY]);
         $r->session()->put(self::SESSION_KEY, $r->user()->id);
         $r->session()->regenerate();
+        return true;
     }
 
     // 画面に出すメールアドレス（ta***@gmail.com）

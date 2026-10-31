@@ -19,10 +19,13 @@ class DummySeed
 {
     const SUFFIX = '@park.example';
 
-    // 担当者・エンジニアの状態と割合（v0.2.0 の状態の列ができるまでは、今ある列で表す）
+    // 担当者・エンジニアの状態と割合（v0.2.0 の仮登録 → 本登録の状態）
     const STATE_RATIO = ['A' => 50, 'B' => 10, 'C' => 15, 'D' => 15, 'E' => 10];
-    const STATE_LABEL = ['A' => '本登録済み', 'B' => '本登録の途中', 'C' => '招待中', 'D' => '仮登録のまま（期限切れ）', 'E' => '停止中'];
-    const SES_LABEL = ['pending' => '申込中', 'active' => '参加中', 'suspended' => '停止'];
+    const STATE_LABEL = ['A' => '本登録済み', 'B' => '参加中（必須項目が足りない）', 'C' => '仮登録', 'D' => '仮登録（期限切れ）', 'E' => '停止中'];
+    const SES_LABEL = ['pending' => '申込中', 'provisional' => '仮登録', 'active' => '参加中', 'suspended' => '停止'];
+    const DUMMY_PHONE = '03-0000-0000';
+    const DUMMY_POSTAL = '100-0001';
+    const DUMMY_ADDRESS = '東京都千代田区（ダミー）';
     const DIRECT_RATE = 0.1;       // 直属の既定の割合（エンジニアの人数に対して）
     const UNAVAILABLE_RATE = 15;   // 本登録済みのエンジニアのうち、休止中にする割合（%）
     const MIN_SKILLS = 3;
@@ -105,11 +108,12 @@ class DummySeed
         if ($errors) return ['errors' => $errors, 'env' => $env];
         if (($opt['seed'] ?? null) === null || $opt['seed'] === '') $seed = random_int(1, 2147483647);
 
-        // 会社の状態の件数（申込中は ses≥3、停止は ses≥4 のときだけ。残りは参加中）
+        // 会社の状態の件数（申込中は ses≥3、停止は ses≥4、仮登録は ses≥5 のときだけ。残りは参加中）
         $nPending = $ses >= 3 ? max(1, (int) round($ses * 0.15)) : 0;
         $nSuspended = $ses >= 4 ? max(1, (int) round($ses * 0.10)) : 0;
-        $nOpen = $ses - $nPending; // 担当者がいる会社（参加中・停止）
-        if ($staff < $nOpen) return ['errors' => ["担当者は最低 {$nOpen} 人です（申込中ではない SES 1社に1人ずつ）。"], 'env' => $env];
+        $nProvisional = $ses >= 5 ? 1 : 0; // 仮登録の会社は、代表者（仮登録）が1人だけ。エンジニアはいない
+        $nOpen = $ses - $nPending - $nProvisional; // 担当者・エンジニアがいる会社（参加中・停止）
+        if ($staff < $nOpen) return ['errors' => ["担当者は最低 {$nOpen} 人です（参加中・停止の SES 1社に1人ずつ）。"], 'env' => $env];
 
         $rng = new Randomizer(new Mt19937($seed));
         $pick = fn (array $a) => $a[$rng->getInt(0, count($a) - 1)];
@@ -124,7 +128,7 @@ class DummySeed
         $e0 = self::maxNo('/^eg-d(\d+)'.preg_quote(self::SUFFIX, '/').'$/i') + 1;
 
         // SES の会社
-        $sesStates = array_merge(array_fill(0, $nPending, 'pending'), array_fill(0, $nSuspended, 'suspended'), array_fill(0, $ses - $nPending - $nSuspended, 'active'));
+        $sesStates = array_merge(array_fill(0, $nPending, 'pending'), array_fill(0, $nProvisional, 'provisional'), array_fill(0, $nSuspended, 'suspended'), array_fill(0, $ses - $nPending - $nProvisional - $nSuspended, 'active'));
         $sesStates = $rng->shuffleArray($sesStates);
         $combos = [];
         foreach (self::CO_HEAD as $h) foreach (self::CO_TAIL as $t) $combos[] = $h.$t;
@@ -134,9 +138,9 @@ class DummySeed
             $companies[$i] = ['no' => $s0 + $i, 'email' => sprintf('ses-d%02d', $s0 + $i).self::SUFFIX, 'name' => $combos[$i % count($combos)].self::CO_SUFFIX, 'status' => $st,
                 'rep' => $person(), 'contact' => $person(), 'employees' => $rng->getInt(3, 80), 'strengths' => $pick(self::CO_STRENGTHS)];
         }
-        $open = array_keys(array_filter($companies, fn ($c) => $c['status'] !== 'pending'));
+        $open = array_keys(array_filter($companies, fn ($c) => in_array($c['status'], ['active', 'suspended'], true)));
 
-        // 担当者：申込中ではない各社に1人目（会社の email と同じ。停止中にしない）。残りは各社にランダムに配る
+        // 担当者：参加中・停止の各社に1人目（会社の email と同じ。会社の代表者。停止中にしない）。残りは各社にランダムに配る
         $st = self::stateList($rng, $staff);
         for ($k = 0; $k < $nOpen; $k++) {
             if ($st[$k] !== 'E') continue;
@@ -147,11 +151,16 @@ class DummySeed
         }
         $people = []; $seq = [];
         for ($k = 0; $k < $staff; $k++) {
-            if ($k < $nOpen) { $ci = $open[$k]; $seq[$ci] = 1; $p = $companies[$ci]['contact']; }
+            if ($k < $nOpen) { $ci = $open[$k]; $seq[$ci] = 1; $p = $companies[$ci]['rep']; }
             else { $ci = $pick($open); $seq[$ci] = ($seq[$ci] ?? 1) + 1; $p = $person(); }
             $no = $companies[$ci]['no'];
-            $people[] = $p + ['ci' => $ci, 'state' => $st[$k], 'days' => $rng->getInt(1, 30), 'expired' => $rng->getInt(1, 20),
+            $people[] = $p + ['ci' => $ci, 'state' => $st[$k], 'days' => $rng->getInt(1, 30), 'expired' => $rng->getInt(1, 20), 'first' => $seq[$ci] === 1,
                 'email' => $seq[$ci] === 1 ? sprintf('ses-d%02d', $no).self::SUFFIX : sprintf('ses-d%02d-%d', $no, $seq[$ci]).self::SUFFIX];
+        }
+        // 仮登録の会社の代表者（仮登録のまま。上の担当者の人数には数えない）
+        foreach ($companies as $ci => $c) {
+            if ($c['status'] !== 'provisional') continue;
+            $people[] = $c['rep'] + ['ci' => $ci, 'state' => 'C', 'days' => 1, 'expired' => 1, 'first' => true, 'email' => sprintf('ses-d%02d', $c['no']).self::SUFFIX];
         }
 
         // エンジニア：直属 $direct 人、残りは申込中ではない SES に（会社ごとの重み 1〜3）
@@ -239,28 +248,41 @@ class DummySeed
             $sesIds = [];
             foreach ($spec['companies'] as $i => $c) {
                 $pending = $c['status'] === 'pending';
+                $prov = $c['status'] === 'provisional';
                 $sesIds[$i] = DB::table('ses_companies')->insertGetId([
                     'name' => $c['name'], 'kind' => 'ses',
                     ...W::sesPeopleCols(['rep_sei' => $c['rep']['sei'], 'rep_mei' => $c['rep']['mei'], 'contact_sei' => $c['contact']['sei'], 'contact_mei' => $c['contact']['mei'],
                         'contact_kana_sei' => $c['contact']['kana_sei'], 'contact_kana_mei' => $c['contact']['kana_mei']]),
                     'email' => $c['email'], 'employees' => $c['employees'], 'strengths' => $c['strengths'],
                     'message' => $pending ? 'テスト用のダミーの申し込みです。' : null, 'status' => $c['status'],
-                    'agreed_at' => now_str(), 'self_confirmed_at' => $pending ? null : now_str(), 'joined_at' => $pending ? null : today_str(),
+                    // 仮登録の会社は、代表者の本登録で同意・参加日が入る
+                    'agreed_at' => $prov ? null : now_str(), 'self_confirmed_at' => ($pending || $prov) ? null : now_str(), 'joined_at' => ($pending || $prov) ? null : today_str(),
                     'created_at' => now_str(), 'updated_at' => now_str(),
                 ]);
             }
 
-            // SES の担当者
+            // SES の担当者（各社の1人目は代表者。代表者が本登録済み・停止なら、会社の電話・住所も入れる）
+            $repState = [];
             foreach ($spec['people'] as $p) {
                 $uid = self::createUser($hash, $p, 'ses', $sesIds[$p['ci']], null);
-                self::applyUserState($uid, $p);
+                self::applyUserState($uid, $p, 'ses');
+                if (!empty($p['first'])) {
+                    $repState[$p['ci']] = $p['state'];
+                    DB::table('ses_companies')->where('id', $sesIds[$p['ci']])->update(['rep_user_id' => $uid]);
+                }
+            }
+            foreach ($repState as $ci => $state) {
+                if ($state === 'B' || $spec['companies'][$ci]['status'] === 'provisional') continue; // 必須項目が足りない代表者の会社は、会社の項目も空のまま
+                DB::table('ses_companies')->where('id', $sesIds[$ci])->update(['phone' => self::DUMMY_PHONE, 'postal_code' => self::DUMMY_POSTAL, 'address' => self::DUMMY_ADDRESS]);
             }
 
             // エンジニア（アカウントつき）
             $engIds = [];
             foreach ($spec['engineers'] as $e) {
                 $sesId = $e['direct'] ? $directId : $sesIds[$e['ci']];
+                $done = in_array($e['state'], ['A', 'E']); // 本登録済み・停止中は、必須項目がそろっている
                 $d = ['name_sei' => $e['sei'], 'name_mei' => $e['mei'], 'kana_sei' => $e['kana_sei'], 'kana_mei' => $e['kana_mei'], 'email' => $e['email'],
+                    'phone' => $done ? self::DUMMY_PHONE : null, 'postal_code' => $done ? self::DUMMY_POSTAL : null, 'address' => $done ? self::DUMMY_ADDRESS : null,
                     'birth_year' => $e['birth_year'], 'years_exp' => $e['years_exp'], 'desired_price' => $e['desired_price'], 'min_price' => $e['min_price'],
                     'nearest_station' => $e['station'], 'available_from' => $e['avail_month'] === 0 ? today_str() : date('Y-m-01', mktime(0, 0, 0, (int) date('n') + $e['avail_month'], 1, (int) date('Y'))),
                     'work_style' => $e['work_style'], 'days_per_week' => $e['days_per_week'], 'summary' => $e['summary'], 'strengths' => $e['strengths'],
@@ -278,9 +300,10 @@ class DummySeed
                     'consent_at' => $consent ? $now : null,
                     'self_confirmed_at' => in_array($e['state'], ['A', 'E']) ? $now : null,
                     'suspended_at' => $e['state'] === 'E' ? $now : null,
+                    'registered_at' => in_array($e['state'], ['A', 'B', 'E']) ? $now : null, // 仮登録（C・D）は候補に出ない
                 ]);
                 $uid = self::createUser($hash, $e, 'eg', $sesId, $id);
-                self::applyUserState($uid, $e);
+                self::applyUserState($uid, $e, 'eg');
             }
 
             // createEngineer が残した、ベルの通知と登録の記録（ダミーの氏名が入る）を消す
@@ -308,16 +331,18 @@ class DummySeed
             + ['role' => $role, 'password' => $hash, 'ses_id' => $sesId, 'engineer_id' => $engineerId, 'created_at' => now_str(), 'updated_at' => now_str()]);
     }
 
-    // 状態ごとの列（担当者・エンジニアのアカウント）。C は招待のリンク（7日）、D は期限切れのリンク
-    private static function applyUserState(int $uid, array $p): void
+    // 状態ごとの列（担当者・エンジニアのアカウント）。A＝本登録済み（必須項目がそろっている）／B＝参加中だが必須項目が足りない／
+    // C＝仮登録（リンクは7日）／D＝仮登録の期限切れ／E＝停止中。本登録の日時（registered_at）が、参加中かどうかの印
+    private static function applyUserState(int $uid, array $p, string $role): void
     {
         $now = now_str();
+        $filled = $role === 'eg' ? ['phone' => self::DUMMY_PHONE] : ['phone' => self::DUMMY_PHONE, 'secrecy_agreed_at' => $now];
         $cols = match ($p['state']) {
-            'A' => ['active' => 1, 'profile_completed_at' => $now, 'two_factor_confirmed_at' => $now, 'last_login' => date('Y-m-d H:i:s', time() - $p['days'] * 86400)],
-            'B' => ['active' => 1, 'profile_completed_at' => null, 'two_factor_confirmed_at' => null],
-            'C' => ['password' => null],
-            'D' => ['password' => null, 'token' => Str::random(40), 'token_expires' => date('Y-m-d H:i:s', time() - $p['expired'] * 86400)],
-            'E' => ['active' => 0, 'profile_completed_at' => $now, 'token' => null, 'token_expires' => null],
+            'A' => ['active' => 1, 'registered_at' => $now, 'profile_completed_at' => $now, 'two_factor_confirmed_at' => $now, 'last_login' => date('Y-m-d H:i:s', time() - $p['days'] * 86400)] + $filled,
+            'B' => ['active' => 1, 'registered_at' => $now, 'profile_completed_at' => null, 'two_factor_confirmed_at' => null],
+            'C' => ['password' => null, 'registered_at' => null],
+            'D' => ['password' => null, 'registered_at' => null, 'token' => Str::random(40), 'token_kind' => 'register', 'token_expires' => date('Y-m-d H:i:s', time() - $p['expired'] * 86400)],
+            'E' => ['active' => 0, 'registered_at' => $now, 'profile_completed_at' => $now, 'token' => null, 'token_expires' => null] + $filled,
         };
         DB::table('users')->where('id', $uid)->update($cols + W::kanaCols(['kana_sei' => $p['kana_sei'], 'kana_mei' => $p['kana_mei']]) + ['updated_at' => $now]);
         if ($p['state'] === 'C') W::issueToken($uid);

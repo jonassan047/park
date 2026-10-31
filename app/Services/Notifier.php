@@ -71,13 +71,14 @@ class Notifier
         }
     }
 
-    public static function admins() { return DB::table('users')->where('role', 'admin')->where('active', 1)->get(); }
-    public static function sesUsers($sesId) { return DB::table('users')->where('role', 'ses')->where('ses_id', $sesId)->where('active', 1)->get(); }
+    // 知らせの相手は、本登録が済んだ人だけ（仮登録の人には送らない）
+    public static function admins() { return DB::table('users')->where('role', 'admin')->where('active', 1)->whereNotNull('registered_at')->get(); }
+    public static function sesUsers($sesId) { return DB::table('users')->where('role', 'ses')->where('ses_id', $sesId)->where('active', 1)->whereNotNull('registered_at')->get(); }
     // エンジニアあての相手：本人のアカウント（SES 担当者・管理者を兼ねている人も含む）。エンジニアが停止中・退会済なら届けない
     public static function egUsers($engineerId)
     {
-        return DB::table('users')->where('engineer_id', $engineerId)->whereIn('role', ['eg', 'ses', 'admin'])->where('active', 1)
-            ->whereExists(fn ($q) => $q->select(DB::raw(1))->from('engineers')->whereColumn('engineers.id', 'users.engineer_id')->whereNull('engineers.suspended_at')->where('engineers.status', '!=', 'left'))->get();
+        return DB::table('users')->where('engineer_id', $engineerId)->whereIn('role', ['eg', 'ses', 'admin'])->where('active', 1)->whereNotNull('users.registered_at')
+            ->whereExists(fn ($q) => Registration::usableEngineers($q->select(DB::raw(1))->from('engineers')->whereColumn('engineers.id', 'users.engineer_id')))->get();
     }
 
     public static function toAdmins(string $title, string $body, string $link, bool $mail = true, string $kind = 'notice'): void
