@@ -652,8 +652,10 @@ class Registration
                 foreach (['applications', 'case_offers', 'case_mails', 'contracts', 'messages', 'engineer_files'] as $t) {
                     if (DB::table($t)->where('engineer_id', $eid)->exists()) { $err = '応募・配信・やり取りなどの記録があるため、取り消せません。'; return; }
                 }
-                foreach (['engineer_skills', 'engineer_projects', 'engineer_histories', 'engineer_certs'] as $t) DB::table($t)->where('engineer_id', $eid)->delete();
-                DB::table('engineers')->where('id', $eid)->delete();
+                // 技術データ（スキル・経験票など）が入っている行は、v0.2.0 より前からいる人の可能性があるので、技術登録は残してアカウントだけ消す
+                $hasTech = false;
+                foreach (['engineer_skills', 'engineer_projects', 'engineer_histories', 'engineer_certs'] as $t) if (DB::table($t)->where('engineer_id', $eid)->exists()) $hasTech = true;
+                if (!$hasTech) DB::table('engineers')->where('id', $eid)->delete();
             }
             DB::table('app_notifications')->where('user_id', $id)->delete();
             DB::table('sessions')->where('user_id', $id)->delete();
