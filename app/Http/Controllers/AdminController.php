@@ -548,33 +548,14 @@ class AdminController extends Controller
         return $this->go('/admin/settings', $ok ? '送りました。届いたか確認してください。' : '送れませんでした。メールの画面でエラーを確認してください。', $ok ? 'ok' : 'bad');
     }
 
+    // 管理者が管理者を仮登録する：企業名・姓・名・メールの4つだけ（電話などは、ご本人が本登録で入れる）。手続きは Registration
     public function admins(Request $r)
     {
-        [$name, $sei, $mei] = name_parts($r->all(), 'name', 'name'); $company = clean_name($r->input('company_name'));
-        $email = strtolower(trim((string) $r->input('email')));
-        $bad = fn (string $msg) => back()->withInput()->with('flash', ['msg' => $msg, 'type' => 'bad']);
-        if ($name === null) return $bad('担当者名（姓）を入れてください。');
-        if ($company === null) return $bad('企業名を入れてください。');
-        if (mb_strlen((string) $sei) > 50 || mb_strlen((string) $mei) > 50) return $bad('担当者名は、姓・名とも50文字までです。');
-        if (mb_strlen((string) $r->input('kana_sei')) > 50 || mb_strlen((string) $r->input('kana_mei')) > 50) return $bad('ふりがなは、姓・名とも50文字までです。');
-        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) return $bad('メールアドレスを正しく入れてください。');
-        if (mb_strlen($company) > 100) return $bad('企業名は100文字までです。');
-        // エンジニアのアカウントなら、招待ではなく管理者の役割を足す（兼任）
-        $share = W::adminShareTarget($email);
-        if (!$share && DB::table('users')->where('email', $email)->exists()) return $bad('このメールアドレスはすでに使われています。');
-        // 任意の項目：所属・役職、電話番号、郵便番号、住所
-        $position = str_in($r->input('position')); $phone = str_in($r->input('phone'));
-        if ($position !== null && mb_strlen($position) > 100) return $bad('所属・役職は100文字までにしてください。');
-        if ($phone !== null && (mb_strlen($phone) > 30 || !preg_match('/^[0-9+\-() ]*$/', $phone))) return $bad('電話番号は30文字までの、数字・+・-・()・空白で入れてください。');
-        $ad = W::addressCols($r->only(['postal_code', 'address']));
-        if (isset($ad['bad'])) return $bad($ad['bad']);
-        if ($share) {
-            W::invite(['email' => $email, 'name' => $name, 'role' => 'admin', 'company_name' => $company, 'position' => $position, 'phone' => $phone] + $ad['ok'], $r->user());
-            return $this->go('/admin/admins', 'このメールアドレスのエンジニアのアカウントに、管理者の役割を足しました（招待メールは送っていません）。');
-        }
-        W::invite(['email' => $email, 'name' => $name, 'name_sei' => $sei, 'name_mei' => $mei, 'kana_sei' => $r->input('kana_sei'), 'kana_mei' => $r->input('kana_mei'), 'role' => 'admin', 'company_name' => $company,
-            'position' => $position, 'phone' => $phone] + $ad['ok'], $r->user());
-        return $this->go('/admin/admins', '登録し、招待メールを送りました。');
+        [, $sei, $mei] = name_parts($r->all(), 'name', 'name');
+        $res = Registration::provisionalAdmin(['company' => $r->input('company_name'), 'sei' => $sei, 'mei' => $mei, 'email' => $r->input('email')], $r->user());
+        if (isset($res['bad'])) return back()->withInput()->with('flash', ['msg' => $res['bad'], 'type' => 'bad']);
+        if ($res['linked']) return $this->go('/admin/admins', 'このメールアドレスのエンジニアのアカウントに、管理者の役割を足しました（仮登録のご案内は送っていません）。');
+        return $this->go('/admin/admins', '仮登録し、仮登録のご案内を送りました。');
     }
 
     // 管理者の詳細（管理者だけ。住所などの個人情報が出る）
@@ -602,18 +583,6 @@ class AdminController extends Controller
         $res = W::updateAdmin($id, $r->only(['name_sei', 'name_mei', 'kana_sei', 'kana_mei', 'company_name', 'email', 'position', 'phone', 'postal_code', 'address']), $r->user());
         if ($res['type'] === 'bad') return back()->withInput()->with('flash', ['msg' => $res['msg'], 'type' => 'bad']);
         return $this->go("/admin/admins/$id", $res['msg'], $res['type']);
-    }
-
-    // まだパスワードを設定していない管理者に、招待を送り直す（リンクは新しくなり、7日に戻る）
-    public function reinviteAdmin(Request $r, int $id)
-    {
-        $u = DB::table('users')->where('id', $id)->where('role', 'admin')->where('active', 1)->whereNull('password')->first();
-        if (!$u) return $this->go('/admin/admins', 'この人には送り直せません。', 'bad');
-        W::invite(['email' => $u->email, 'name' => $u->name, 'role' => 'admin'], $r->user());
-        // 詳細から押したら詳細へ、一覧から押したら一覧へ戻る
-        $back = url()->previous();
-        $to = $back === url("/admin/admins/$id") ? "/admin/admins/$id" : '/admin/admins';
-        return $this->go($to, '招待を送り直しました。');
     }
 
     // 管理者の停止・再開・退会（手続きは Workflow）。一覧から押したら一覧へ、それ以外は管理者の詳細へ。

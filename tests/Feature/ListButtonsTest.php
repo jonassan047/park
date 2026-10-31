@@ -68,7 +68,8 @@ class ListButtonsTest extends TestCase
         $r = $this->admin()->get('/admin/admins')->assertOk();
         $r->assertSee("/admin/admins/$b/suspend", false)->assertSee("/admin/admins/$b/delete", false)->assertSee("/admin/admins/$b", false);
         $r->assertDontSee("/admin/admins/$a/suspend", false)->assertDontSee("/admin/admins/$a/delete", false);
-        $r->assertSee("/admin/admins/$c/reinvite", false);
+        $r->assertSee("/people/$c/resend", false)->assertSee("/people/$c/cancel", false); // 仮登録の行：送り直しと取り消し
+        $r->assertDontSee("/people/$b/resend", false)->assertDontSee("/people/$b/cancel", false); // 本登録が済んだ行には出ない
 
         DB::table('users')->where('id', $b)->update(['active' => 0]);
         $r = $this->admin()->get('/admin/admins')->assertOk();

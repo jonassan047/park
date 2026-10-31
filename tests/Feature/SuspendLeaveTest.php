@@ -46,6 +46,13 @@ class SuspendLeaveTest extends TestCase
         return (int) DB::table('users')->where('email', $email)->value('ses_id');
     }
 
+    // 同じ会社に、仮登録中の担当者を1人足す（管理者が仮登録して、ご案内のリンクを出す）。users の行を返す
+    private function provisionalStaff(int $sesId, string $email, string $sei, string $mei): object
+    {
+        $res = \App\Services\Registration::provisionalPerson('ses', $sesId, ['sei' => $sei, 'mei' => $mei, 'email' => $email], User::where('email', 'admin@park.example')->first());
+        return DB::table('users')->find($res['user_id']);
+    }
+
     // 同じ会社に担当者をもう1人足す（使用中）
     private function addSesUser(int $sesId, string $email, string $name): int
     {
@@ -100,7 +107,7 @@ class SuspendLeaveTest extends TestCase
         $sid = $this->sesId('ses1@park.example');
         $uid = $this->addSesUser($sid, 'ses1w@park.example', '停止 太郎'); // 止める人（代表者 ses1 は、交代のあとでなければ止められない。台帳 K21）
         // 招待中の別の担当者（止める前に招待リンクを出しておく）
-        $inv = W::invite(['email' => 'ses1d@park.example', 'name' => '招待 四郎', 'role' => 'ses', 'ses_id' => $sid], User::where('email', 'admin@park.example')->first());
+        $inv = $this->provisionalStaff($sid, 'ses1d@park.example', '招待', '四郎');
         $token = DB::table('users')->where('id', $inv->id)->value('token');
         $this->assertNotEmpty($token);
 
@@ -140,7 +147,7 @@ class SuspendLeaveTest extends TestCase
         $this->assertSame(1, DB::table('audit_log')->where('action', 'ses-user-resume')->count());
 
         // パスワード未設定の人は、招待を送り直す方法を添える
-        $inv = W::invite(['email' => 'ses1e@park.example', 'name' => '招待 五郎', 'role' => 'ses', 'ses_id' => $sid], User::where('email', 'admin@park.example')->first());
+        $inv = $this->provisionalStaff($sid, 'ses1e@park.example', '招待', '五郎');
         $this->admin()->post("/admin/ses/$sid/users/{$inv->id}/suspend");
         $this->admin()->post("/admin/ses/$sid/users/{$inv->id}/resume");
         $this->assertStringContainsString('送り直し', $this->flash('msg'));
@@ -265,7 +272,7 @@ class SuspendLeaveTest extends TestCase
         $left = $this->addSesUser($sid, 'ses1i@park.example', '退会 九郎');
         DB::table('users')->where('id', $left)->update(['active' => 0, 'left_at' => now()]);
         // パスワード未設定の停止の人（招待中だった人）
-        $inv = W::invite(['email' => 'ses1j@park.example', 'name' => '招待 十郎', 'role' => 'ses', 'ses_id' => $sid], User::where('email', 'admin@park.example')->first());
+        $inv = $this->provisionalStaff($sid, 'ses1j@park.example', '招待', '十郎');
         DB::table('users')->where('id', $inv->id)->update(['active' => 0, 'token' => null, 'token_expires' => null]);
 
         $before = DB::table('mail_outbox')->where('kind', 'invite')->count();

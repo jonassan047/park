@@ -59,13 +59,14 @@ class AdminAccountTest extends TestCase
     public function test_p1_form_fields(): void
     {
         $this->as('admin@park.example')->get('/admin/admins/new')->assertOk()
-            ->assertSee('担当者名')->assertSee('企業名')->assertSee('メールアドレス')->assertSee('登録して招待メールを送る');
+            ->assertSee('氏名（姓）')->assertSee('氏名（名）')->assertSee('企業名')->assertSee('メールアドレス')->assertSee('仮登録してメールを送る')
+            ->assertDontSee('name="phone"', false)->assertDontSee('name="address"', false); // 電話などは、ご本人が本登録で入れる
     }
 
     public function test_p1_settings_has_no_admin_card_and_nav_has_admins_before_ses(): void
     {
         $r = $this->as('admin@park.example')->get('/admin/settings')->assertOk();
-        $r->assertDontSee('登録して招待メールを送る')->assertDontSee('招待メール（7日間有効のリンク）');
+        $r->assertDontSee('仮登録してメールを送る')->assertDontSee('仮登録のご案内（7日以内に本登録）');
         $r->assertSeeInOrder(['href="'.url('/admin').'"', 'href="'.url('/admin/admins').'"', 'href="'.url('/admin/ses').'"'], false);
         // 直す画面では「管理者」が選択中になる
         $id = $this->activeAdmin();
@@ -89,9 +90,12 @@ class AdminAccountTest extends TestCase
     {
         $u0 = $this->users(); $m0 = $this->invites(); $a0 = $this->audits('invite');
         $this->as('admin@park.example')->post('/admin/admins', ['name' => '招待 一郎', 'company_name' => 'テスト企業', 'email' => 'Inv-A@park.example'])
-            ->assertRedirect(url('/admin/admins'))->assertSessionHas('flash.type', 'ok')->assertSessionHas('flash.msg', '登録し、招待メールを送りました。');
+            ->assertRedirect(url('/admin/admins'))->assertSessionHas('flash.type', 'ok')->assertSessionHas('flash.msg', '仮登録し、仮登録のご案内を送りました。');
         $row = DB::table('users')->where('email', 'inv-a@park.example')->first();
         $this->assertSame('admin', $row->role);
+        $this->assertNull($row->registered_at);
+        $this->assertSame('register', $row->token_kind);
+        $this->assertSame($this->uid('admin@park.example'), (int) $row->registered_by);
         $this->assertSame('テスト企業', $row->company_name);
         $this->assertNull($row->password);
         $this->assertSame('招待 一郎', $row->name);
@@ -109,8 +113,9 @@ class AdminAccountTest extends TestCase
     {
         $ok = ['name' => '招待 二郎', 'company_name' => '二郎企業', 'email' => 'inv-b@park.example'];
         $cases = [
-            [['name' => ''], '担当者名（姓）を入れてください。'],
-            [['name' => "　 \t"], '担当者名（姓）を入れてください。'],
+            [['name' => ''], '氏名（姓）を入れてください。'],
+            [['name' => "　 \t"], '氏名（姓）を入れてください。'],
+            [['name' => '姓だけ'], '氏名（名）を入れてください。'],
             [['company_name' => ''], '企業名を入れてください。'],
             [['email' => ''], 'メールアドレスを正しく入れてください。'],
             [['email' => 'abc'], 'メールアドレスを正しく入れてください。'],
@@ -128,10 +133,15 @@ class AdminAccountTest extends TestCase
     {
         $this->pendingAdmin('inv-a@park.example');
         DB::table('users')->where('email', 'eg2@park.example')->update(['active' => 0]);
-        foreach (['ses1@park.example', 'inv-a@park.example', 'INV-A@Park.Example', 'ADMIN@park.example', 'eg2@park.example'] as $email) {
+        // 管理者には、理由を別々の文で出す（使用中／仮登録中／停止中）
+        $used = 'このメールアドレスはすでに使われています。';
+        $why = ['ses1@park.example' => $used, 'inv-a@park.example' => 'このメールアドレスは、仮登録中の方が使っています。送り直しや直しは、その方の画面から行ってください。',
+            'INV-A@Park.Example' => 'このメールアドレスは、仮登録中の方が使っています。送り直しや直しは、その方の画面から行ってください。', 'ADMIN@park.example' => $used,
+            'eg2@park.example' => 'このメールアドレスは、停止中の方が使っているため登録できません。'];
+        foreach ($why as $email => $msg) {
             $u0 = $this->users(); $m0 = DB::table('mail_outbox')->count();
             $this->as('admin@park.example')->post('/admin/admins', ['name' => '重複 太郎', 'company_name' => '重複企業', 'email' => $email])
-                ->assertSessionHas('flash.type', 'bad')->assertSessionHas('flash.msg', 'このメールアドレスはすでに使われています。');
+                ->assertSessionHas('flash.type', 'bad')->assertSessionHas('flash.msg', $msg);
             $this->assertSame($u0, $this->users(), $email);
             $this->assertSame($m0, DB::table('mail_outbox')->count(), $email);
         }
@@ -161,17 +171,17 @@ class AdminAccountTest extends TestCase
         $this->as('admin@park.example')->post("/admin/ses/$sesId/users", ['name' => '担当 次郎', 'email' => 'ses-new@example.com'])->assertSessionHas('flash.type', 'ok');
         $this->assertNull(DB::table('users')->where('email', 'ses-new@example.com')->value('company_name'));
         $this->assertSame('ses', DB::table('users')->where('email', 'ses-new@example.com')->value('role'));
-        // W::invite を直接呼んでも、管理者以外には入れない
-        W::invite(['email' => 'ses-direct@example.com', 'name' => '直接 三郎', 'role' => 'ses', 'ses_id' => $sesId, 'company_name' => '入れない企業'], User::where('email', 'admin@park.example')->first());
+        // 企業名を混ぜて送っても、管理者以外には入れない
+        $this->post("/admin/ses/$sesId/users", ['name' => '直接 三郎', 'email' => 'ses-direct@example.com', 'company_name' => '入れない企業'])->assertSessionHas('flash.type', 'ok');
         $this->assertNull(DB::table('users')->where('email', 'ses-direct@example.com')->value('company_name'));
     }
 
-    public function test_p7_reinvite_keeps_company_and_renews_token(): void
+    public function test_p7_resend_keeps_company_and_renews_token(): void
     {
         $id = $this->pendingAdmin();
         $t0 = DB::table('users')->where('id', $id)->value('token');
         $m0 = $this->invites();
-        $this->post("/admin/admins/$id/reinvite")->assertSessionHas('flash.type', 'ok');
+        $this->post("/people/$id/resend")->assertSessionHas('flash.type', 'ok');
         $this->assertSame('テスト企業', DB::table('users')->where('id', $id)->value('company_name'));
         $this->assertNotSame($t0, DB::table('users')->where('id', $id)->value('token'));
         $this->assertSame($m0 + 1, $this->invites());
@@ -208,9 +218,9 @@ class AdminAccountTest extends TestCase
         $this->assertSame($a0 + 1, $this->audits('admin-edit'));
         $this->assertSame($m0, DB::table('mail_outbox')->count());
         $this->assertStringContainsString('氏名：別 管理者→新姓 新名', (string) DB::table('audit_log')->where('action', 'admin-edit')->orderByDesc('id')->value('detail'));
-        // 名が空でもよい
-        $this->post("/admin/admins/$id", ['name_sei' => '姓だけ', 'name_mei' => '', 'company_name' => '新企業', 'email' => 'admin2@park.example'])->assertSessionHas('flash.type', 'ok');
-        $this->assertSame('姓だけ', DB::table('users')->where('id', $id)->value('name'));
+        // 名は必須（K20）。空にする保存は断り、値は残る
+        $this->post("/admin/admins/$id", ['name_sei' => '姓だけ', 'name_mei' => '', 'company_name' => '新企業', 'email' => 'admin2@park.example'])->assertSessionHas('flash.type', 'bad');
+        $this->assertSame('新姓 新名', DB::table('users')->where('id', $id)->value('name'));
     }
 
     public function test_q3_edit_self_company_shows_everywhere(): void
@@ -263,9 +273,9 @@ class AdminAccountTest extends TestCase
         $id = $this->pendingAdmin('inv-a@park.example');
         $t0 = DB::table('users')->where('id', $id)->value('token');
         $old = DB::table('mail_outbox')->where('to_email', 'inv-a@park.example')->count();
-        $this->get("/admin/admins/$id/edit")->assertOk()->assertSee('仮登録')->assertSee('変えると、新しいアドレスに招待を送り直します。');
+        $this->get("/admin/admins/$id/edit")->assertOk()->assertSee('仮登録')->assertSee('変えると、新しいアドレスに仮登録のご案内を送り直します');
         $this->save($id, ['email' => 'Moved@Park.Example'])->assertRedirect(url("/admin/admins/$id"))
-            ->assertSessionHas('flash.type', 'ok')->assertSessionHas('flash.msg', '保存し、新しいメールアドレスに招待を送り直しました。');
+            ->assertSessionHas('flash.type', 'ok')->assertSessionHas('flash.msg', '保存し、新しいメールアドレスに仮登録のご案内を送り直しました（前のリンクは使えなくなりました）。');
         $r = DB::table('users')->find($id);
         $this->assertSame('moved@park.example', $r->email);
         $this->assertNotSame($t0, $r->token);
@@ -386,7 +396,7 @@ class AdminAccountTest extends TestCase
         $this->get('/admin/admins')->assertSee('反映企業')->assertSee('反映 花子');
         $this->assertStringContainsString('反映企業 反映 花子', user_label(DB::table('users')->find($id)));
         // 以降の招待の送り直しの宛名にも新しい値
-        $this->post("/admin/admins/$id/reinvite");
+        $this->post("/people/$id/resend");
         $this->assertStringContainsString('反映企業 反映 花子 様', DB::table('mail_outbox')->where('kind', 'invite')->orderByDesc('id')->value('body'));
     }
 

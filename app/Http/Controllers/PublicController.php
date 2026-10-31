@@ -72,14 +72,20 @@ class PublicController extends Controller
     public function setup(Request $r)
     {
         if (DB::table('users')->where('role', 'admin')->exists()) return redirect('/login');
-        $r->validate(['email' => 'required|email', 'password' => 'required|min:8'], [], ['password' => 'パスワード']);
-        [$full, $sei, $mei] = name_parts($r->all(), 'name', 'name');
-        if ($full === null) return back()->withInput()->with('flash', ['msg' => 'お名前（姓）を入れてください。', 'type' => 'bad']);
-        $id = W::createUser($r->input('email'), $full, 'admin', $r->input('password'), ['sei' => $sei, 'mei' => $mei]);
+        // 企業名・姓・名・電話・メール・パスワードを1画面で入れる（K33）。必須の決まりは、本登録の画面と同じ（Requirements）
+        $only = ['company_name', 'name_sei', 'name_mei', 'phone'];
+        $data = Registration::cleanInput($r->all(), 'admin', false, $only);
+        $r->merge($data);
+        [$rules, $msg, $attr] = Registration::rules('admin', false, $only);
+        $rules += ['email' => 'required|email', 'password' => 'required|min:8'];
+        $attr += ['email' => 'メールアドレス', 'password' => 'パスワード'];
+        $r->validate($rules, $msg, $attr);
+        $id = W::createUser((string) $r->input('email'), (string) join_name($data['name_sei'], $data['name_mei']), 'admin', (string) $r->input('password'), ['sei' => $data['name_sei'], 'mei' => $data['name_mei']]);
+        DB::table('users')->where('id', $id)->update(['company_name' => $data['company_name'], 'phone' => $data['phone'], 'profile_completed_at' => now_str()]);
         Auth::loginUsingId($id);
         $r->session()->regenerate();
-        TwoFactor::pass($r); // 最初の管理者を作るときだけ（まだ誰もいないので）
-        return $this->go('/welcome', '管理者のアカウントを作りました。続けて、あなたの情報を登録してください。');
+        TwoFactor::pass($r); // 最初の管理者を作るときだけ（まだ誰もいないので）。確認コードは聞かない
+        return $this->go('/admin', '管理者のアカウントを作りました。');
     }
 
     public function applyForm() { return view('public.apply'); }

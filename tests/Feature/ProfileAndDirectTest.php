@@ -178,13 +178,16 @@ class ProfileAndDirectTest extends TestCase
         $this->assertNotNull(DB::table('users')->where('email', 'admin@park.example')->value('profile_completed_at'));
     }
 
-    public function test_a12_setup_goes_to_the_complete_screen(): void
+    // はじめの設定は、企業名・姓・名・電話・メール・パスワードを1画面で入れる（K33）。通すと本登録済みで、足りない項目の画面は出ない
+    public function test_a12_setup_creates_a_registered_admin(): void
     {
         DB::table('users')->delete();
-        $this->post('/setup', ['name' => '最初 の管理者', 'email' => 'first@park.example', 'password' => 'abcd1234'])->assertRedirect(url('/welcome'));
-        $this->get('/welcome')->assertRedirect(url('/register/complete'));
-        $this->get('/register/complete')->assertOk()->assertSee('企業名')->assertSee('電話番号')->assertDontSee('name="name_sei"', false);
-        $this->get('/admin')->assertRedirect(url('/register/complete'));
+        $this->post('/setup', ['company_name' => '最初企業', 'name_sei' => '最初', 'name_mei' => '管理', 'phone' => '03-0000-0001', 'email' => 'first@park.example', 'password' => 'abcd1234'])->assertRedirect(url('/admin'));
+        $u = DB::table('users')->where('email', 'first@park.example')->first();
+        $this->assertNotNull($u->registered_at);
+        $this->assertSame(['最初企業', '最初 管理', '03-0000-0001'], [$u->company_name, $u->name, $u->phone]);
+        $this->get('/admin')->assertOk();
+        $this->get('/register/complete')->assertRedirect(url('/admin'));
     }
 
     // ---------- B. 立場の帯 ----------
@@ -214,42 +217,44 @@ class ProfileAndDirectTest extends TestCase
 
     // ---------- C. 管理者の登録 ----------
 
-    public function test_c_admin_invite_and_reinvite(): void
+    public function test_c_admin_register_and_resend(): void
     {
         $this->as('admin@park.example');
         $this->post('/admin/admins', ['name' => '新任 管理', 'company_name' => 'テスト企業', 'email' => 'new-admin@park.example'])->assertRedirect();
         $nu = DB::table('users')->where('email', 'new-admin@park.example')->first();
         $this->assertSame('admin', $nu->role);
         $this->assertNull($nu->password);
-        $this->get('/admin/admins/new')->assertOk()->assertSee('登録して招待メールを送る');
-        $this->get('/admin/admins')->assertOk()->assertDontSee('登録すると')->assertSee('仮登録')->assertSee('参加中')->assertSee('招待を送り直す');
+        $this->get('/admin/admins/new')->assertOk()->assertSee('仮登録してメールを送る');
+        $this->get('/admin/admins')->assertOk()->assertDontSee('登録すると')->assertSee('仮登録')->assertSee('参加中')->assertSee('送り直し');
         // 送り直しは毎回 token が新しくなる
         $mails = DB::table('mail_outbox')->where('kind', 'invite')->count();
         $t0 = $nu->token;
-        $this->post("/admin/admins/{$nu->id}/reinvite")->assertRedirect(url('/admin/admins'));
+        $this->post("/people/{$nu->id}/resend")->assertRedirect(url('/admin/admins'));
         $t1 = DB::table('users')->where('id', $nu->id)->value('token');
         $this->assertNotSame($t0, $t1);
         $this->assertSame($mails + 1, DB::table('mail_outbox')->where('kind', 'invite')->count());
-        $this->post("/admin/admins/{$nu->id}/reinvite");
+        $this->post("/people/{$nu->id}/resend");
         $this->assertNotSame($t1, DB::table('users')->where('id', $nu->id)->value('token'));
         $this->assertSame($mails + 2, DB::table('mail_outbox')->where('kind', 'invite')->count());
     }
 
-    public function test_c3_reinvite_refused(): void
+    public function test_c3_resend_refused(): void
     {
         $this->as('admin@park.example');
         $me = User::where('email', 'admin@park.example')->first();
         $ses = User::where('email', 'ses1@park.example')->first();
         $mails = DB::table('mail_outbox')->count();
-        foreach ([$me->id, $ses->id, 99999] as $id) {
-            $this->post("/admin/admins/$id/reinvite")->assertRedirect(url('/admin/admins'))->assertSessionHas('flash.type', 'bad');
+        // 本登録が済んだ人には送り直せない
+        foreach ([$me->id, $ses->id] as $id) {
+            $this->post("/people/$id/resend")->assertSessionHas('flash.type', 'bad');
         }
+        $this->post('/people/99999/resend')->assertNotFound();
         $this->assertSame($mails, DB::table('mail_outbox')->count());
         $this->assertSame($me->token, DB::table('users')->where('id', $me->id)->value('token'));
         $this->assertSame($ses->token, DB::table('users')->where('id', $ses->id)->value('token'));
     }
 
-    public function test_c_reinvite_refused_for_stopped_admin(): void
+    public function test_c_resend_refused_for_stopped_admin(): void
     {
         $this->as('admin@park.example');
         $this->post('/admin/admins', ['name' => '止める 人', 'company_name' => 'テスト企業', 'email' => 'stop-admin@park.example'])->assertRedirect();
@@ -257,7 +262,7 @@ class ProfileAndDirectTest extends TestCase
         DB::table('users')->where('id', $id)->update(['active' => 0]);
         $token = DB::table('users')->where('id', $id)->value('token');
         $mails = DB::table('mail_outbox')->count();
-        $this->post("/admin/admins/$id/reinvite")->assertRedirect(url('/admin/admins'))->assertSessionHas('flash.type', 'bad');
+        $this->post("/people/$id/resend")->assertRedirect(url('/admin/admins'))->assertSessionHas('flash.type', 'bad');
         $this->assertSame($token, DB::table('users')->where('id', $id)->value('token'));
         $this->assertSame($mails, DB::table('mail_outbox')->count());
         $this->get('/admin/admins')->assertSee('停止');
@@ -267,8 +272,9 @@ class ProfileAndDirectTest extends TestCase
     {
         $this->as('ses1@park.example');
         $this->get('/admin/settings')->assertForbidden();
-        $this->post('/admin/admins/1/reinvite')->assertForbidden();
-        $this->as('eg1@park.example')->post('/admin/admins/1/reinvite')->assertForbidden();
+        // 他社（管理者）の行は見つからない扱い。エンジニアは入口で断る
+        $this->post('/people/1/resend')->assertNotFound();
+        $this->as('eg1@park.example')->post('/people/1/resend')->assertForbidden();
     }
 
     // ---------- D. SES の登録 ----------

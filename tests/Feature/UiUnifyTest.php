@@ -52,7 +52,7 @@ class UiUnifyTest extends TestCase
         $other = $this->otherAdmin();
         $r = $this->admin()->get('/admin/admins')->assertOk();
         $r->assertSee('管理者を登録')->assertSee('href="'.url('/admin/admins/new').'"', false);
-        $r->assertDontSee('登録すると')->assertDontSee('登録して招待メールを送る');
+        $r->assertDontSee('登録すると')->assertDontSee('仮登録してメールを送る');
         // V2-1：行末は文字のリンク「詳細」（一覧 → 詳細 → 編集）
         $r->assertSee('href="'.url("/admin/admins/$other").'">詳細</a>', false);
         $this->assertStringNotContainsString('>直す<', $r->getContent());
@@ -61,8 +61,8 @@ class UiUnifyTest extends TestCase
 
     public function test_u1_new_screen_and_roles(): void
     {
-        $this->admin()->get('/admin/admins/new')->assertOk()->assertSee('管理者の登録')->assertSee('登録して招待メールを送る')->assertSee('必須')
-            ->assertSee('登録すると、担当の方に招待メール（7日間有効のリンク）が届きます。');
+        $this->admin()->get('/admin/admins/new')->assertOk()->assertSee('管理者の登録')->assertSee('仮登録してメールを送る')->assertSee('必須')
+            ->assertSee('仮登録すると、ご本人に仮登録のご案内（7日以内に本登録）が届きます。');
         foreach (['ses1@park.example', 'eg1@park.example'] as $email) {
             $this->as($email)->get('/admin/admins/new')->assertForbidden();
         }

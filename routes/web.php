@@ -195,7 +195,6 @@ Route::middleware('role:admin')->group(function () {
         Route::get('/admins', [Adm::class, 'adminsIndex']);
         Route::get('/admins/new', [Adm::class, 'adminNew']);
         Route::post('/admins', [Adm::class, 'admins']);
-        Route::post('/admins/{id}/reinvite', [Adm::class, 'reinviteAdmin']);
         Route::post('/admins/{id}/suspend', [Adm::class, 'adminSuspend']);
         Route::post('/admins/{id}/resume', [Adm::class, 'adminResume']);
         Route::post('/admins/{id}/delete', [Adm::class, 'adminDelete']);

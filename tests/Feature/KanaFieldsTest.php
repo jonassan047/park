@@ -21,12 +21,16 @@ class KanaFieldsTest extends TestCase
         return $this->actingAs($u->fresh())->withSession([TwoFactor::SESSION_KEY => $u->id]);
     }
 
-    public function test_admin_new_and_edit_have_kana(): void
+    // 管理者の仮登録は 企業名・氏名・メールの4つだけで、ふりがなの欄は無い（本登録のあとの編集で入れる）
+    public function test_admin_new_has_no_kana_and_edit_has_kana(): void
     {
-        $this->admin()->get('/admin/admins/new')->assertOk()->assertSee('ふりがな（姓）')->assertSee('ふりがな（名）');
+        $this->admin()->get('/admin/admins/new')->assertOk()->assertDontSee('ふりがな');
         $this->post('/admin/admins', ['name_sei' => '山田', 'name_mei' => '太郎', 'kana_sei' => 'やまだ', 'kana_mei' => 'たろう', 'company_name' => 'テスト社', 'email' => 'kana-admin@park.example']);
         $u = DB::table('users')->where('email', 'kana-admin@park.example')->first();
-        $this->assertSame(['やまだ', 'たろう', 'やまだ たろう'], [$u->kana_sei, $u->kana_mei, $u->kana]);
+        $this->assertNull($u->kana_sei); // 送られても入れない
+        $this->get("/admin/admins/{$u->id}/edit")->assertOk()->assertDontSee('ふりがな');
+        // 本登録が済んだあとは、編集でふりがなを入れられる
+        DB::table('users')->where('id', $u->id)->update(['password' => bcrypt('park1234'), 'registered_at' => now_str(), 'phone' => '03-0000-0001', 'kana_sei' => 'やまだ', 'kana_mei' => 'たろう', 'kana' => 'やまだ たろう']);
         $this->get("/admin/admins/{$u->id}/edit")->assertOk()->assertSee('value="やまだ"', false);
         $this->post("/admin/admins/{$u->id}", ['name_sei' => '山田', 'name_mei' => '太郎', 'kana_sei' => 'やまた', 'kana_mei' => 'たろう', 'company_name' => 'テスト社']);
         $this->assertSame('やまた たろう', DB::table('users')->where('id', $u->id)->value('kana'));

@@ -296,10 +296,10 @@ class NameSplitTest extends TestCase
     public function test_m10_setup_and_invite_admin_command(): void
     {
         DB::table('users')->delete();
-        $this->post('/setup', ['name' => '最初 管理', 'email' => 'first@park.example', 'password' => 'abcd1234'])->assertRedirect(url('/welcome'));
+        $this->post('/setup', ['company_name' => '最初企業', 'name_sei' => '最初', 'name_mei' => '管理', 'phone' => '03-0000-0001', 'email' => 'first@park.example', 'password' => 'abcd1234'])->assertRedirect(url('/admin'));
         $u = $this->user('first@park.example');
         $this->assertSame(['最初', '管理'], [$u->name_sei, $u->name_mei]);
-        $this->artisan('park:invite-admin', ['email' => 'cmd-admin@park.example', 'name' => 'コマンド 一郎'])->assertExitCode(0);
+        $this->artisan('park:invite-admin', ['email' => 'cmd-admin@park.example', 'sei' => 'コマンド', 'mei' => '一郎'])->assertExitCode(0);
         $u = $this->user('cmd-admin@park.example');
         $this->assertNotNull($u);
         $this->assertSame(['コマンド', '一郎'], [$u->name_sei, $u->name_mei]);

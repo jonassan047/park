@@ -384,53 +384,6 @@ class Workflow
         return $own && (int) $own === (int) $engineerId ? '［本人］' : '';
     }
 
-    public static function invite(array $d, $actor, string $note = ''): ?object
-    {
-        $email = strtolower(trim((string) ($d['email'] ?? '')));
-        if (!$email) return null;
-        // 兼任：すでにログインできる人に役割を足す（招待メールは送らない）
-        if ($d['role'] === 'eg' && !empty($d['engineer_id'])) {
-            $same = DB::table('users')->where('email', $email)->where('engineer_id', $d['engineer_id'])->whereIn('role', ['ses', 'admin'])->where('active', 1)->first();
-            if ($same) return $same; // すでにこのエンジニアと兼任している
-            if ($t = self::egShareTarget($email, (int) ($d['ses_id'] ?? 0), $actor)) {
-                self::linkEngineer($t->id, (int) $d['engineer_id'], $actor);
-                return DB::table('users')->find($t->id);
-            }
-        } elseif ($d['role'] === 'ses' && !empty($d['ses_id']) && ($t = self::sesShareTarget($email, (int) $d['ses_id']))) {
-            self::addSesRole($t->id, $actor);
-            return DB::table('users')->find($t->id);
-        } elseif ($d['role'] === 'admin' && ($t = self::adminShareTarget($email))) {
-            self::addAdminRole($t->id, $d, $actor);
-            return DB::table('users')->find($t->id);
-        }
-        $u = DB::table('users')->where('email', $email)->first();
-        if ($u && !$u->active) return null; // 停止中・退会済の人は招待しない
-        if ($u && ($u->password || $u->registered_at)) return $u; // すでに使っている人には送らない
-        // 未設定の人でも、立場（役割・SES・エンジニア）が依頼と違うなら招待しない（別の立場のリンクを渡さないため）
-        if ($u && ($u->role !== $d['role'] || (int) $u->ses_id !== (int) ($d['ses_id'] ?? 0) || (int) $u->engineer_id !== (int) ($d['engineer_id'] ?? 0))) return null;
-        if (!$u) {
-            // エンジニアのアカウントを新しく作るときは、技術登録の氏名・ふりがな・電話を写す（B1・AC7）
-            if ($d['role'] === 'eg' && !empty($d['engineer_id']) && ($eng = DB::table('engineers')->find($d['engineer_id']))) {
-                $d += ['name_sei' => $eng->name_sei, 'name_mei' => $eng->name_mei, 'kana_sei' => $eng->kana_sei, 'kana_mei' => $eng->kana_mei, 'phone' => $eng->phone];
-            }
-            $row = ['email' => $email] + self::nameCols((string) $d['name'], $d['name_sei'] ?? null, $d['name_mei'] ?? null) + self::kanaCols($d) + ['role' => $d['role'], 'ses_id' => $d['ses_id'] ?? null,
-                'engineer_id' => $d['engineer_id'] ?? null, 'registered_by' => $actor->id ?? null, 'created_at' => now_str(), 'updated_at' => now_str()];
-            // 企業名は管理者だけ（宛名に出る）
-            // 所属・役職・電話・郵便番号・住所も管理者だけ（呼ぶ側で検査・そろえ済みの値を渡す）
-            if ($d['role'] === 'admin') {
-                $row['company_name'] = clean_name($d['company_name'] ?? null);
-                foreach (['position', 'phone', 'postal_code', 'address'] as $f) $row[$f] = str_in($d[$f] ?? '');
-            } elseif ($d['role'] === 'eg') {
-                $row['phone'] = str_in($d['phone'] ?? '');
-            }
-            $id = DB::table('users')->insertGetId($row);
-            $u = DB::table('users')->find($id);
-        }
-        // 仮登録のご案内（リンクと文面は Registration・RegistrationText）
-        Registration::sendLink($u, $actor, $note);
-        return $u;
-    }
-
     // パスワードを持つ行を作る。使うのは「はじめの設定」・見本・テストだけ（人を登録するときは仮登録を使う）なので、本登録済みの日時を入れる
     public static function createUser(string $email, string $name, string $role, string $password, array $extra = []): int
     {
@@ -439,16 +392,28 @@ class Workflow
     }
 
     // 管理者の情報（氏名・企業名・メール）を直す。$d は name_sei・name_mei・company_name・email（メールは無ければ変えない）。
-    // メールを変えられるのは、招待中（パスワード未設定）の他人だけ。変えたら新しいアドレスに招待を送り直す。自分・停止中・使用中の人は変えられない
+    // 仮登録中（本登録が済む前）は、企業名・姓・名・メールの4つだけ直せる（ほかは本人が本登録で入れる）。同じ行のまま。
+    // メールを変えられるのは、仮登録中の他人だけ。変えたら新しいアドレスに仮登録のご案内を送り直す（前のリンクは使えなくなる）。自分・停止中・本登録が済んだ人は変えられない。
+    // 必須の欄（企業名・姓・名・電話）は、本人も上位も空にできない（K20）
     public static function updateAdmin(int $id, array $d, $actor): array
     {
         $bad = fn (string $msg) => ['type' => 'bad', 'msg' => $msg];
         $u = DB::table('users')->where('id', $id)->where('role', 'admin')->first();
         if (!$u) return $bad('この管理者は見つかりません。');
 
-        $sei = clean_name($d['name_sei'] ?? null); $mei = clean_name($d['name_mei'] ?? null); $company = clean_name($d['company_name'] ?? null);
+        // 仮登録中は、4つの項目だけ受け取る（電話などを混ぜても入らない）
+        if (!$u->registered_at) $d = array_intersect_key($d, array_flip(['name_sei', 'name_mei', 'company_name', 'email']));
+
+        // 姓・名の列が空の古い行は、つないだ name を分けたものを基準にする（何も変えずに保存したら「変化なし」）
+        [$curSei, $curMei] = ($u->name_sei || $u->name_mei) ? [$u->name_sei, $u->name_mei] : split_name($u->name);
+        $sei = clean_name($d['name_sei'] ?? null); $company = clean_name($d['company_name'] ?? null);
+        $mei = array_key_exists('name_mei', $d) ? clean_name($d['name_mei']) : $curMei; // 名の欄が来なければ今のまま
         if ($sei === null) return $bad('氏名（姓）を入れてください。');
         if ($company === null) return $bad('企業名を入れてください。');
+        // 必須の欄（名・電話）は、欄が来て空なら断る
+        $given = [];
+        foreach (['name_mei', 'phone'] as $k) if (array_key_exists($k, $d)) $given[$k] = is_string($d[$k]) ? clean_name($d[$k]) : null;
+        if ($why = Requirements::checkNotEmpty('admin', false, $given)) return $bad($why);
         if (mb_strlen($sei) > 50 || mb_strlen((string) $mei) > 50) return $bad('氏名は姓・名とも50文字までです。');
         if (mb_strlen($company) > 100) return $bad('企業名は100文字までです。');
 
@@ -484,8 +449,6 @@ class Workflow
         if (mb_strlen((string) $ks) > 50 || mb_strlen((string) $km) > 50) return $bad('ふりがなは姓・名とも50文字までです。');
         $name = join_name($sei, $mei);
         $upd = [];
-        // 姓・名の列が空の古い行は、つないだ name を分けたものを基準にする（何も変えずに保存したら「変化なし」）
-        [$curSei, $curMei] = ($u->name_sei || $u->name_mei) ? [$u->name_sei, $u->name_mei] : split_name($u->name);
         if ($sei !== $curSei || $mei !== $curMei) $upd += ['name_sei' => $sei, 'name_mei' => $mei, 'name' => $name];
         if (array_key_exists('kana_sei', $d) || array_key_exists('kana_mei', $d)) {
             [$curKs, $curKm] = ($u->kana_sei || $u->kana_mei) ? [$u->kana_sei, $u->kana_mei] : split_name($u->kana);
@@ -502,9 +465,9 @@ class Workflow
         DB::transaction(fn () => DB::table('users')->where('id', $id)->update($upd + ['updated_at' => now_str()]));
 
         $msg = '保存しました。';
-        if ($emailChanged) { // ここに来るのは招待中（パスワード未設定）の人だけ
-            self::invite(['email' => $new, 'name' => $name, 'role' => 'admin', 'company_name' => $company], $actor);
-            $msg = '保存し、新しいメールアドレスに招待を送り直しました。';
+        if ($emailChanged) { // ここに来るのは仮登録中の人だけ。新しいリンクで、前のリンクは使えなくなる
+            Registration::sendLink(DB::table('users')->find($id), $actor);
+            $msg = '保存し、新しいメールアドレスに仮登録のご案内を送り直しました（前のリンクは使えなくなりました）。';
         }
 
         $log = [];
@@ -676,7 +639,10 @@ class Workflow
         if ($v['email'] && ($t = self::egShareTarget($v['email'], $sesId, $actor))) {
             self::linkEngineer($t->id, $id, $actor);
             $linked = $t;
-        } elseif ($invite && $v['email']) self::invite(['email' => $v['email'], 'name' => $v['name'], 'role' => 'eg', 'ses_id' => $sesId, 'engineer_id' => $id], $actor);
+        } elseif ($invite && $v['email'] && !DB::table('users')->where('email', $v['email'])->exists()) {
+            // ログインの無いエンジニアに、仮登録のアカウントを作ってご案内を送る（技術登録の氏名・ふりがな・電話を写す。B1・AC7）
+            Registration::resendEngineer(DB::table('engineers')->find($id), $actor);
+        }
         if ($tellAdmins) N::toAdmins('エンジニアが登録されました', "{$v['name']} さんが登録されました。経験票・スキルシートの作成を一緒に進めてください。", "/engineers/$id", false);
         return $id;
     }

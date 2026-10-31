@@ -166,6 +166,34 @@ class Registration
         return ['ok' => true, 'ses_id' => $sesId, 'user_id' => $uid];
     }
 
+    // ---------- 管理者の仮登録（管理者 → 管理者。企業名・姓・名・メールの4つだけ。K02・K05・K15） ----------
+    // $d：company（企業名）・sei・mei・email。電話などは、ご本人が本登録で入れる。
+    // すでに本登録が済んだエンジニアのアドレスなら、仮登録ではなく管理者の役割を足す（兼任）。
+    // 戻り値：['ok' => true, 'user_id' => int, 'linked' => ?object（役割を足した相手）] か ['bad' => 文]
+    public static function provisionalAdmin(array $d, $actor): array
+    {
+        $company = clean_name(self::s($d['company'] ?? null)); $sei = clean_name(self::s($d['sei'] ?? null)); $mei = clean_name(self::s($d['mei'] ?? null));
+        $email = strtolower(trim((string) self::s($d['email'] ?? null)));
+        if ($sei === null) return ['bad' => '氏名（姓）を入れてください。'];
+        if ($mei === null) return ['bad' => '氏名（名）を入れてください。'];
+        if ($company === null) return ['bad' => '企業名を入れてください。'];
+        if (mb_strlen($sei) > 50 || mb_strlen($mei) > 50) return ['bad' => '氏名は、姓・名とも50文字までです。'];
+        if (mb_strlen($company) > 100) return ['bad' => '企業名は100文字までです。'];
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) return ['bad' => 'メールアドレスを正しく入れてください。'];
+
+        if (DB::table('users')->where('email', $email)->exists()) {
+            $share = W::adminShareTarget($email); // 本登録済みのエンジニアだけ。仮登録中・停止中・退会済は断る
+            if (!$share) return ['bad' => self::emailInUse($email) ?? 'このメールアドレスはすでに使われています。'];
+            W::addAdminRole((int) $share->id, ['company_name' => $company], $actor); // 空の値で、既にある値は消さない
+            return ['ok' => true, 'user_id' => (int) $share->id, 'linked' => $share];
+        }
+        $uid = (int) DB::table('users')->insertGetId(['email' => $email] + W::nameCols(join_name($sei, $mei), $sei, $mei)
+            + ['role' => 'admin', 'company_name' => $company, 'registered_by' => $actor->id ?? null, 'created_at' => now_str(), 'updated_at' => now_str()]);
+        self::sendLink(DB::table('users')->find($uid), $actor);
+        N::audit($actor->id ?? null, 'reg-person', "管理者 #{$uid}"); // 氏名・アドレスは記録に書かない
+        return ['ok' => true, 'user_id' => $uid, 'linked' => null];
+    }
+
     // このアドレスを新しく登録できない理由（無ければ null）。$exceptUserId の人は除く
     public static function emailInUse(string $email, ?int $exceptUserId = null): ?string
     {
@@ -714,6 +742,8 @@ class Registration
             $mei = array_key_exists($b, $uu) ? $uu[$b] : (($eng->$b ?? null) ?: $u->$b);
             $uu[$full] = join_name($sei, $mei);
             if ($eng) $en += [$a => $sei, $b => $mei, $full => $uu[$full]];
+            // ふりがながそろったら、名前を伏せたスキルシートのイニシャル（T.Y）も入れる（まだ無いとき）
+            if ($full === 'kana' && $eng && empty($eng->initials) && $uu['kana']) $en['initials'] = W::initialsFromKana($uu['kana']);
             // 兼任の人（DB の役割が eg でない）は、担当者・管理者のアカウントの氏名・ふりがなを変えない（技術登録だけに入れる）
             if ($eng && $u->role !== 'eg') unset($uu[$a], $uu[$b], $uu[$full]);
         }

@@ -23,10 +23,14 @@ class PeopleController extends Controller
     }
 
     // 操作のあとの戻り先（役割と対象から決め、送られた値から作らない）
-    private function back(Request $r, object $t, bool $sesDeleted = false): string
+    // $gone：取り消して行が消えたとき（詳細の画面にはもう戻れない）
+    private function back(Request $r, object $t, bool $sesDeleted = false, bool $gone = false): string
     {
         if ($r->user()->role === 'admin') {
-            if ($t->role === 'admin') return '/admin/admins';
+            if ($t->role === 'admin') {
+                // 管理者の詳細から押したら詳細へ、一覧から押したら一覧へ戻る
+                return !$gone && url()->previous() === url("/admin/admins/{$t->id}") ? "/admin/admins/{$t->id}" : '/admin/admins';
+            }
             if ($t->role === 'ses') return $sesDeleted ? '/admin/ses' : "/admin/ses/{$t->ses_id}";
             // 直属の入れ物には SES の詳細が無い（404 になる）ので、エンジニアの一覧へ
             return $t->ses_id && !W::isDirect((int) $t->ses_id) ? "/admin/ses/{$t->ses_id}" : '/admin/engineers';
@@ -69,6 +73,6 @@ class PeopleController extends Controller
     {
         $t = $this->target($r, $id);
         $res = Registration::cancel($t, $r->user());
-        return $this->go($this->back($r, $t, $res['sesDeleted']), $res['msg'], $res['type']);
+        return $this->go($this->back($r, $t, $res['sesDeleted'], $res['type'] === 'ok'), $res['msg'], $res['type']);
     }
 }

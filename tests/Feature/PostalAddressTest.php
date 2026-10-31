@@ -128,7 +128,7 @@ class PostalAddressTest extends TestCase
         $self = (int) DB::table('users')->where('email', 'admin@park.example')->value('id');
         $this->admin()->get("/admin/admins/$other")->assertOk()->assertSee('別 管理者')->assertSee('管理者情報')
             ->assertSee('href="'.url("/admin/admins/$other/edit").'"', false)->assertSee('〒100-0001 東京都千代田区')->assertSee('営業部 部長')->assertSee('参加中')
-            ->assertDontSee('招待を送り直す');
+            ->assertDontSee('送り直し')->assertDontSee('取り消し');
         $this->get("/admin/admins/$self")->assertOk();
         $this->get('/admin/admins/99999')->assertNotFound();
         foreach (['ses1@park.example', 'eg1@park.example'] as $email) {
@@ -140,13 +140,13 @@ class PostalAddressTest extends TestCase
         $this->admin()->get("/admin/admins/$ses")->assertNotFound();
     }
 
-    public function test_v2_detail_pending_shows_reinvite_and_returns_to_detail(): void
+    public function test_v2_detail_pending_shows_resend_and_returns_to_detail(): void
     {
         $id = $this->pendingAdmin();
-        $this->admin()->get("/admin/admins/$id")->assertOk()->assertSee('仮登録')->assertSee('招待を送り直す');
+        $this->admin()->get("/admin/admins/$id")->assertOk()->assertSee('仮登録')->assertSee('送り直し')->assertSee('取り消し');
         $m0 = DB::table('mail_outbox')->where('kind', 'invite')->count();
-        $this->from("/admin/admins/$id")->post("/admin/admins/$id/reinvite")->assertRedirect(url("/admin/admins/$id"));
-        $this->from('/admin/admins')->post("/admin/admins/$id/reinvite")->assertRedirect(url('/admin/admins'));
+        $this->from("/admin/admins/$id")->post("/people/$id/resend")->assertRedirect(url("/admin/admins/$id"));
+        $this->from('/admin/admins')->post("/people/$id/resend")->assertRedirect(url('/admin/admins'));
         $this->assertSame($m0 + 2, DB::table('mail_outbox')->where('kind', 'invite')->count());
     }
 
@@ -199,12 +199,13 @@ class PostalAddressTest extends TestCase
 
     // ---------- V3 管理者の項目 ----------
 
-    public function test_v3_invite_with_extra_fields(): void
+    // 管理者の仮登録は 企業名・氏名・メールの4つだけ。住所などを混ぜても入らない（ご本人が本登録で入れる。S3-01）
+    public function test_v3_invite_ignores_extra_fields(): void
     {
         $this->admin()->post('/admin/admins', ['name_sei' => '追加', 'name_mei' => '花子', 'company_name' => '追加企業', 'email' => 'pa-new@park.example',
             'position' => '営業部', 'phone' => '03-1234-5678', 'postal_code' => '１２３４５６７', 'address' => '東京都港区'])->assertSessionHas('flash.type', 'ok');
         $r = DB::table('users')->where('email', 'pa-new@park.example')->first();
-        $this->assertSame(['営業部', '03-1234-5678', '123-4567', '東京都港区'], [$r->position, $r->phone, $r->postal_code, $r->address]);
+        $this->assertSame([null, null, null, null], [$r->position, $r->phone, $r->postal_code, $r->address]);
         // V3-5：メールの本文に住所・郵便番号は書かない
         $body = (string) DB::table('mail_outbox')->where('to_email', 'pa-new@park.example')->value('body');
         $this->assertStringNotContainsString('東京都港区', $body);
@@ -216,7 +217,7 @@ class PostalAddressTest extends TestCase
         $u0 = $this->rows('users'); $m0 = $this->rows('mail_outbox');
         $ok = ['name_sei' => '不正', 'name_mei' => '太郎', 'company_name' => '企業', 'email' => 'pa-bad@park.example'];
         $this->admin();
-        foreach ([['postal_code' => '12345'], ['phone' => 'abc'], ['address' => str_repeat('あ', 201)], ['position' => str_repeat('あ', 101)]] as $over) {
+        foreach ([['company_name' => str_repeat('あ', 101)], ['name_sei' => str_repeat('あ', 51)], ['name_mei' => ''], ['email' => 'abc']] as $over) {
             $this->post('/admin/admins', $over + $ok)->assertSessionHas('flash.type', 'bad');
         }
         $this->assertSame([$u0, $m0], [$this->rows('users'), $this->rows('mail_outbox')]);

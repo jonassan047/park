@@ -1,14 +1,9 @@
 @extends('layouts.app', ['title' => '管理者の登録'])
 @section('content')
-<p class="muted">登録すると、担当の方に招待メール（7日間有効のリンク）が届きます。</p>
+<p class="muted">仮登録すると、ご本人に仮登録のご案内（7日以内に本登録）が届きます。電話番号などは、ご本人が本登録で入れます。本登録が済むと参加中になります。</p>
 <x-card><form method="post" action="{{ url('/admin/admins') }}">@csrf
-<div class="pair"><x-field label="担当者名（姓）" name="name_sei" required /><x-field label="担当者名（名）" name="name_mei" /></div>
-<div class="pair"><x-field label="ふりがな（姓）" name="kana_sei" placeholder="やまだ" /><x-field label="ふりがな（名）" name="kana_mei" placeholder="たろう" /></div>
-<x-field label="企業名" name="company_name" required hint="メールの差出人の名前にも使います。" />
+<x-field label="企業名" name="company_name" required hint="本登録のときに、ご本人が確かめます。メールの差出人の名前にも使います。" />
+<div class="pair"><x-field label="氏名（姓）" name="name_sei" required /><x-field label="氏名（名）" name="name_mei" required /></div>
 <x-field label="メールアドレス" name="email" type="email" required />
-<x-field label="所属・役職" name="position" />
-<x-field label="電話番号" name="phone" />
-<x-field label="郵便番号" name="postal_code" placeholder="123-4567" />
-<x-field label="住所" name="address" />
-<a class="btn ghost" href="{{ url('/admin/admins') }}">管理者の一覧に戻る</a> <button class="btn">登録して招待メールを送る</button></form></x-card>
+<a class="btn ghost" href="{{ url('/admin/admins') }}">管理者の一覧に戻る</a> <button class="btn">仮登録してメールを送る</button></form></x-card>
 @endsection
