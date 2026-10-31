@@ -3,7 +3,9 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use App\Services\Registration;
 use App\Services\Workflow as W;
+use App\Support\RegistrationText as T;
 use App\Support\TwoFactor;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
@@ -136,7 +138,7 @@ class DualRoleTest extends TestCase
         $u0 = $this->users(); $i0 = $this->invites();
         $this->as(self::ADMIN, 'admin')->post('/engineers', ['ses_id' => $this->sesId(self::SES1), 'name_sei' => '緑川', 'name_mei' => '兼任', 'email' => self::SES1])
             ->assertSessionHas('flash.type', 'ok')
-            ->assertSessionHas('flash.msg', '登録しました。このメールアドレスの方のアカウントに、エンジニアの役割を足しました（招待メールは送っていません）。');
+            ->assertSessionHas('flash.msg', '登録しました。このメールアドレスの方のアカウントに、エンジニアの役割を足しました（仮登録のご案内は送っていません）。');
         $this->assertSame($u0, $this->users());
         $this->assertSame($i0, $this->invites());
         $u = $this->row(self::SES1);
@@ -199,7 +201,7 @@ class DualRoleTest extends TestCase
         $u0 = $this->users();
         $this->as(self::ADMIN, 'admin')->post("/admin/ses/{$sid}/users", ['name' => '山田 太郎', 'email' => 'eg1@park.example'])
             ->assertSessionHas('flash.type', 'ok')
-            ->assertSessionHas('flash.msg', 'このメールアドレスのエンジニアのアカウントに、SES 担当者の役割を足しました（招待メールは送っていません）。');
+            ->assertSessionHas('flash.msg', 'このメールアドレスのエンジニアのアカウントに、SES 担当者の役割を足しました（仮登録のご案内は送っていません）。');
         $this->assertSame($u0, $this->users());
         $u = $this->row('eg1@park.example');
         $this->assertSame('ses', $u->role);
@@ -226,12 +228,13 @@ class DualRoleTest extends TestCase
 
     public function test_ac5_refusals_leave_no_trace(): void
     {
-        $msg = 'このメールアドレスはすでに使われています。';
+        $msg = 'このメールアドレスはすでに使われています。';   // 管理者には理由を出す
+        $same = T::REFUSED_EMAIL;                               // SES の人には、理由によらず同じ文（K30）
         // 他社の担当者のアドレスで、ses1 所属のエンジニアを登録（SES 側から）
         $u0 = $this->users(); $e0 = $this->engineers();
-        $this->as(self::SES1, 'ses')->post('/engineers', ['name_sei' => '他社', 'name_mei' => '担当', 'email' => 'ses2@park.example'])->assertSessionHas('flash.msg', $msg);
+        $this->as(self::SES1, 'ses')->post('/engineers', ['name_sei' => '他社', 'name_mei' => '担当', 'email' => 'ses2@park.example'])->assertSessionHas('flash.msg', $same);
         // SES が管理者のアドレスでエンジニアを登録
-        $this->as(self::SES1, 'ses')->post('/engineers', ['name_sei' => '管理', 'name_mei' => '狙い', 'email' => self::ADMIN])->assertSessionHas('flash.msg', $msg);
+        $this->as(self::SES1, 'ses')->post('/engineers', ['name_sei' => '管理', 'name_mei' => '狙い', 'email' => self::ADMIN])->assertSessionHas('flash.msg', $same);
         // 管理者が、ses1 所属として他社(ses2)の担当者のアドレスを入れる
         $this->as(self::ADMIN, 'admin')->post('/engineers', ['ses_id' => $this->sesId(self::SES1), 'name_sei' => '他社', 'name_mei' => '担当', 'email' => 'ses2@park.example'])->assertSessionHas('flash.msg', $msg);
         // 他社のエンジニア(eg2=ses2)のアドレスで ses1 の担当者を登録
@@ -248,7 +251,7 @@ class DualRoleTest extends TestCase
 
     public function test_ac5_suspended_and_left_and_already_dual_refused(): void
     {
-        $msg = 'このメールアドレスはすでに使われています。';
+        $msg = T::REFUSED_EMAIL; // SES の人には、理由によらず同じ文（K30）
         // 停止中の担当者
         $extra = W::createUser('ses1b@park.example', '緑川 二郎', 'ses', 'park1234', ['ses_id' => $this->sesId(self::SES1)]);
         $this->completeProfile($extra, ['active' => 0]);
@@ -689,6 +692,8 @@ class DualRoleTest extends TestCase
         // ほかに担当者がいる（最後の1人でない）
         $other = W::createUser('ses1c@park.example', '緑川 三郎', 'ses', 'park1234', ['ses_id' => $sid]);
         $this->completeProfile($other, ['password' => bcrypt('park1234')]);
+        // 代表者の退会は交代のあと（K21）：先に、ほかの担当者を代表者にする
+        $this->assertSame('ok', Registration::changeRep($sid, $other, $this->row(self::ADMIN))['type']);
         $this->as(self::ADMIN, 'admin')->post("/admin/ses/$sid/users/$uid/delete")
             ->assertSessionHas('flash.msg', '緑川 一郎 さんを SES 担当者から外しました。エンジニアとしては引き続き入れます。');
         $u = $this->row(self::SES1);
@@ -709,6 +714,8 @@ class DualRoleTest extends TestCase
         $sid = $this->sesId(self::SES1);
         $other = W::createUser('ses1c@park.example', '緑川 三郎', 'ses', 'park1234', ['ses_id' => $sid]);
         $this->completeProfile($other);
+        // 代表者の停止は交代のあと（K21）：先に、ほかの担当者を代表者にする
+        $this->assertSame('ok', Registration::changeRep($sid, $other, $this->row(self::ADMIN))['type']);
         $this->as(self::ADMIN, 'admin')->post("/admin/ses/$sid/users/$uid/suspend")->assertSessionHas('flash.msg');
         $this->assertSame(0, (int) $this->row(self::SES1)->active);
         $this->flushSession();

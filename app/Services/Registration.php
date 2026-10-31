@@ -313,9 +313,11 @@ class Registration
             $ev = ['name' => $name, 'name_sei' => $sei, 'name_mei' => $mei, 'phone' => str_in($d['phone'] ?? ''), 'postal_code' => str_in($d['postal_code'] ?? ''), 'address' => str_in($d['address'] ?? ''),
                 'consent_at' => $now, 'self_confirmed_at' => $now, 'registered_at' => $now, 'updated_at' => $now] + W::kanaCols($d);
             if (empty($e->initials) && $ev['kana']) $ev['initials'] = W::initialsFromKana($ev['kana']);
-            if ($e && $e->name !== $name) $changes[] = "氏名：{$e->name} → {$name}";
+            // 氏名の変更は、users の分ですでに書いていれば重ねない（同じ変更が2行出ないように）
+            if ($e && $e->name !== $name && !preg_grep('/^氏名：/u', $changes)) $changes[] = "氏名：{$e->name} → {$name}";
             DB::table('engineers')->where('id', $u->engineer_id)->update($ev);
         }
+        $changes = array_values(array_unique($changes));
         DB::table('users')->where('id', $u->id)->update($upd);
     }
 
@@ -341,7 +343,8 @@ class Registration
         $isRep = Requirements::isRep($target);
         $s = $target->ses_id ? DB::table('ses_companies')->find($target->ses_id) : null;
         if ($s && $s->kind === 'ses' && in_array($target->role, ['ses', 'eg'], true) && !$isRep && $s->rep_user_id) $add(DB::table('users')->find($s->rep_user_id));
-        if ($target->role === 'admin' || ($target->role === 'ses' && $isRep)) {
+        // 管理者の直属のエンジニアは、代表者がいないので、管理者全員に知らせる（S2-31）
+        if ($target->role === 'admin' || ($target->role === 'ses' && $isRep) || ($s && $s->kind === 'direct')) {
             foreach (DB::table('users')->where('role', 'admin')->get() as $a) $add($a);
         }
         if (!$out) foreach (DB::table('users')->where('role', 'admin')->get() as $a) $add($a);
@@ -396,6 +399,185 @@ class Registration
         if ($actor->role !== 'ses' || empty($actor->ses_id) || (int) $target->ses_id !== (int) $actor->ses_id) return false;
         if ($target->role === 'ses') return Requirements::isRep($actor) && (int) $target->id !== (int) $actor->id && !Requirements::isRep($target);
         return $target->role === 'eg';
+    }
+
+    // ---------- 担当者・エンジニアの仮登録（上位が 姓・名・メール の3つを入れる。K12・K15） ----------
+    // $kind：'ses'（担当者）か 'eg'。$sesId：所属する会社（参加中の SES だけ）。$d：sei・mei・email。
+    // 戻り値：['ok' => true, 'user_id' => ?int, 'engineer_id' => ?int, 'linked' => ?object（役割を足した相手）] か ['bad' => 文]
+    public static function provisionalPerson(string $kind, int $sesId, array $d, $actor): array
+    {
+        $s = DB::table('ses_companies')->where('id', $sesId)->where('kind', 'ses')->where('status', 'active')->first();
+        if (!$s) return ['bad' => '担当者・エンジニアを登録できるのは、参加中の SES だけです。'];
+        $sei = clean_name(self::s($d['sei'] ?? null)); $mei = clean_name(self::s($d['mei'] ?? null));
+        $email = strtolower(trim((string) self::s($d['email'] ?? null)));
+        if ($sei === null || $mei === null) return ['bad' => '氏名（姓・名）を入れてください。'];
+        if (mb_strlen($sei) > 50 || mb_strlen($mei) > 50) return ['bad' => '氏名は、姓・名とも50文字までにしてください。'];
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) return ['bad' => 'メールアドレスを正しく入れてください。'];
+
+        // すでに使われているアドレス：同じ SES の本登録済みの人（または管理者が登録する管理者）なら、役割を足す（兼任）。それ以外は断る
+        $share = null;
+        if (DB::table('users')->where('email', $email)->exists()) {
+            $share = $kind === 'eg' ? W::egShareTarget($email, $sesId, $actor) : W::sesShareTarget($email, $sesId);
+            if (!$share) return self::refuseEmail($email, $kind, $actor);
+        }
+        if ($kind === 'ses' && $share) {
+            W::addSesRole($share->id, $actor);
+            N::audit($actor->id ?? null, 'reg-person', '担当者 #'.$share->id.'（役割を追加）');
+            return ['ok' => true, 'user_id' => (int) $share->id, 'engineer_id' => null, 'linked' => $share];
+        }
+
+        $linked = null; $eid = null; $uid = null;
+        DB::transaction(function () use ($kind, $sesId, $sei, $mei, $email, $actor, &$linked, &$eid, &$uid) {
+            if ($kind === 'eg') {
+                // エンジニアの行は仮登録のまま（engineers.registered_at は本登録で入る）。管理者へのお知らせは、本登録のときに Registration が出す
+                $eid = W::createEngineer($sesId, ['name_sei' => $sei, 'name_mei' => $mei, 'email' => $email], $actor, false, $linked, false);
+                if ($linked) return;
+            }
+            $uid = (int) DB::table('users')->insertGetId(['email' => $email] + W::nameCols(join_name($sei, $mei), $sei, $mei)
+                + ['role' => $kind, 'ses_id' => $sesId, 'engineer_id' => $eid, 'registered_by' => $actor->id ?? null, 'created_at' => now_str(), 'updated_at' => now_str()]);
+        });
+        if ($linked) return ['ok' => true, 'user_id' => (int) $linked->id, 'engineer_id' => $eid, 'linked' => $linked];
+
+        $target = DB::table('users')->find($uid);
+        self::sendLink($target, $actor);
+        N::audit($actor->id ?? null, 'reg-person', lbl('role', $kind)." #{$uid}"); // 氏名・アドレスは記録に書かない
+        self::tellRep($s, $target, $actor);
+        return ['ok' => true, 'user_id' => $uid, 'engineer_id' => $eid, 'linked' => null];
+    }
+
+    // 使われているアドレスで登録できないとき。SES の人には理由によらず同じ文（他社の人の存在を漏らさない）と記録、管理者には理由を出す
+    private static function refuseEmail(string $email, string $kind, $actor, ?int $exceptUserId = null): array
+    {
+        if (($actor->role ?? '') === 'ses') {
+            N::audit($actor->id ?? null, 'reg-refused', ($kind === 'eg' ? 'エンジニア' : '担当者').'の仮登録'); // アドレスは記録に書かない
+            return ['bad' => T::REFUSED_EMAIL, 'refused' => true];
+        }
+        return ['bad' => self::emailInUse($email, $exceptUserId) ?? 'このメールアドレスはすでに使われています。'];
+    }
+
+    // 管理者が担当者・エンジニアを仮登録したら、所属の代表者にメールとベルで知らせる
+    private static function tellRep(object $s, object $target, $actor): void
+    {
+        if (($actor->role ?? '') !== 'admin' || !$s->rep_user_id) return;
+        [$who, $roleName] = self::whoOf($target);
+        N::notify((int) $s->rep_user_id, T::adminRegisteredTitle($who, $roleName), T::adminRegisteredBody($who, $roleName, (string) ($actor->name ?? '')),
+            $target->role === 'eg' ? "/engineers/{$target->engineer_id}" : '/ses/company', true, 'registered-by-admin', 'ses');
+    }
+
+    // 仮登録中の担当者・エンジニアの直し（姓・名・メール。管理者だけ、所属を参加中の SES に直せる）。同じ行のまま。
+    // メールか所属を変えたときだけ、新しいリンクを送る。['ok' => 文] か ['bad' => 文]
+    public static function editProvisionalPerson(object $t, array $d, $actor): array
+    {
+        if ($t->registered_at) return ['bad' => '仮登録の内容は、本登録が済む前だけ直せます。'];
+        if (!in_array($t->role, ['ses', 'eg'], true) || Requirements::isRep($t)) return ['bad' => 'この方の仮登録は、ここでは直せません。'];
+        $sei = clean_name(self::s($d['sei'] ?? null)); $mei = clean_name(self::s($d['mei'] ?? null));
+        $email = strtolower(trim((string) self::s($d['email'] ?? null)));
+        if ($sei === null || $mei === null) return ['bad' => '氏名（姓・名）を入れてください。'];
+        if (mb_strlen($sei) > 50 || mb_strlen($mei) > 50) return ['bad' => '氏名は、姓・名とも50文字までにしてください。'];
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) return ['bad' => 'メールアドレスを正しく入れてください。'];
+        $mailChanged = $email !== strtolower((string) $t->email);
+        if ($mailChanged && DB::table('users')->where('email', $email)->where('id', '!=', $t->id)->exists()) return self::refuseEmail($email, $t->role, $actor, (int) $t->id);
+        // 所属を変えられるのは管理者だけ。選べるのは参加中の SES だけ（SES の人が ses_id を混ぜても無視する）
+        $sesId = (int) $t->ses_id;
+        if (($actor->role ?? '') === 'admin' && isset($d['ses_id']) && ctype_digit((string) $d['ses_id']) && (int) $d['ses_id'] !== $sesId) {
+            if (!DB::table('ses_companies')->where('id', (int) $d['ses_id'])->where('kind', 'ses')->where('status', 'active')->exists()) return ['bad' => '所属に選べるのは、参加中の SES だけです。'];
+            $sesId = (int) $d['ses_id'];
+        }
+        $sesChanged = $sesId !== (int) $t->ses_id;
+        DB::transaction(function () use ($t, $sei, $mei, $email, $sesId) {
+            DB::table('users')->where('id', $t->id)->update(W::nameCols(join_name($sei, $mei), $sei, $mei) + ['email' => $email, 'ses_id' => $sesId, 'updated_at' => now_str()]);
+            if ($t->role === 'eg' && $t->engineer_id) {
+                DB::table('engineers')->where('id', $t->engineer_id)->update(W::nameCols(join_name($sei, $mei), $sei, $mei) + ['email' => $email, 'ses_id' => $sesId, 'updated_at' => now_str()]);
+            }
+        });
+        N::audit($actor->id ?? null, 'reg-edit', lbl('role', $t->role)." #{$t->id}");
+        if ($mailChanged || $sesChanged) {
+            self::sendLink(DB::table('users')->find($t->id), $actor); // 新しいリンクで、前のリンクは使えなくなる
+            return ['ok' => '保存し、新しい仮登録のご案内を送りました（前のリンクは使えなくなりました）。'];
+        }
+        return ['ok' => '保存しました。'];
+    }
+
+    // エンジニアの「送り直し」（エンジニアの画面から）。アカウントがあればそのリンクを送り直し、無ければ（ログインの無いエンジニア）ここで作る。
+    // 同じ SES の本登録済みの担当者（管理者）のアドレスなら、リンクではなくエンジニアの役割を足す。['type' => 'ok'|'bad', 'msg' => 文]
+    public static function resendEngineer(object $e, $actor): array
+    {
+        $bad = fn (string $m) => ['type' => 'bad', 'msg' => $m];
+        if ($e->status === 'left') return $bad('退会済のため、送れません。');
+        if ($e->suspended_at) return $bad('停止中のため、送れません。');
+        if (!$e->email) return $bad('メールアドレスが登録されていません。');
+        $mine = DB::table('users')->where('engineer_id', $e->id)->where('role', 'eg')->first();
+        if ($mine) return self::resend($mine, $actor);
+        // 同じ SES の担当者（管理者）のアカウントなら、リンクではなくエンジニアの役割を足す（兼任）
+        $linkedOther = DB::table('users')->where('email', strtolower($e->email))->where('engineer_id', $e->id)->whereIn('role', ['ses', 'admin'])->exists();
+        if ($linkedOther) return ['type' => 'ok', 'msg' => 'この方のアカウントに、エンジニアの役割を足しました。'];
+        if ($t = W::egShareTarget($e->email, (int) $e->ses_id, $actor)) {
+            W::linkEngineer($t->id, (int) $e->id, $actor);
+            return ['type' => 'ok', 'msg' => 'この方のアカウントに、エンジニアの役割を足しました。'];
+        }
+        if (DB::table('users')->where('email', strtolower($e->email))->exists()) {
+            $r = self::refuseEmail(strtolower($e->email), 'eg', $actor);
+            return $bad($r['bad']);
+        }
+        // ログインの無いエンジニア：技術登録の氏名・ふりがな・電話を写して、仮登録のアカウントを作る
+        [$sei, $mei] = ($e->name_sei || $e->name_mei) ? [$e->name_sei, $e->name_mei] : split_name($e->name);
+        $uid = (int) DB::table('users')->insertGetId(['email' => strtolower($e->email)] + W::nameCols((string) $e->name, $sei, $mei) + W::kanaCols((array) $e)
+            + ['phone' => $e->phone, 'role' => 'eg', 'ses_id' => $e->ses_id, 'engineer_id' => $e->id, 'registered_by' => $actor->id ?? null, 'created_at' => now_str(), 'updated_at' => now_str()]);
+        self::sendLink(DB::table('users')->find($uid), $actor);
+        N::audit($actor->id ?? null, 'reg-resend', 'エンジニア #'.$uid);
+        return ['type' => 'ok', 'msg' => '仮登録のご案内を送りました。'];
+    }
+
+    // ---------- 代表者の交代（管理者だけ。K21） ----------
+    // 本登録済みの担当者から選ぶ。前の代表者は担当者になる。会社の代表者の欄（rep_*）は新しい人の姓名にそろえる。['type', 'msg']
+    public static function changeRep(int $sesId, int $userId, $actor): array
+    {
+        $bad = fn (string $m) => ['type' => 'bad', 'msg' => $m];
+        $res = null;
+        DB::transaction(function () use ($sesId, $userId, $actor, $bad, &$res) {
+            $s = DB::table('ses_companies')->where('id', $sesId)->where('kind', 'ses')->lockForUpdate()->first();
+            if (!$s || $s->status !== 'active') { $res = $bad('代表者を交代できるのは、参加中の SES だけです。'); return; }
+            $new = DB::table('users')->where('id', $userId)->where('role', 'ses')->where('ses_id', $sesId)->where('active', 1)->whereNull('left_at')->whereNotNull('registered_at')->first();
+            if (!$new) { $res = $bad('代表者にできるのは、この会社の、本登録が済んだ担当者だけです。'); return; }
+            if ((int) $s->rep_user_id === (int) $new->id) { $res = $bad('すでに代表者です。'); return; }
+            $old = $s->rep_user_id ? DB::table('users')->find($s->rep_user_id) : null;
+            [, $a, $b] = ($new->name_sei || $new->name_mei) ? [null, $new->name_sei, $new->name_mei] : [null, ...split_name($new->name)];
+            DB::table('ses_companies')->where('id', $sesId)->update(['rep_user_id' => $new->id, 'next_rep_user_id' => null, 'rep_name' => $new->name, 'rep_sei' => $a, 'rep_mei' => $b, 'updated_at' => now_str()]);
+            N::audit($actor->id ?? null, 'rep-change', "ses #{$sesId}");
+            $body = T::repChangedBody((string) $s->name, (string) $new->name, (string) ($old->name ?? '（なし）'));
+            N::notify((int) $new->id, T::REP_CHANGED_TITLE, $body, '/ses/company', true, 'rep-change', 'ses');
+            if ($old && (int) $old->id !== (int) $new->id) N::notify((int) $old->id, T::REP_CHANGED_TITLE, $body, '/ses/company', true, 'rep-change', 'ses');
+            $res = ['type' => 'ok', 'msg' => "{$new->name} さんを代表者にしました。"];
+        });
+        return $res;
+    }
+
+    // 担当者が（本登録済みで）1人もいない会社の交代：次の代表者を仮登録する。本登録が済むと、代表者が入れ替わる。それまでは今の代表者のまま
+    public static function provisionalNextRep(int $sesId, array $d, $actor): array
+    {
+        $s = DB::table('ses_companies')->where('id', $sesId)->where('kind', 'ses')->first();
+        if (!$s || $s->status !== 'active') return ['type' => 'bad', 'msg' => '代表者を交代できるのは、参加中の SES だけです。'];
+        $staff = DB::table('users')->where('ses_id', $sesId)->where('role', 'ses')->where('active', 1)->whereNull('left_at')->whereNotNull('registered_at')
+            ->when($s->rep_user_id, fn ($q) => $q->where('id', '!=', $s->rep_user_id))->exists();
+        if ($staff) return ['type' => 'bad', 'msg' => '本登録が済んだ担当者がいます。その中から代表者を選んでください。'];
+        if ($s->next_rep_user_id && DB::table('users')->where('id', $s->next_rep_user_id)->whereNull('registered_at')->exists()) {
+            return ['type' => 'bad', 'msg' => 'すでに次の代表者を仮登録しています。送り直しや取り消しは、その方の行から行ってください。'];
+        }
+        $sei = clean_name(self::s($d['sei'] ?? null)); $mei = clean_name(self::s($d['mei'] ?? null));
+        $email = strtolower(trim((string) self::s($d['email'] ?? null)));
+        if ($sei === null || $mei === null) return ['type' => 'bad', 'msg' => '氏名（姓・名）を入れてください。'];
+        if (mb_strlen($sei) > 50 || mb_strlen($mei) > 50) return ['type' => 'bad', 'msg' => '氏名は、姓・名とも50文字までにしてください。'];
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) return ['type' => 'bad', 'msg' => 'メールアドレスを正しく入れてください。'];
+        if ($why = self::emailInUse($email)) return ['type' => 'bad', 'msg' => $why];
+        $uid = (int) DB::transaction(function () use ($sesId, $sei, $mei, $email, $actor) {
+            $uid = (int) DB::table('users')->insertGetId(['email' => $email] + W::nameCols(join_name($sei, $mei), $sei, $mei)
+                + ['role' => 'ses', 'ses_id' => $sesId, 'registered_by' => $actor->id ?? null, 'created_at' => now_str(), 'updated_at' => now_str()]);
+            DB::table('ses_companies')->where('id', $sesId)->update(['next_rep_user_id' => $uid, 'updated_at' => now_str()]);
+            return $uid;
+        });
+        self::sendLink(DB::table('users')->find($uid), $actor); // 次の代表者なので、代表者の本登録の画面になる
+        N::audit($actor->id ?? null, 'rep-next', "ses #{$sesId}");
+        return ['type' => 'ok', 'msg' => '次の代表者を仮登録し、仮登録のご案内を送りました。本登録が済むと、代表者が入れ替わります。'];
     }
 
     // ---------- 送り直し・取り消し ----------

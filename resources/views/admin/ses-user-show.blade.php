@@ -4,14 +4,18 @@
     $state = user_state($u);
     $base = '/admin/ses/'.$s->id.'/users/'.$u->id;
     $back = ['back' => 'detail'];
+    $isRepRow = (int) $u->id === (int) $s->rep_user_id || (int) $u->id === (int) $s->next_rep_user_id; // 代表者（次の代表者）は、交代のあとでなければ止められない
 @endphp
 <x-card title="担当者情報">
-<x-slot:actions>@if($state === '停止')<x-post :action="$base.'/resume'" label="再開" cls="small" :fields="$back" :confirm="$u->name.' さんを再開します。'" />
-@elseif($state !== '退会済')<x-post :action="$base.'/suspend'" label="停止" cls="ghost small" :fields="$back" :confirm="$u->name.' さんを停止します。ログインできなくなります（再開できます）。'" />@endif
-@if($state !== '退会済')<x-post :action="$base.'/delete'" label="退会" cls="danger small" :fields="$back" :confirm="$u->name.' さんを退会済にします。ログインできなくなり、元に戻せません（記録は残ります）。よろしいですか？'" />@endif
+<x-slot:actions>@if(is_provisional_state($state))<x-post :action="'/people/'.$u->id.'/resend'" label="送り直し" cls="ghost small" />
+<a class="btn ghost small" href="{{ url('/people/'.$u->id.'/edit') }}">仮登録の内容を直す</a>
+@if((int) $u->id !== (int) $s->rep_user_id)<x-post :action="'/people/'.$u->id.'/cancel'" label="取り消し" cls="danger small" confirm="この仮登録を取り消します。元に戻せません。よろしいですか？" />@endif @endif
+@if(!$isRepRow && $state === '停止')<x-post :action="$base.'/resume'" label="再開" cls="small" :fields="$back" :confirm="$u->name.' さんを再開します。'" />
+@elseif(!$isRepRow && $state !== '退会済')<x-post :action="$base.'/suspend'" label="停止" cls="ghost small" :fields="$back" :confirm="$u->name.' さんを停止します。ログインできなくなります（再開できます）。'" />@endif
+@if(!$isRepRow && $state !== '退会済')<x-post :action="$base.'/delete'" label="退会" cls="danger small" :fields="$back" :confirm="$u->name.' さんを退会済にします。ログインできなくなり、元に戻せません（記録は残ります）。よろしいですか？'" />@endif
 </x-slot:actions>
 <dl class="dl">
-<dt>状態</dt><dd>{{ $state }}</dd>
+<dt>状態</dt><dd>{{ $state }}@if((int) $u->id === (int) $s->rep_user_id)（代表者）@elseif((int) $u->id === (int) $s->next_rep_user_id)（次の代表者）@endif</dd>
 <dt>SES</dt><dd>{{ $s->name }}</dd>
 <dt>氏名</dt><dd>{{ $u->name }}</dd>
 <dt>ふりがな</dt><dd>{{ $u->kana ?: '—' }}</dd>

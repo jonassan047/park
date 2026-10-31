@@ -72,6 +72,25 @@ class RegistrationText
     const HELP_SUBJECT = '本登録のご案内について';
     const HELP_BODY = "PARK の本登録が、まだ済んでいません。\n本登録のリンクは、登録した方に送り直しをご依頼ください。\nこのメールに心当たりがない場合は、破棄してください。";
 
+    // ---------- 管理者が担当者・エンジニアを仮登録したとき、所属の代表者に送る知らせ ----------
+    public static function adminRegisteredTitle(string $who, string $roleName): string
+    {
+        return "管理者が{$roleName}を仮登録しました：{$who}";
+    }
+
+    public static function adminRegisteredBody(string $who, string $roleName, string $by): string
+    {
+        return "管理者の{$by}が、{$who} さんを PARK の{$roleName}として仮登録しました。\n本登録が済むと、お知らせします。\n心当たりがない場合は、管理者にご連絡ください。";
+    }
+
+    // ---------- 代表者の交代の知らせ ----------
+    const REP_CHANGED_TITLE = '代表者が変わりました';
+
+    public static function repChangedBody(string $company, string $newRep, string $oldRep): string
+    {
+        return "{$company} の代表者が、{$oldRep} さんから {$newRep} さんに変わりました。\n前の代表者は担当者になります。";
+    }
+
     // ---------- 上位への知らせ ----------
     // 本登録が済んだとき：$who は「{立場} {氏名}」、$changes は修正の前後の行（無ければ空）
     public static function doneTitle(string $who): string

@@ -24,18 +24,44 @@
 @foreach($users as $u)@php
 $state = user_state($u);
 $base = '/admin/ses/'.$s->id.'/users/'.$u->id;
-@endphp<tr><td>{{ $u->name }}@if($u->engineer_id) <a class="badge info" href="{{ url('/engineers/'.$u->engineer_id) }}">エンジニア兼任</a>@endif</td><td>{{ $u->email }}</td><td>{{ $state }}</td>
-<td>{{ fmt_dt($u->last_login) }}</td><td>@if(is_provisional_state($state))<x-post :action="'/people/'.$u->id.'/resend'" label="送り直し" cls="ghost small" />@if($s->rep_user_id != $u->id)<x-post :action="'/people/'.$u->id.'/cancel'" label="取り消し" cls="danger small" confirm="この仮登録を取り消します。元に戻せません。よろしいですか？" />@endif @endif
-@if($state === '停止')<x-post :action="$base.'/resume'" label="再開" cls="small" :confirm="$u->name.' さんを再開します。'" />
-@elseif($state !== '退会済')<x-post :action="$base.'/suspend'" label="停止" cls="ghost small" :confirm="$u->name.' さんを停止します。ログインできなくなります（再開できます）。'" />@endif
-@if($state !== '退会済')<x-post :action="$base.'/delete'" label="退会" cls="danger small" :confirm="$u->name.' さんを退会済にします。ログインできなくなり、元に戻せません（記録は残ります）。よろしいですか？'" />@endif
+$isRepRow = (int) $u->id === (int) $s->rep_user_id || (int) $u->id === (int) $s->next_rep_user_id; // 代表者（次の代表者）は、交代のあとでなければ止められない
+@endphp<tr><td>{{ $u->name }}@if((int) $u->id === (int) $s->rep_user_id) <span class="badge info">代表者</span>@elseif((int) $u->id === (int) $s->next_rep_user_id) <span class="badge info">次の代表者</span>@endif
+@if($u->engineer_id) <a class="badge info" href="{{ url('/engineers/'.$u->engineer_id) }}">エンジニア兼任</a>@endif</td><td>{{ $u->email }}</td><td>{{ $state }}</td>
+<td>{{ fmt_dt($u->last_login) }}</td><td>@if(is_provisional_state($state))<x-post :action="'/people/'.$u->id.'/resend'" label="送り直し" cls="ghost small" />
+<a class="btn ghost small" href="{{ url('/people/'.$u->id.'/edit') }}">仮登録の内容を直す</a>
+@if((int) $s->rep_user_id !== (int) $u->id)<x-post :action="'/people/'.$u->id.'/cancel'" label="取り消し" cls="danger small" confirm="この仮登録を取り消します。元に戻せません。よろしいですか？" />@endif @endif
+@if(!$isRepRow && $state === '停止')<x-post :action="$base.'/resume'" label="再開" cls="small" :confirm="$u->name.' さんを再開します。'" />
+@elseif(!$isRepRow && $state !== '退会済')<x-post :action="$base.'/suspend'" label="停止" cls="ghost small" :confirm="$u->name.' さんを停止します。ログインできなくなります（再開できます）。'" />@endif
+@if(!$isRepRow && $state !== '退会済')<x-post :action="$base.'/delete'" label="退会" cls="danger small" :confirm="$u->name.' さんを退会済にします。ログインできなくなり、元に戻せません（記録は残ります）。よろしいですか？'" />@endif
 <a class="btn small" href="{{ url($base) }}">詳細</a></td></tr>@endforeach
 </x-table>
 </x-card>
+@if($s->status === 'active')
+<x-card title="代表者の交代">
+@if(!$s->rep_user_id)<p class="bad-text">この会社には代表者がいません。本登録が済んだ担当者から選んで、代表者にしてください。</p>@endif
+@if($repCandidates->count())
+<form method="post" action="{{ url('/admin/ses/'.$s->id.'/rep') }}" class="filters">@csrf
+<x-field label="新しい代表者（本登録が済んだ担当者から選びます）" name="user_id" type="select" :options="$repCandidates->pluck('name', 'id')->all()" blank="選んでください" required />
+<button class="btn small" onclick="return confirm('代表者を交代します。前の代表者は担当者になります。よろしいですか？')">代表者にする</button></form>
+@else
+<p class="muted">本登録が済んだ担当者がいません。次の代表者を仮登録すると、その方の本登録が済んだときに代表者が入れ替わります（それまでは今の代表者のままです）。</p>
+@if($s->next_rep_user_id && $users->firstWhere('id', $s->next_rep_user_id))<p>次の代表者：{{ $users->firstWhere('id', $s->next_rep_user_id)->name }}（上の担当者の表から、送り直し・直し・取り消しができます）</p>
+@else
+<form method="post" action="{{ url('/admin/ses/'.$s->id.'/rep') }}">@csrf
+<div class="pair"><x-field label="氏名（姓）" name="name_sei" required /><x-field label="氏名（名）" name="name_mei" required /></div>
+<x-field label="メールアドレス" name="email" type="email" required />
+<button class="btn small">次の代表者を仮登録する</button></form>
+@endif
+@endif
+</x-card>
+@endif
 <x-card title="エンジニア">@if($s->status === 'active')<x-slot:actions><a class="btn small" href="{{ url('/engineers/new?ses='.$s->id) }}">エンジニアを登録</a></x-slot:actions> @endif
-<x-table :head="['名前', '状態', '希望', '']" :count="$engs->count()">
-@foreach($engs as $e)@php $egBase = '/engineers/'.$e->id; $back = ['back' => 'ses']; @endphp<tr><td>{{ $e->name }}</td><td>{{ badge('engStatus', $e->status) }}@if($e->suspended_at) <span class="badge mute">停止中</span>@endif</td><td>{{ man($e->desired_price) }}</td>
-<td>@if($e->status !== 'left')@if($e->suspended_at)<x-post :action="$egBase.'/resume'" label="再開" cls="small" :fields="$back" confirm="このエンジニアを再開します。ログインでき、案件の配信の候補にも出るようになります。" />
+<x-table :head="['名前', '状態', 'アカウント', '希望', '']" :count="$engs->count()">
+@foreach($engs as $e)@php $egBase = '/engineers/'.$e->id; $back = ['back' => 'ses']; @endphp<tr><td>{{ $e->name }}</td><td>{{ badge('engStatus', $e->status) }}@if($e->suspended_at) <span class="badge mute">停止中</span>@endif</td><td>{{ $e->account }}</td><td>{{ man($e->desired_price) }}</td>
+<td>@if(is_provisional_state($e->account) && $e->status !== 'left')<x-post :action="$egBase.'/invite'" label="送り直し" cls="ghost small" />
+@if($e->login_id)<a class="btn ghost small" href="{{ url('/people/'.$e->login_id.'/edit') }}">仮登録の内容を直す</a>
+<x-post :action="'/people/'.$e->login_id.'/cancel'" label="取り消し" cls="danger small" confirm="この仮登録を取り消します。エンジニアの行も消え、元に戻せません。よろしいですか？" />@endif @endif
+@if($e->status !== 'left')@if($e->suspended_at)<x-post :action="$egBase.'/resume'" label="再開" cls="small" :fields="$back" confirm="このエンジニアを再開します。ログインでき、案件の配信の候補にも出るようになります。" />
 @else<x-post :action="$egBase.'/suspend'" label="停止" cls="ghost small" :fields="$back" :confirm="engineer_stop_confirm(isset($working[$e->id]), (int) ($inSel[$e->id] ?? 0))" />@endif
 <x-post :action="$egBase.'/delete'" label="退会" cls="danger small" :fields="$back" confirm="このエンジニアを退会済にします。ログインできなくなり、元に戻せません（記録は残ります）。よろしいですか？" />@endif
 <a class="btn small" href="{{ url($egBase) }}">詳細</a></td></tr>@endforeach

@@ -14,6 +14,12 @@ use Illuminate\Support\Facades\DB;
 // SES の画面：ダッシュボード・自社のエンジニア・案件・応募状況・契約・請求・会社情報
 class SesController extends Controller
 {
+    // 仮登録中のエンジニアのアカウント（role='eg' で本登録が済んでいないもの）の id。「直す」「取り消し」の対象
+    public static function provisionalLoginId(?object $u): ?int
+    {
+        return $u && $u->role === 'eg' && !$u->registered_at ? (int) $u->id : null;
+    }
+
     public function dashboard(Request $r)
     {
         $sid = $r->user()->ses_id;
@@ -42,7 +48,8 @@ class SesController extends Controller
         $users = DB::table('users')->whereIn('engineer_id', $list->pluck('id'))->orderByRaw("case when role = 'eg' then 1 else 0 end")->get()->keyBy('engineer_id');
         foreach ($list as $e) {
             $e->skills = implode('、', ($skills[$e->id] ?? collect())->pluck('name')->all());
-            $e->account = user_state($users[$e->id] ?? null);
+            $e->account = engineer_state($e, $users[$e->id] ?? null);
+            $e->login_id = self::provisionalLoginId($users[$e->id] ?? null);
         }
         $egIds = $list->pluck('id');
         return view('ses.engineers', [
@@ -95,14 +102,35 @@ class SesController extends Controller
         $engs = DB::table('engineers')->where('ses_id', $id)->orderBy('name')->get();
         $egIds = $engs->pluck('id');
         $s = DB::table('ses_companies')->find($id);
+        $egUsers = DB::table('users')->whereIn('engineer_id', $egIds)->orderByRaw("case when role = 'eg' then 1 else 0 end")->get()->keyBy('engineer_id');
+        foreach ($engs as $e) { $e->account = engineer_state($e, $egUsers[$e->id] ?? null); $e->login_id = self::provisionalLoginId($egUsers[$e->id] ?? null); }
         return view('ses.company', [
-            's' => $s, 'repName' => Registration::repName($s)[0], 'isRep' => Requirements::isRep($r->user()),
+            's' => $s, 'repName' => Registration::repName($s)[0], 'isRep' => Requirements::isRep($r->user()), 'repId' => $s->rep_user_id,
             'users' => DB::table('users')->where('ses_id', $id)->where('role', 'ses')->get(),
             'engs' => $engs,
             'working' => DB::table('contracts')->whereIn('engineer_id', $egIds)->where('status', 'active')->pluck('engineer_id')->flip(),
             'inSel' => DB::table('applications')->whereIn('engineer_id', $egIds)->whereIn('status', PipelineController::OPEN)->get(['engineer_id'])->groupBy('engineer_id')->map->count(),
             'invs' => DB::table('invoices')->where('ses_id', $id)->where('status', '!=', 'draft')->orderByDesc('period')->get(),
         ]);
+    }
+
+    // 担当者の仮登録は代表者だけ（担当者は 403。K13）。入れるのは 姓・名・メール の3つだけ
+    public function userNew(Request $r)
+    {
+        abort_unless(Requirements::isRep($r->user()), 403);
+        $s = DB::table('ses_companies')->find($r->user()->ses_id);
+        return view('ses.user-new', ['s' => $s]);
+    }
+
+    public function userStore(Request $r)
+    {
+        abort_unless(Requirements::isRep($r->user()), 403);
+        [, $sei, $mei] = name_parts($r->all(), 'name', 'name');
+        // 所属は自社に固定（ses_id が混ぜられても使わない）
+        $res = Registration::provisionalPerson('ses', (int) $r->user()->ses_id, ['sei' => $sei, 'mei' => $mei, 'email' => $r->input('email')], $r->user());
+        if (isset($res['bad'])) return $this->go('/ses/company', $res['bad'], 'bad');
+        if ($res['linked']) return $this->go('/ses/company', 'このメールアドレスのエンジニアのアカウントに、SES 担当者の役割を足しました（仮登録のご案内は送っていません）。');
+        return $this->go('/ses/company', '担当者を仮登録し、仮登録のご案内を送りました。');
     }
 
     // 会社情報の編集は代表者だけ（担当者は見るだけ。K34）

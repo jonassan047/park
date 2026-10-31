@@ -46,11 +46,19 @@ class Workflow
         return ['type' => 'bad', 'msg' => 'この会社で使える担当者が、この人だけです。停止・退会にはできません。会社ごと止めるときは、SES の「停止」か「退会」を使ってください。'];
     }
 
+    // 代表者（または次の代表者）は、交代のあとでなければ停止・退会にできない（会社に代表者がいない状態を作らない。K21）
+    private static function repGuard(object $u): ?array
+    {
+        if (!Requirements::isRep($u)) return null;
+        return ['type' => 'bad', 'msg' => '代表者は、停止・退会にできません。先に、管理者に代表者の交代をご依頼ください。会社ごと止めるときは、SES の「停止」か「退会」を使ってください。'];
+    }
+
     public static function suspendSesUser(int $sesId, int $uid, $actor): ?array
     {
         if (!($u = self::sesUserOf($sesId, $uid))) return null;
         if ($u->left_at) return ['type' => 'bad', 'msg' => '退会済の人は操作できません。'];
         if (!$u->active) return ['type' => 'ok', 'msg' => 'すでに停止中です。'];
+        if ($rep = self::repGuard($u)) return $rep;
         if ($only = self::onlyUsableUser($sesId, $u)) return $only;
         // 招待リンクも使えなくする
         DB::table('users')->where('id', $uid)->update(['active' => 0, 'token' => null, 'token_expires' => null, 'updated_at' => now_str()]);
@@ -75,6 +83,7 @@ class Workflow
     {
         if (!($u = self::sesUserOf($sesId, $uid))) return null;
         if ($u->left_at) return ['type' => 'bad', 'msg' => '退会済の人は操作できません。'];
+        if ($rep = self::repGuard($u)) return $rep;
         if ($only = self::onlyUsableUser($sesId, $u)) return $only;
         // エンジニアを兼ねている人は、SES 担当者の役割だけ外す（エンジニアとしては引き続き入れる）
         if (self::isDual($u)) {
@@ -400,6 +409,10 @@ class Workflow
         // 未設定の人でも、立場（役割・SES・エンジニア）が依頼と違うなら招待しない（別の立場のリンクを渡さないため）
         if ($u && ($u->role !== $d['role'] || (int) $u->ses_id !== (int) ($d['ses_id'] ?? 0) || (int) $u->engineer_id !== (int) ($d['engineer_id'] ?? 0))) return null;
         if (!$u) {
+            // エンジニアのアカウントを新しく作るときは、技術登録の氏名・ふりがな・電話を写す（B1・AC7）
+            if ($d['role'] === 'eg' && !empty($d['engineer_id']) && ($eng = DB::table('engineers')->find($d['engineer_id']))) {
+                $d += ['name_sei' => $eng->name_sei, 'name_mei' => $eng->name_mei, 'kana_sei' => $eng->kana_sei, 'kana_mei' => $eng->kana_mei, 'phone' => $eng->phone];
+            }
             $row = ['email' => $email] + self::nameCols((string) $d['name'], $d['name_sei'] ?? null, $d['name_mei'] ?? null) + self::kanaCols($d) + ['role' => $d['role'], 'ses_id' => $d['ses_id'] ?? null,
                 'engineer_id' => $d['engineer_id'] ?? null, 'registered_by' => $actor->id ?? null, 'created_at' => now_str(), 'updated_at' => now_str()];
             // 企業名は管理者だけ（宛名に出る）
@@ -407,6 +420,8 @@ class Workflow
             if ($d['role'] === 'admin') {
                 $row['company_name'] = clean_name($d['company_name'] ?? null);
                 foreach (['position', 'phone', 'postal_code', 'address'] as $f) $row[$f] = str_in($d[$f] ?? '');
+            } elseif ($d['role'] === 'eg') {
+                $row['phone'] = str_in($d['phone'] ?? '');
             }
             $id = DB::table('users')->insertGetId($row);
             $u = DB::table('users')->find($id);
@@ -533,6 +548,7 @@ class Workflow
             // 代表者が姓名を直したら、会社の代表者の欄も同じにする（企業名はここでは変えられない）
             if ($user->role === 'ses' && ($ns !== null || $nm !== null) && Requirements::isRep($user)) Registration::syncRepName((int) $user->ses_id, $ns, $nm);
         });
+        self::syncEngineerFromUser($user->id); // エンジニア本人なら、技術登録にもそろえる（兼任の人は対象外）
         N::audit($user->id, 'profile', '');
         return $warn;
     }
@@ -650,7 +666,8 @@ class Workflow
     }
 
     // $linked：同じメールアドレスの担当者・管理者のアカウントに、エンジニアの役割を足したとき、その人の行が入る（招待は送らない）
-    public static function createEngineer(int $sesId, array $d, $actor, bool $invite = true, ?object &$linked = null): int
+    // $tellAdmins：管理者に「登録されました」のお知らせを出すか（仮登録のときは出さない。本登録のとき Registration が知らせる）
+    public static function createEngineer(int $sesId, array $d, $actor, bool $invite = true, ?object &$linked = null, bool $tellAdmins = true): int
     {
         $v = self::engValues($d);
         $id = DB::table('engineers')->insertGetId($v + ['ses_id' => $sesId, 'created_at' => now_str(), 'updated_at' => now_str()]);
@@ -660,7 +677,7 @@ class Workflow
             self::linkEngineer($t->id, $id, $actor);
             $linked = $t;
         } elseif ($invite && $v['email']) self::invite(['email' => $v['email'], 'name' => $v['name'], 'role' => 'eg', 'ses_id' => $sesId, 'engineer_id' => $id], $actor);
-        N::toAdmins('エンジニアが登録されました', "{$v['name']} さんが登録されました。経験票・スキルシートの作成を一緒に進めてください。", "/engineers/$id", false);
+        if ($tellAdmins) N::toAdmins('エンジニアが登録されました', "{$v['name']} さんが登録されました。経験票・スキルシートの作成を一緒に進めてください。", "/engineers/$id", false);
         return $id;
     }
 
@@ -670,7 +687,36 @@ class Workflow
         $v = self::engValues($d, $old);
         DB::table('engineers')->where('id', $id)->update($v + ['updated_at' => now_str()]);
         N::audit($actor->id, 'engineer-update', self::selfMark($actor, $id).$v['name']);
+        self::syncUsersFromEngineer($id); // 氏名・ふりがな・電話を、本人のアカウントにもそろえる
         self::editedBy($id, $actor);
+    }
+
+    // ---------- エンジニアの氏名・ふりがな・電話を、アカウント（users）と技術登録（engineers）でそろえる（B1） ----------
+    // 兼任の人（users.role が ses・admin）は対象にしない。電話は会社のものかもしれないため。self_confirmed_at には触らない
+
+    // アカウントの値を、技術登録に写す。DB の行を読み直し、role='eg' で engineer_id があるときだけ
+    public static function syncEngineerFromUser(int $userId): void
+    {
+        $u = DB::table('users')->find($userId);
+        if (!$u || $u->role !== 'eg' || !$u->engineer_id) return;
+        $e = DB::table('engineers')->find($u->engineer_id);
+        if (!$e) return;
+        $upd = ['kana' => $u->kana, 'kana_sei' => $u->kana_sei, 'kana_mei' => $u->kana_mei, 'phone' => $u->phone, 'updated_at' => now_str()];
+        // 姓・名がどちらも空なら、氏名は今のまま
+        if ($u->name_sei !== null || $u->name_mei !== null) $upd += ['name' => $u->name, 'name_sei' => $u->name_sei, 'name_mei' => $u->name_mei];
+        if (empty($e->initials) && $u->kana) $upd['initials'] = self::initialsFromKana($u->kana);
+        DB::table('engineers')->where('id', $e->id)->update($upd);
+    }
+
+    // 技術登録の値を、そのエンジニア本人のアカウント（role='eg' の行だけ）に写す
+    public static function syncUsersFromEngineer(int $engineerId): void
+    {
+        $e = DB::table('engineers')->find($engineerId);
+        if (!$e) return;
+        DB::table('users')->where('engineer_id', $engineerId)->where('role', 'eg')->update([
+            'name' => $e->name, 'name_sei' => $e->name_sei, 'name_mei' => $e->name_mei,
+            'kana' => $e->kana, 'kana_sei' => $e->kana_sei, 'kana_mei' => $e->kana_mei, 'phone' => $e->phone, 'updated_at' => now_str(),
+        ]);
     }
 
     // 登録の内容は、本人が責任を持つ。管理者・SES が書き換えたら、本人にもう一度確かめてもらう

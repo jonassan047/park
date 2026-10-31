@@ -287,21 +287,29 @@ class PostalAddressTest extends TestCase
     public function test_v4_6_engineer_register_and_profile(): void
     {
         $this->admin();
-        $this->get('/engineers/new?ses=1')->assertOk()->assertSee('name="postal_code"', false)->assertSee('name="address"', false);
+        // 仮登録の画面に、郵便番号・住所は無い（ご本人が本登録で入れる）。送られても入らない
+        $this->get('/engineers/new?ses=1')->assertOk()->assertDontSee('name="postal_code"', false)->assertDontSee('name="address"', false);
         $this->post('/engineers', ['ses_id' => '1', 'name_sei' => '郵便', 'name_mei' => '太郎', 'email' => 'pa-eg@park.example', 'postal_code' => '1500001', 'address' => '東京都渋谷区'])
             ->assertSessionHas('flash.type', 'ok');
         $e = DB::table('engineers')->where('name', '郵便 太郎')->first();
+        $this->assertSame([null, null], [$e->postal_code, $e->address]);
+        // 本登録の画面で入れる：不正な郵便番号・長すぎる住所は断る
+        $token = DB::table('users')->where('email', 'pa-eg@park.example')->value('token');
+        $reg = ['name_sei' => '郵便', 'name_mei' => '太郎', 'kana_sei' => 'ゆうびん', 'kana_mei' => 'たろう', 'phone' => '090-0000-0003', 'consent' => '1', 'password' => 'password12', 'password_confirmation' => 'password12'];
+        auth()->logout();
+        $this->flushSession();
+        $this->post('/invite/'.$token, $reg + ['postal_code' => '1-2', 'address' => '東京都渋谷区'])->assertSessionHasErrors('postal_code');
+        $this->post('/invite/'.$token, $reg + ['postal_code' => '1500001', 'address' => str_repeat('あ', 201)])->assertSessionHasErrors('address');
+        $this->assertNull(DB::table('engineers')->find($e->id)->postal_code);
+        $this->post('/invite/'.$token, $reg + ['postal_code' => '1500001', 'address' => '東京都渋谷区'])->assertRedirect(url('/two-factor/challenge'));
+        $this->post('/two-factor/challenge', ['code' => $this->lastTwoFactorCode()])->assertRedirect();
+        $e = DB::table('engineers')->find($e->id);
         $this->assertSame(['150-0001', '東京都渋谷区'], [$e->postal_code, $e->address]);
-        $this->get("/engineers/{$e->id}")->assertOk()->assertSee('〒150-0001 東京都渋谷区');
-        // 不正な郵便番号・長すぎる住所：増えない
-        $e0 = $this->rows('engineers'); $u0 = $this->rows('users');
-        $this->post('/engineers', ['ses_id' => '1', 'name_sei' => '不正', 'name_mei' => '太郎', 'email' => 'pa-eg2@park.example', 'postal_code' => '1-2'])->assertSessionHas('flash.type', 'bad');
-        $this->post('/engineers', ['ses_id' => '1', 'name_sei' => '不正', 'name_mei' => '太郎', 'email' => 'pa-eg2@park.example', 'address' => str_repeat('あ', 201)])
-            ->assertSessionHas('flash.type', 'bad')->assertSessionHas('flash.msg', '現住所は200文字までにしてください。');
-        $this->assertSame([$e0, $u0], [$this->rows('engineers'), $this->rows('users')]);
-        // SES の担当者も登録できる
+        $this->admin()->get("/engineers/{$e->id}")->assertOk()->assertSee('〒150-0001 東京都渋谷区');
+        // SES の担当者も、仮登録できる（郵便番号は取らない）
         $this->as('ses1@park.example')->post('/engineers', ['name_sei' => '自社', 'name_mei' => '次郎', 'email' => 'pa-eg3@park.example', 'postal_code' => '1000001'])->assertSessionHas('flash.type', 'ok');
-        $this->assertSame('100-0001', DB::table('engineers')->where('name', '自社 次郎')->value('postal_code'));
+        $this->assertNull(DB::table('engineers')->where('name', '自社 次郎')->value('postal_code'));
+        $this->admin();
         // 詳しいプロフィール
         $this->admin()->get('/engineers/1/profile')->assertOk()->assertSee('placeholder="123-4567"', false);
         $this->post('/engineers/1/profile', ['postal_code' => '1-2', 'address' => '変わらない'])->assertSessionHas('flash.type', 'bad');

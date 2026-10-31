@@ -61,6 +61,8 @@ class AiController extends Controller
     {
         $e = DB::table('engineers')->find($id);
         abort_unless($e && Perms::engineer($r->user(), $e), 403);
+        // 仮登録中のエンジニアには、上位が AI を使えない（K18）
+        abort_if(DB::table('users')->where('engineer_id', $id)->where('role', 'eg')->whereNull('registered_at')->exists(), 403);
         try {
             AiJobs::queueResume($id, $fid, $r->user());
             return $this->go("/engineers/$id#docs", 'AI に頼みました。手元の PC の AI が順に作業します（数分かかります。できたら知らせます）。');

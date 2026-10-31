@@ -4,21 +4,19 @@
     [$nameSei, $nameMei] = (($e->name_sei ?? null) || ($e->name_mei ?? null)) ? [$e->name_sei ?? null, $e->name_mei ?? null] : split_name($e->name ?? null);
     [$kanaSei, $kanaMei] = (($e->kana_sei ?? null) || ($e->kana_mei ?? null)) ? [$e->kana_sei ?? null, $e->kana_mei ?? null] : split_name($e->kana ?? null);
 @endphp
-@extends('layouts.app', ['title' => $isNew ? 'エンジニアの登録' : 'プロフィールの編集'])
+@extends('layouts.app', ['title' => 'プロフィールの編集'])
 @section('content')
-@if($isNew)<p class="muted">基本情報を登録します。登録すると、{{ auth()->user()->role === 'ses' ? 'ご本人に招待メールが届き、' : '所属の SES から招待メールを送ってもらうと、' }}経験票（これまでの案件）をご本人が入れられます。</p>@endif
 <x-card><form method="post" action="{{ url($action) }}">@csrf<div class="grid2">
-@if($sesFixed)<p class="span2">所属：{{ $sesFixed['name'] }}</p><input type="hidden" name="ses_id" value="{{ $sesFixed['id'] }}">@endif
 <div class="pair">
 <x-field label="氏名（姓）" name="name_sei" :value="$nameSei" required />
-<x-field label="氏名（名）" name="name_mei" :value="$nameMei" :required="$isNew" />
+<x-field label="氏名（名）" name="name_mei" :value="$nameMei" required />
 </div>
 <div class="pair">
-<x-field label="ふりがな（姓）" name="kana_sei" :value="$kanaSei" placeholder="やまだ" />
-<x-field label="ふりがな（名）" name="kana_mei" :value="$kanaMei" placeholder="たろう" hint="スキルシートのイニシャル（T.Y）に使います" />
+<x-field label="ふりがな（姓）" name="kana_sei" :value="$kanaSei" placeholder="やまだ" required />
+<x-field label="ふりがな（名）" name="kana_mei" :value="$kanaMei" placeholder="たろう" required hint="スキルシートのイニシャル（T.Y）に使います" />
 </div>
 <x-field label="メールで呼ぶ名前（愛称など）" name="nickname" :value="$e->nickname ?? null" placeholder="たろうさん" hint="案件の案内メールの宛名に使います。空なら氏名" />
-@unless($isEg)<x-field label="メールアドレス" name="email" type="email" :value="$e->email ?? null" :required="$isNew" :hint="$isNew ? (auth()->user()->role === 'ses' ? 'ご本人に招待メールが届きます' : '招待メールは所属の SES が送ります') : null" />@endunless
+@unless($isEg)<x-field label="メールアドレス" name="email" type="email" :value="$e->email ?? null" />@endunless
 <x-field label="生まれた年" name="birth_year" type="number" :value="$e->birth_year ?? null" placeholder="1985" />
 <x-field label="最寄り駅" name="nearest_station" :value="$e->nearest_station ?? null" />
 <x-field label="IT の経験年数" name="years_exp" type="number" step="0.5" :value="num_disp($e->years_exp ?? null)" />
@@ -27,7 +25,6 @@
 <x-field label="稼働できる日" name="available_from" type="date" :value="$e->available_from ?? null" />
 <x-field label="希望の働き方" name="work_style" type="select" :options="PARK_LABELS['workStyle']" :value="$e->work_style ?? 'any'" />
 <x-field label="週の稼働日数" name="days_per_week" type="number" min="1" :value="$e->days_per_week ?? 5" />
-@if($isNew)<x-field label="郵便番号" name="postal_code" placeholder="123-4567" /><x-field label="現住所" name="address" hint="履歴書に使います。見られるのは、ご本人・所属の SES・管理者だけです。" />@endif
 @if($isEg)
   @php $st = $e->status ?? 'available'; $opts = ['available' => '案件を探している', 'unavailable' => '今は休止'] + (in_array($st, ['working', 'proposing']) ? [$st => lbl('engStatus', $st)] : []); @endphp
   <x-field label="今の状態" name="status" type="select" :options="$opts" :value="$st" />
@@ -39,5 +36,5 @@
 </div>
 <x-field label="強み（ひとこと）" name="strengths" :value="$e->strengths ?? null" placeholder="例：業務系 Java の設計〜テストを1人で回せる" />
 <x-field label="自己PR" name="summary" type="textarea" rows="5" :value="$e->summary ?? null" hint="得意分野と、どんな現場で力を出せるか。事実だけを書きます。" />
-<a class="btn ghost" href="{{ $isNew ? ($sesFixed ? url('/admin/ses/'.$sesFixed['id']) : list_url('engineers')) : url('/engineers/'.$e->id) }}">戻る</a> <button class="btn">{{ $isNew ? (auth()->user()->role === 'ses' ? '登録して招待メールを送る' : '登録する') : '保存する' }}</button></form></x-card>
+<a class="btn ghost" href="{{ url('/engineers/'.$e->id) }}">戻る</a> <button class="btn">保存する</button></form></x-card>
 @endsection

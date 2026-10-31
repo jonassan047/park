@@ -6,8 +6,10 @@ use App\Services\EngineerDocs;
 use App\Services\Matcher;
 use App\Services\Notifier as N;
 use App\Services\Qa;
+use App\Services\Registration;
 use App\Services\Workflow as W;
 use App\Support\Perms;
+use App\Support\Requirements;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -23,21 +25,45 @@ class EngineerController extends Controller
         return $e;
     }
 
+    // 仮登録の入力画面（姓・名・メールの3つだけ）。管理者は、参加中の SES を選ぶ（SES の画面から来たときは、その SES に決まる）。
+    // SES の人は自社に固定。管理者の直属は、新しくは登録できない
     public function create(Request $r)
     {
-        // 管理者は、SES の画面で SES を選んでから登録する（管理者の直属は、新しくは登録できない）
         $sesFixed = null;
-        $sesId = null;
+        $sesOptions = null;
         if ($r->user()->role === 'admin') {
+            $active = DB::table('ses_companies')->where('kind', 'ses')->where('status', 'active')->orderBy('name')->pluck('name', 'id')->all();
             $ses = (string) $r->query('ses');
-            if (ctype_digit($ses) && ($row = DB::table('ses_companies')->where('id', (int) $ses)->where('kind', 'ses')->where('status', 'active')->first())) {
-                $sesFixed = ['id' => (string) $row->id, 'name' => $row->name];
+            if ($ses !== '') {
+                if (!ctype_digit($ses) || !isset($active[(int) $ses])) {
+                    return redirect('/admin/ses')->with('flash', ['msg' => 'エンジニアは、SES の画面で SES を選んでから登録します。', 'type' => 'warn']);
+                }
+                $sesFixed = ['id' => (string) (int) $ses, 'name' => $active[(int) $ses]];
+            } elseif (!$active) {
+                return redirect('/admin/ses')->with('flash', ['msg' => 'エンジニアを登録できる、参加中の SES がありません。', 'type' => 'warn']);
             } else {
-                return redirect('/admin/ses')->with('flash', ['msg' => 'エンジニアは、SES の画面で SES を選んでから登録します。', 'type' => 'warn']);
+                $sesOptions = $active;
             }
-            $sesId = $sesFixed['id'];
         }
-        return view('engineers.form', ['e' => (object) ['ses_id' => $sesId], 'action' => '/engineers', 'isNew' => true, 'sesFixed' => $sesFixed]);
+        return view('engineers.new', ['sesFixed' => $sesFixed, 'sesOptions' => $sesOptions]);
+    }
+
+    // 仮登録中のエンジニアは、上位が技術・住所などを入れられない（本人が本登録のあとに入れる。K18）。仮登録の直しの画面へ案内する。
+    // 「仮登録中」＝本登録が済んでいないアカウント（role='eg'）がある。ログインの無い古い行は対象にしない
+    private function guardProvisional(object $e): void
+    {
+        $u = DB::table('users')->where('engineer_id', $e->id)->where('role', 'eg')->whereNull('registered_at')->first();
+        if (!$u) return;
+        throw new \Illuminate\Http\Exceptions\HttpResponseException(
+            $this->go("/people/{$u->id}/edit", '仮登録中のため、技術・住所などはまだ入れられません。本登録が済むと、ご本人が入れられます。氏名・メールだけ、ここで直せます。', 'warn'));
+    }
+
+    // 上位が使う編集の入口の入り口（load に、仮登録の守りを足したもの）
+    private function loadForEdit(Request $r, int $id)
+    {
+        $e = $this->load($r, $id);
+        if ($r->user()->role !== 'eg') $this->guardProvisional($e);
+        return $e;
     }
 
     // 氏名・ふりがなの姓・名を整える（前後の空白は全角も取る）。姓・名の欄が無く name だけ来たら、空白で分ける。
@@ -62,8 +88,9 @@ class EngineerController extends Controller
 
     public function store(Request $r)
     {
-        [$body, $byParts, $lenErr] = $this->cleanNames($r->except('_token', 'ses_id'));
-        $hasName = $byParts ? ($body['name_sei'] ?? null) && ($body['name_mei'] ?? null) : ($body['name'] ?? null);
+        // 入れるのは 姓・名・メール の3つだけ（住所・電話などは、ご本人が本登録で入れる。送られても無視する）
+        [$body, , $lenErr] = $this->cleanNames($r->only('name', 'name_sei', 'name_mei'));
+        $hasName = ($body['name_sei'] ?? null) && ($body['name_mei'] ?? null);
         if ($r->user()->role === 'ses') $sesId = $r->user()->ses_id;
         else {
             // 管理者が選べるのは、参加中の SES だけ（'direct' など数字でない値は 0 になり、はじかれる）
@@ -72,20 +99,15 @@ class EngineerController extends Controller
         }
         if (!$sesId || !$hasName) return back()->withInput()->with('flash', ['msg' => '所属と氏名を入れてください。', 'type' => 'bad']);
         if ($lenErr) return back()->withInput()->with('flash', ['msg' => $lenErr, 'type' => 'bad']);
-        // 新しく登録するときは、メールアドレスが必須（ご本人への招待メールが届かないとログインできないため）
-        $email = strtolower((string) str_in($r->input('email')));
-        if (!$email || !filter_var($email, FILTER_VALIDATE_EMAIL)) return back()->withInput()->with('flash', ['msg' => 'メールアドレスを正しく入れてください。', 'type' => 'bad']);
-        // すでに使われているアドレスでも、同じ SES の担当者（管理者なら管理者）のアカウントなら、エンジニアの役割を足せる（兼任）
-        if (DB::table('users')->where('email', $email)->exists() && !W::egShareTarget($email, $sesId, $r->user())) return back()->withInput()->with('flash', ['msg' => 'このメールアドレスはすでに使われています。', 'type' => 'bad']);
-        $ad = W::addressCols($body, '現住所');
-        if (isset($ad['bad'])) return back()->withInput()->with('flash', ['msg' => $ad['bad'], 'type' => 'bad']);
-        $id = W::createEngineer($sesId, $ad['ok'] + $body, $r->user(), $r->user()->role === 'ses', $linked);
-        if ($linked) {
-            return $this->go("/engineers/$id", (int) $linked->id === (int) $r->user()->id
+        $res = Registration::provisionalPerson('eg', (int) $sesId, ['sei' => $body['name_sei'], 'mei' => $body['name_mei'], 'email' => $r->input('email')], $r->user());
+        if (isset($res['bad'])) return back()->withInput()->with('flash', ['msg' => $res['bad'], 'type' => 'bad']);
+        $id = (int) $res['engineer_id'];
+        if ($res['linked']) {
+            return $this->go("/engineers/$id", (int) $res['linked']->id === (int) $r->user()->id
                 ? 'ご自身をエンジニアとして登録しました。エンジニアの画面は、ログアウトして入り直し、「エンジニア」を選ぶと開けます。'
-                : '登録しました。このメールアドレスの方のアカウントに、エンジニアの役割を足しました（招待メールは送っていません）。');
+                : '登録しました。このメールアドレスの方のアカウントに、エンジニアの役割を足しました（仮登録のご案内は送っていません）。');
         }
-        return $this->go("/engineers/$id", $r->user()->role === 'ses' ? '登録し、ご本人に招待メールを送りました。' : '登録しました。招待メールは、所属の SES から送ってもらいます。');
+        return $this->go("/engineers/$id", '仮登録し、ご本人に仮登録のご案内を送りました。');
     }
 
     public function show(Request $r, int $id)
@@ -110,12 +132,12 @@ class EngineerController extends Controller
 
     public function edit(Request $r, int $id)
     {
-        return view('engineers.form', ['e' => $this->load($r, $id), 'action' => "/engineers/$id", 'isNew' => false, 'sesFixed' => null]);
+        return view('engineers.form', ['e' => $this->loadForEdit($r, $id), 'action' => "/engineers/$id", 'isNew' => false, 'sesFixed' => null]);
     }
 
     public function update(Request $r, int $id)
     {
-        $e = $this->load($r, $id);
+        $e = $this->loadForEdit($r, $id);
         $in = $r->except('_token', 'ses_id');
         // 姓・名の片方だけ送られたときは、もう片方は今の値のまま
         foreach (['name', 'kana'] as $base) {
@@ -124,8 +146,8 @@ class EngineerController extends Controller
             }
         }
         [$body, , $lenErr] = $this->cleanNames($in);
-        // 姓は必須、名は空でもよい（名のない人もいるため）
-        if (array_key_exists('name_sei', $body) && empty($body['name_sei'])) return back()->withInput()->with('flash', ['msg' => '氏名（姓）を入れてください。', 'type' => 'bad']);
+        // 必須の欄（姓・名・ふりがな・電話・郵便番号・住所）は、本人も上位も空にできない（K20。名の空は認めない）
+        if ($bad = Requirements::checkNotEmpty('eg', false, $body)) return back()->withInput()->with('flash', ['msg' => $bad, 'type' => 'bad']);
         if ($lenErr) return back()->withInput()->with('flash', ['msg' => $lenErr, 'type' => 'bad']);
         if ($r->user()->role === 'eg') {
             unset($body['email']);
@@ -161,19 +183,10 @@ class EngineerController extends Controller
     public function invite(Request $r, int $id)
     {
         $e = $this->load($r, $id);
-        if ($r->user()->role !== 'ses') return $this->go("/engineers/$id", '招待メールは、所属の SES だけが送れます。', 'bad');
-        if ($e->status === 'left') return $this->go("/engineers/$id", '退会済のため、招待を送れません。', 'bad');
-        if ($e->suspended_at) return $this->go("/engineers/$id", '停止中のため、招待を送れません。', 'bad');
-        if (!$e->email) return $this->go("/engineers/$id", 'メールアドレスが登録されていません。', 'bad');
-        // 同じ SES の担当者のアカウントなら、招待ではなくエンジニアの役割を足す（兼任）
-        $share = W::egShareTarget($e->email, (int) $e->ses_id, $r->user())
-            || DB::table('users')->where('email', strtolower($e->email))->where('engineer_id', $id)->whereIn('role', ['ses', 'admin'])->exists();
-        $res = W::invite(['email' => $e->email, 'name' => $e->name, 'role' => 'eg', 'ses_id' => $e->ses_id, 'engineer_id' => $e->id], $r->user());
-        // 返ってきた人がこのエンジニアのアカウントでなければ（ほかの立場の人が使っているアドレス）、送ったことにしない
-        if (!$res || (int) $res->engineer_id !== (int) $e->id) {
-            return $this->go("/engineers/$id", '招待を送れませんでした（このメールアドレスは、ほかの立場の人が使っています）。', 'bad');
-        }
-        return $this->go("/engineers/$id", $share ? 'この方のアカウントに、エンジニアの役割を足しました。' : '招待メールを送りました。');
+        // 送り直しの権限は1か所（管理者は全部、代表者・担当者は自社のエンジニア）。ログインの無いエンジニアは、ここでアカウントを作る
+        abort_unless(Registration::canManage($r->user(), (object) ['role' => 'eg', 'ses_id' => $e->ses_id, 'id' => 0]), 403);
+        $res = Registration::resendEngineer($e, $r->user());
+        return $this->go("/engineers/$id", $res['msg'], $res['type']);
     }
 
     // エンジニアを退会済にする（記録は残す）。ログインできなくなる。稼働中の契約があるときはできない
@@ -227,14 +240,14 @@ class EngineerController extends Controller
 
     public function skills(Request $r, int $id)
     {
-        $e = $this->load($r, $id);
-        return view('engineers.skills', ['e' => $e, 'skills' => DB::table('engineer_skills')->where('engineer_id', $id)->orderBy('category')->orderByDesc('years')->get(),
+        $e = $this->loadForEdit($r, $id);
+        return view('engineers.skills',['e' => $e, 'skills' => DB::table('engineer_skills')->where('engineer_id', $id)->orderBy('category')->orderByDesc('years')->get(),
             'terms' => DB::table('skill_terms')->orderBy('category')->orderBy('name')->get(['name', 'category'])]);
     }
 
     public function saveSkills(Request $r, int $id)
     {
-        $this->load($r, $id);
+        $this->loadForEdit($r, $id);
         W::saveSkills($id, $r->all());
         W::editedBy($id, $r->user());
         return $this->go("/engineers/$id", 'スキルを保存しました。');
@@ -242,7 +255,7 @@ class EngineerController extends Controller
 
     public function projectForm(Request $r, int $id, ?int $pid = null)
     {
-        $e = $this->load($r, $id);
+        $e = $this->loadForEdit($r, $id);
         $p = $pid ? DB::table('engineer_projects')->where('id', $pid)->where('engineer_id', $id)->first() : (object) [];
         abort_unless($p, 404);
         // ホームの「経歴の更新」から：成約した案件の名前と期間を入れておく
@@ -259,7 +272,7 @@ class EngineerController extends Controller
 
     public function saveProject(Request $r, int $id, ?int $pid = null)
     {
-        $this->load($r, $id);
+        $this->loadForEdit($r, $id);
         if (!str_in($r->input('title'))) return back()->withInput()->with('flash', ['msg' => '案件名を入れてください。', 'type' => 'bad']);
         W::saveProject($id, $r->all(), $pid);
         W::editedBy($id, $r->user());
@@ -270,7 +283,7 @@ class EngineerController extends Controller
 
     public function deleteProject(Request $r, int $id, int $pid)
     {
-        $this->load($r, $id);
+        $this->loadForEdit($r, $id);
         DB::table('engineer_projects')->where('id', $pid)->where('engineer_id', $id)->delete();
         W::editedBy($id, $r->user());
         return $this->go("/engineers/$id", '削除しました。');
@@ -325,16 +338,18 @@ class EngineerController extends Controller
     // ---------- 詳しいプロフィール（履歴書・業務経歴書の項目、学歴・職歴、資格） ----------
     public function profileForm(Request $r, int $id)
     {
-        $e = $this->load($r, $id);
-        return view('engineers.profile', ['e' => $e,
+        $e = $this->loadForEdit($r, $id);
+        return view('engineers.profile',['e' => $e,
             'hist' => DB::table('engineer_histories')->where('engineer_id', $id)->orderBy('sort')->get(),
             'certs' => DB::table('engineer_certs')->where('engineer_id', $id)->orderBy('sort')->get()]);
     }
 
     public function saveProfile(Request $r, int $id)
     {
-        $this->load($r, $id);
+        $this->loadForEdit($r, $id);
         $in = $r->only(W::ENG_PROFILE_FIELDS);
+        // 必須の欄（電話・郵便番号・住所）は、空にできない（K20）
+        if ($bad = Requirements::checkNotEmpty('eg', false, $in)) return back()->withInput()->with('flash', ['msg' => $bad, 'type' => 'bad']);
         // 郵便番号・住所は検査してそろえる（だめなら何も保存しない）
         $ad = W::addressCols($in, '現住所');
         if (isset($ad['bad'])) return back()->withInput()->with('flash', ['msg' => $ad['bad'], 'type' => 'bad']);
@@ -347,7 +362,7 @@ class EngineerController extends Controller
     // ---------- データ領域（書類） ----------
     public function generateDoc(Request $r, int $id)
     {
-        $this->load($r, $id);
+        $this->loadForEdit($r, $id);
         $kind = $r->input('kind') === 'resume' ? 'resume' : 'careersheet';
         $fid = EngineerDocs::generate($id, $kind, $r->user(), $kind === 'careersheet' && $r->boolean('anon'));
         return $this->go("/engineers/$id#docs", EngineerDocs::KINDS[$kind].'を書き出して保存しました。下の一覧からダウンロードできます。');
@@ -355,7 +370,7 @@ class EngineerController extends Controller
 
     public function uploadDoc(Request $r, int $id)
     {
-        $this->load($r, $id);
+        $this->loadForEdit($r, $id);
         $r->validate(['file' => 'required|file|max:10240|mimes:pdf,xlsx,xls,docx,doc,jpg,jpeg,png,txt,csv'], [], ['file' => 'ファイル']);
         EngineerDocs::store($id, $r->file('file'), (string) $r->input('kind'), (string) str_in($r->input('title')), $r->user());
         return $this->go("/engineers/$id#docs", 'アップロードしました。');

@@ -70,10 +70,25 @@ class AccountController extends Controller
         return $this->go($home, $msg);
     }
 
+    // エンジニア本人の画面に出す値：アカウントの欄が空なら、欄ごとに技術登録の値で補う（空欄のまま保存して、技術登録の値を消してしまわないため。B1・AC6）。
+    // 兼任の人（DB の role が ses・admin）は補わない
+    private function withEngineerValues(Request $r): object
+    {
+        $u = $r->user();
+        $a = $u->getAttributes();
+        $row = DB::table('users')->find($u->id);
+        if ($row && $row->role === 'eg' && $row->engineer_id && ($e = DB::table('engineers')->find($row->engineer_id))) {
+            foreach (['name_sei', 'name_mei', 'kana_sei', 'kana_mei', 'phone'] as $k) {
+                if (($a[$k] ?? null) === null || $a[$k] === '') $a[$k] = $e->$k;
+            }
+        }
+        return (object) $a;
+    }
+
     public function show(Request $r)
     {
         $u = $r->user();
-        return view('account.show', ['u' => $u, 'sesName' => $u->role === 'ses' ? DB::table('ses_companies')->where('id', $u->ses_id)->value('name') : null]);
+        return view('account.show', ['u' => $this->withEngineerValues($r), 'sesName' => $u->role === 'ses' ? DB::table('ses_companies')->where('id', $u->ses_id)->value('name') : null]);
     }
 
     public function update(Request $r)
@@ -127,7 +142,7 @@ class AccountController extends Controller
     {
         $u = $r->user();
         $sesName = $u->role === 'ses' ? DB::table('ses_companies')->where('id', $u->ses_id)->value('name') : null;
-        return view('account.profile', ['u' => $u, 'sesName' => $sesName, 'engineerId' => $u->role === 'eg' ? $u->engineer_id : null]);
+        return view('account.profile', ['u' => $this->withEngineerValues($r), 'sesName' => $sesName, 'engineerId' => $u->role === 'eg' ? $u->engineer_id : null]);
     }
 
     // 氏名・企業名・SES名の前後の空白（全角の空白も）を取る。空になれば null（Laravel の標準の取り除きは全角の空白を取らないため）

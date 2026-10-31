@@ -64,7 +64,7 @@
 @if($passed)
 <div class="loginbar"><div class="wrap">
   @if($u->role === 'admin')管理者{{ $u->company_name ? '（'.$u->company_name.'）' : '' }}としてログインしています：{{ $u->name }}
-  @elseif($u->role === 'ses')SES（{{ DB::table('ses_companies')->where('id', $u->ses_id)->value('name') }}）のご担当者としてログインしています
+  @elseif($u->role === 'ses')SES（{{ DB::table('ses_companies')->where('id', $u->ses_id)->value('name') }}）の{{ \App\Support\Requirements::isRep($u) ? '代表者' : 'ご担当者' }}としてログインしています
   @else エンジニアとしてログインしています
   @endif
   @if($dual)

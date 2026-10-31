@@ -95,7 +95,8 @@ class Requirements
         foreach (self::fields($role, $isRep) as $key => $def) {
             $out[$key] = match (true) {
                 $key === 'ses_name' => $company->name ?? null,
-                $key === 'company_name' && $def['store'] === 'company' => $company->name ?? null,
+                // 管理者の直属は会社ではないので、企業名を出さない（user_label と同じ）
+                $key === 'company_name' && $def['store'] === 'company' => ($company->kind ?? '') === 'direct' ? null : ($company->name ?? null),
                 $def['store'] === 'company' => $company->$key ?? null,
                 $def['store'] === 'engineer' => $eng->$key ?? null,
                 $kind === 'eg' && in_array($key, ['name_sei', 'name_mei', 'kana_sei', 'kana_mei'], true) => ($eng->$key ?? null) ?: ($u->$key ?? null),

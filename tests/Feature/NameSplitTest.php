@@ -152,16 +152,32 @@ class NameSplitTest extends TestCase
             ->assertSeeInOrder(['氏名（姓）', '氏名（名）', 'ふりがな（姓）', 'ふりがな（名）', 'SES名', '所属・役職', '電話'])->assertDontSee('お名前');
     }
 
+    // 本登録（メールのリンク → 確認コード）を、この人として通す。ふりがななどの入力を渡す
+    private function finishRegistration(string $email, array $payload): void
+    {
+        $token = $this->user($email)->token;
+        \Illuminate\Support\Facades\Auth::logout();
+        $this->flushSession();
+        $this->post('/invite/'.$token, $payload + ['password' => 'password12', 'password_confirmation' => 'password12'])->assertRedirect(url('/two-factor/challenge'));
+        $this->post('/two-factor/challenge', ['code' => $this->lastTwoFactorCode()])->assertRedirect();
+    }
+
     public function test_m6_register_engineer_with_parts(): void
     {
         $this->as('admin@park.example');
+        // 仮登録で入れるのは 姓・名・メール の3つだけ。ふりがなは送られても入れない（ご本人が本登録で入れる）
         $this->post('/engineers', ['ses_id' => '1', 'name_sei' => '直属', 'name_mei' => '一郎', 'kana_sei' => 'ちょくぞく', 'kana_mei' => 'いちろう', 'email' => 'm6-direct@park.example'])->assertRedirect();
         $e = DB::table('engineers')->where('name', '直属 一郎')->first();
         $this->assertNotNull($e);
-        $this->assertSame('ちょくぞく いちろう', $e->kana);
+        $this->assertNull($e->kana);
         $this->assertSame(['直属', '一郎'], [$e->name_sei, $e->name_mei]);
-        $this->assertSame('I.C', $e->initials);
         $this->assertSame(1, (int) $e->ses_id);
+        // ご本人が本登録でふりがなを入れると、イニシャルもできる
+        $this->finishRegistration('m6-direct@park.example', ['name_sei' => '直属', 'name_mei' => '一郎', 'kana_sei' => 'ちょくぞく', 'kana_mei' => 'いちろう', 'phone' => '090-0000-0001',
+            'postal_code' => '100-0001', 'address' => '東京都千代田区1-1', 'consent' => '1']);
+        $e = DB::table('engineers')->find($e->id);
+        $this->assertSame('ちょくぞく いちろう', $e->kana);
+        $this->assertSame('I.C', $e->initials);
     }
 
     public function test_m6_register_requires_both_parts(): void
@@ -177,9 +193,10 @@ class NameSplitTest extends TestCase
 
     public function test_m6_form_order_and_hint(): void
     {
+        // 仮登録の画面は 姓・名・メール の3つだけ（ふりがなは本登録で入れる）
         $this->as('admin@park.example')->get('/engineers/new?ses=1')->assertOk()
-            ->assertSeeInOrder(['所属：','氏名（姓）', '氏名（名）', 'ふりがな（姓）', 'ふりがな（名）', 'スキルシートのイニシャル（T.Y）に使います', 'メールで呼ぶ名前', 'メールアドレス']);
-        $this->get('/engineers/1/edit')->assertOk()->assertSeeInOrder(['氏名（姓）', '氏名（名）', 'ふりがな（姓）', 'ふりがな（名）', 'メールで呼ぶ名前']);
+            ->assertSeeInOrder(['所属：', '氏名（姓）', '氏名（名）', 'メールアドレス'])->assertDontSee('ふりがな（姓）')->assertDontSee('メールで呼ぶ名前');
+        $this->get('/engineers/1/edit')->assertOk()->assertSeeInOrder(['氏名（姓）', '氏名（名）', 'ふりがな（姓）', 'ふりがな（名）', 'スキルシートのイニシャル（T.Y）に使います', 'メールで呼ぶ名前']);
     }
 
     public function test_m6_edit_only_sei_keeps_mei(): void
@@ -189,13 +206,13 @@ class NameSplitTest extends TestCase
         $e = DB::table('engineers')->find(1);
         $this->assertSame('佐藤 太郎', $e->name);
         $this->assertSame('太郎', $e->name_mei);
-        // 姓を空にするとエラー、名を空にするのは可
-        $this->post('/engineers/1', ['name_sei' => '', 'name_mei' => '太郎'])->assertSessionHas('flash.msg', '氏名（姓）を入れてください。');
+        // 姓も名も、空にするとエラー（台帳 K20。以前は、名を空にできた）
+        $this->post('/engineers/1', ['name_sei' => '', 'name_mei' => '太郎'])->assertSessionHas('flash.msg', '氏名（姓）は空にできません。');
         $this->assertSame('佐藤 太郎', DB::table('engineers')->find(1)->name);
-        $this->post('/engineers/1', ['name_sei' => '佐藤', 'name_mei' => ''])->assertRedirect(url('/engineers/1'));
+        $this->post('/engineers/1', ['name_sei' => '佐藤', 'name_mei' => ''])->assertSessionHas('flash.msg', '氏名（名）は空にできません。');
         $e = DB::table('engineers')->find(1);
-        $this->assertSame('佐藤', $e->name);
-        $this->assertNull($e->name_mei);
+        $this->assertSame('佐藤 太郎', $e->name);
+        $this->assertSame('太郎', $e->name_mei);
     }
 
     public function test_m6_detailed_profile_save_keeps_names(): void
@@ -234,7 +251,10 @@ class NameSplitTest extends TestCase
 
     public function test_m8_initials_from_joined_kana(): void
     {
-        $this->as('admin@park.example')->post('/engineers', ['ses_id' => '1', 'name_sei' => '山田', 'name_mei' => '次郎', 'kana_sei' => 'やまだ', 'kana_mei' => 'じろう', 'email' => 'm8-jiro@park.example'])->assertRedirect();
+        $this->as('admin@park.example')->post('/engineers', ['ses_id' => '1', 'name_sei' => '山田', 'name_mei' => '次郎', 'email' => 'm8-jiro@park.example'])->assertRedirect();
+        $this->assertNull(DB::table('engineers')->where('name', '山田 次郎')->value('initials')); // ふりがなは、ご本人が本登録で入れる
+        $this->finishRegistration('m8-jiro@park.example', ['name_sei' => '山田', 'name_mei' => '次郎', 'kana_sei' => 'やまだ', 'kana_mei' => 'じろう', 'phone' => '090-0000-0002',
+            'postal_code' => '100-0001', 'address' => '東京都千代田区1-1', 'consent' => '1']);
         $this->assertSame('J.Y', DB::table('engineers')->where('name', '山田 次郎')->value('initials'));
     }
 
@@ -302,8 +322,9 @@ class NameSplitTest extends TestCase
     public function test_m11_legacy_engineer_post(): void
     {
         $this->as('admin@park.example')->post('/engineers', ['ses_id' => '1', 'name' => '古い 画面', 'kana' => 'ふるい がめん', 'email' => 'm11-old@park.example'])->assertRedirect();
+        // 古い送り方（name の1欄）でも、姓・名に分けて入る。ふりがなは仮登録では取らない（本登録で入れる）
         $e = DB::table('engineers')->where('name', '古い 画面')->first();
-        $this->assertSame(['古い', '画面', 'ふるい', 'がめん'], [$e->name_sei, $e->name_mei, $e->kana_sei, $e->kana_mei]);
+        $this->assertSame(['古い', '画面', null, null], [$e->name_sei, $e->name_mei, $e->kana_sei, $e->kana_mei]);
     }
 
     public function test_m11_person_names_use_sei_mei_fields(): void

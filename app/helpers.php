@@ -84,6 +84,16 @@ function is_provisional_state(string $state): bool
     return str_starts_with($state, '仮登録');
 }
 
+// エンジニアの状態の言葉（一覧・詳細）。$u はそのエンジニアのアカウント（無ければ null）。
+// アカウントの状態が基本。ログインの無い仮登録のエンジニアは「仮登録（未送信）」、兼任の人でエンジニアの立場の登録がまだなら付け足す
+function engineer_state(object $e, ?object $u): string
+{
+    if (!$u) return empty($e->registered_at) ? '仮登録（未送信）' : 'なし';
+    $s = user_state($u);
+    if ($s === '参加中' && empty($e->registered_at)) return '参加中（エンジニアの項目が未入力）';
+    return $s;
+}
+
 // エンジニアを停止するときの確認の文（エンジニアの詳細と SES の詳細で同じ文を使う）
 function engineer_stop_confirm(bool $working, int $inSelection): string
 {

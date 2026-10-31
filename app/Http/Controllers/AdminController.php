@@ -149,9 +149,14 @@ class AdminController extends Controller
         $noUsable = $s->status === 'active' && $usable === 0 && $users->count() > 0 ? ($users->whereNull('left_at')->count() > 0 ? 'stopped' : 'left') : null;
         $engs = DB::table('engineers')->where('ses_id', $id)->orderBy('name')->get();
         $egIds = $engs->pluck('id');
+        // エンジニアの状態（ログインの人の状態。兼任の人はエンジニアの行 role='eg' を優先）
+        $egUsers = DB::table('users')->whereIn('engineer_id', $egIds)->orderByRaw("case when role = 'eg' then 1 else 0 end")->get()->keyBy('engineer_id');
+        foreach ($engs as $e) { $e->account = engineer_state($e, $egUsers[$e->id] ?? null); $e->login_id = SesController::provisionalLoginId($egUsers[$e->id] ?? null); }
+        // 代表者の交代で選べる人：この会社の、本登録が済んだ担当者（今の代表者を除く）
+        $repCandidates = $users->filter(fn ($x) => $x->active && !$x->left_at && $x->registered_at && (int) $x->id !== (int) $s->rep_user_id)->values();
         return view('admin.ses-show', [
             's' => $s, 'repName' => Registration::repName($s)[0],
-            'engs' => $engs,
+            'engs' => $engs, 'repCandidates' => $repCandidates,
             'users' => $users, 'noUsable' => $noUsable,
             // 停止の確認の文に添える、稼働中の契約と選考中の応募（エンジニアごとに問い合わせず、まとめて取る）
             'working' => DB::table('contracts')->whereIn('engineer_id', $egIds)->where('status', 'active')->pluck('engineer_id')->flip(),
@@ -288,24 +293,30 @@ class AdminController extends Controller
     {
         $s = $this->sesOrFail($id);
         if ($s->status !== 'active') return $this->go("/admin/ses/$id", '担当者を登録できるのは、参加中の SES だけです。', 'bad');
-        $email = strtolower((string) str_in($r->input('email')));
-        // 同じ SES のエンジニアのアカウントなら、招待ではなく SES 担当者の役割を足す（兼任）
-        if ($email && W::sesShareTarget($email, $id)) {
-            W::invite(['email' => $email, 'name' => '', 'role' => 'ses', 'ses_id' => $id], $r->user());
-            return $this->go("/admin/ses/$id", 'このメールアドレスのエンジニアのアカウントに、SES 担当者の役割を足しました（招待メールは送っていません）。');
+        // 姓・名・メールの3つだけを受け取る（ふりがななどは、ご本人が本登録で入れる）。手続きは Registration
+        [, $sei, $mei] = name_parts($r->all(), 'name', 'name');
+        $res = Registration::provisionalPerson('ses', $id, ['sei' => $sei, 'mei' => $mei, 'email' => $r->input('email')], $r->user());
+        if (isset($res['bad'])) return $this->go("/admin/ses/$id", $res['bad'], 'bad');
+        if ($res['linked']) return $this->go("/admin/ses/$id", 'このメールアドレスのエンジニアのアカウントに、SES 担当者の役割を足しました（仮登録のご案内は送っていません）。');
+        return $this->go("/admin/ses/$id", '担当者を仮登録し、仮登録のご案内を送りました。');
+    }
+
+    // 代表者の交代：本登録済みの担当者を選ぶ（user_id）。担当者がいない会社は、次の代表者を仮登録する（sei・mei・email）
+    public function changeRep(Request $r, int $id)
+    {
+        $this->sesOrFail($id);
+        if ($r->filled('user_id')) {
+            $uid = is_string($r->input('user_id')) && ctype_digit($r->input('user_id')) ? (int) $r->input('user_id') : 0;
+            $res = Registration::changeRep($id, $uid, $r->user());
+        } else {
+            [, $sei, $mei] = name_parts($r->all(), 'name', 'name');
+            $res = Registration::provisionalNextRep($id, ['sei' => $sei, 'mei' => $mei, 'email' => $r->input('email')], $r->user());
         }
-        if ($email && DB::table('users')->where('email', $email)->where('active', 0)->exists()) return $this->go("/admin/ses/$id", 'このメールアドレスは使えません（停止中か退会済です）。', 'bad');
-        if (!$email || DB::table('users')->where('email', $email)->whereNotNull('password')->exists()) return $this->go("/admin/ses/$id", 'このメールアドレスは使えません（空か、すでに使われています）。', 'bad');
-        [$full, $sei, $mei] = name_parts($r->all(), 'name', 'name');
-        $res = W::invite(['email' => $email, 'name' => (string) $full, 'name_sei' => $sei, 'name_mei' => $mei, 'kana_sei' => $r->input('kana_sei'), 'kana_mei' => $r->input('kana_mei'), 'role' => 'ses', 'ses_id' => $id], $r->user());
-        // 返ってきた人がこの会社の担当者でなければ（ほかの立場の人が使っているアドレス）、送ったことにしない
-        if (!$res || $res->role !== 'ses' || (int) $res->ses_id !== $id) {
-            return $this->go("/admin/ses/$id", 'このメールアドレスには招待を出せません（ほかの立場の人が使っています）。', 'bad');
-        }
-        return $this->go("/admin/ses/$id", '担当者を登録し、招待メールを送りました。');
+        return $this->go("/admin/ses/$id", $res['msg'], $res['type']);
     }
 
     // 担当者の停止・再開・退会（手続きは Workflow）。管理者はどの会社でも、SES は自社の担当者だけ（ご自身は不可）。
+    // 担当者の登録・停止・退会は代表者と管理者だけ（担当者は 403。K13）。代表者は交代のあとでなければ止められない（Workflow の repGuard）。
     // 戻り先は、管理者なら SES の詳細、SES なら会社情報
     private function sesUserDo(Request $r, int $id, int $uid, string $method)
     {
@@ -313,6 +324,7 @@ class AdminController extends Controller
         $isSes = $u->role === 'ses';
         abort_unless($u->role === 'admin' || $isSes, 403);
         abort_if($isSes && (int) $u->ses_id !== $id, 404); // 他社の会社は見つからない扱い
+        abort_if($isSes && !Requirements::isRep($u), 403);
         $this->sesOrFail($id);
         $back = $isSes ? '/ses/company' : "/admin/ses/$id";
         $toDetail = !$isSes && $r->input('back') === 'detail'; // 担当者の詳細の画面から押したとき
@@ -346,7 +358,8 @@ class AdminController extends Controller
         $list = DB::table('engineers as e')->join('ses_companies as s', 's.id', '=', 'e.ses_id')->select('e.*', 's.name as ses_name', 's.kind as ses_kind')
             ->selectSub(DB::table('engineer_projects')->whereColumn('engineer_id', 'e.id')->selectRaw('count(*)'), 'projs')->orderByDesc('e.updated_at')->get();
         $skills = DB::table('engineer_skills')->get()->groupBy('engineer_id');
-        foreach ($list as $e) $e->skills = implode('、', ($skills[$e->id] ?? collect())->pluck('name')->all());
+        $egUsers = DB::table('users')->whereIn('engineer_id', $list->pluck('id'))->orderByRaw("case when role = 'eg' then 1 else 0 end")->get()->keyBy('engineer_id');
+        foreach ($list as $e) { $e->skills = implode('、', ($skills[$e->id] ?? collect())->pluck('name')->all()); $e->account = engineer_state($e, $egUsers[$e->id] ?? null); $e->login_id = SesController::provisionalLoginId($egUsers[$e->id] ?? null); }
         if ($st) $list = $list->where('status', $st);
         $direct = $r->query('ses') === 'direct';
         if ($direct) $list = $list->where('ses_kind', 'direct');

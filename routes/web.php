@@ -115,9 +115,11 @@ Route::middleware('role:admin,ses')->group(function () {
     Route::get('/case-mails/{id}/doc/{kind}', [CMail::class, 'doc']);
     Route::post('/cases/{id}/status', [Cas::class, 'status']);
     Route::get('/engineers/new', [Eng::class, 'create']);
-    Route::post('/engineers', [Eng::class, 'store']);
+    Route::post('/engineers', [Eng::class, 'store'])->middleware('throttle:20,1');
     Route::post('/engineers/{id}/invite', [Eng::class, 'invite']);
-    // 仮登録の送り直しと取り消し（権限は Registration::canManage で確かめる）
+    // 仮登録の送り直し・直し・取り消し（権限は Registration::canManage で確かめる）
+    Route::get('/people/{id}/edit', [People::class, 'edit']);
+    Route::post('/people/{id}', [People::class, 'update']);
     Route::post('/people/{id}/resend', [People::class, 'resend']);
     Route::post('/people/{id}/cancel', [People::class, 'cancel']);
     Route::post('/engineers/{id}/delete', [Eng::class, 'destroy']);
@@ -169,7 +171,8 @@ Route::middleware('role:admin')->group(function () {
         Route::post('/ses/{id}/approve', [Adm::class, 'sesApprove']);
         Route::post('/ses/{id}/suspend', [Adm::class, 'sesSuspend']);
         Route::post('/ses/{id}/resume', [Adm::class, 'sesResume']);
-        Route::post('/ses/{id}/users', [Adm::class, 'sesUsers']);
+        Route::post('/ses/{id}/users', [Adm::class, 'sesUsers'])->middleware('throttle:20,1');
+        Route::post('/ses/{id}/rep', [Adm::class, 'changeRep']);
         Route::get('/engineers', [Adm::class, 'engineers']);
         Route::post('/engineers/operator', [Adm::class, 'operator']);
         Route::get('/cases', [Adm::class, 'cases']);
@@ -219,6 +222,9 @@ Route::middleware('role:ses')->prefix('ses')->group(function () {
     Route::get('/company', [Ses::class, 'company']);
     Route::get('/company/edit', [Ses::class, 'companyEdit']);
     Route::post('/company', [Ses::class, 'saveCompany']);
+    // 担当者の仮登録は代表者だけ（担当者は 403）
+    Route::get('/company/users/new', [Ses::class, 'userNew']);
+    Route::post('/company/users', [Ses::class, 'userStore'])->middleware('throttle:20,1');
 });
 
 // ---------- エンジニア ----------
