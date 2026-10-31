@@ -55,11 +55,18 @@ class KanaFieldsTest extends TestCase
         $this->get("/admin/ses/$sid/edit")->assertOk()->assertSee('value="たなか"', false);
     }
 
-    public function test_ses_contact_new_has_kana(): void
+    // 担当者の仮登録は 姓・名・メール の3つだけ（台帳 K12・K15）。ふりがなは、担当者が本登録のときに任意で入れる
+    public function test_ses_contact_provisional_form_has_no_kana(): void
     {
         $sid = (int) DB::table('ses_companies')->where('kind', 'ses')->value('id');
-        $this->admin()->get("/admin/ses/$sid/users/new")->assertOk()->assertSee('ふりがな（姓）');
+        $this->admin()->get("/admin/ses/$sid/users/new")->assertOk()->assertSee('氏名（姓）')->assertDontSee('ふりがな');
         $this->post("/admin/ses/$sid/users", ['name_sei' => '佐藤', 'name_mei' => '花子', 'kana_sei' => 'さとう', 'kana_mei' => 'はなこ', 'email' => 'kana-ses@park.example']);
-        $this->assertSame('さとう はなこ', DB::table('users')->where('email', 'kana-ses@park.example')->value('kana'));
+        $u = DB::table('users')->where('email', 'kana-ses@park.example')->first();
+        $this->assertSame('佐藤 花子', $u->name);
+        $this->assertNull($u->kana_sei); // 送られても入れない
+        $this->assertNull($u->kana);
+        // 本登録の画面には、ふりがなの欄（任意）がある
+        $this->flushSession();
+        $this->get('/invite/'.$u->token)->assertOk()->assertSee('ふりがな（姓）');
     }
 }

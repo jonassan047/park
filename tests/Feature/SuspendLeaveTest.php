@@ -79,11 +79,15 @@ class SuspendLeaveTest extends TestCase
         DB::table('users')->where('id', $stopped)->update(['active' => 0]);
         $left = $this->addSesUser($sid, 'ses1c@park.example', '退会 三郎');
         DB::table('users')->where('id', $left)->update(['active' => 0, 'left_at' => now()]);
-        $mine = $this->uid('ses1@park.example');
+        $mine = $this->addSesUser($sid, 'ses1a@park.example', '同僚 一郎'); // 代表者ではない担当者（代表者 ses1 の行は、交代のあとでなければ止められない。台帳 K21）
+        $rep = $this->uid('ses1@park.example');
 
         $r = $this->admin()->get("/admin/ses/$sid")->assertOk();
         $r->assertSee('担当者を登録')->assertSee('>停止</button>', false)->assertSee('>退会</button>', false);
         $r->assertSee("/admin/ses/$sid/users/$mine/suspend")->assertSee("/admin/ses/$sid/users/$mine/delete");
+        // 代表者の行：「代表者」の印と詳細だけで、停止・再開・退会のボタンは出ない
+        $r->assertSee('代表者')->assertSee('href="'.url("/admin/ses/$sid/users/$rep").'"', false);
+        foreach (['suspend', 'resume', 'delete'] as $a) $r->assertDontSee("/admin/ses/$sid/users/$rep/$a");
         // 停止の人：再開と退会
         $r->assertSee("/admin/ses/$sid/users/$stopped/resume")->assertSee("/admin/ses/$sid/users/$stopped/delete")->assertDontSee("/admin/ses/$sid/users/$stopped/suspend");
         // 退会済の人：ボタンなし
@@ -94,8 +98,7 @@ class SuspendLeaveTest extends TestCase
     public function test_t2_suspend_blocks_login_and_invite_link(): void
     {
         $sid = $this->sesId('ses1@park.example');
-        $uid = $this->uid('ses1@park.example');
-        $this->addSesUser($sid, 'ses1x@park.example', '予備 担当'); // 使える担当者が1人だけだと止められない
+        $uid = $this->addSesUser($sid, 'ses1w@park.example', '停止 太郎'); // 止める人（代表者 ses1 は、交代のあとでなければ止められない。台帳 K21）
         // 招待中の別の担当者（止める前に招待リンクを出しておく）
         $inv = W::invite(['email' => 'ses1d@park.example', 'name' => '招待 四郎', 'role' => 'ses', 'ses_id' => $sid], User::where('email', 'admin@park.example')->first());
         $token = DB::table('users')->where('id', $inv->id)->value('token');
@@ -109,9 +112,9 @@ class SuspendLeaveTest extends TestCase
         $this->assertStringNotContainsString('@', (string) DB::table('audit_log')->where('action', 'ses-user-suspend')->value('detail'));
 
         // ログイン中だった人は、次の操作でログイン画面へ
-        $this->as('ses1@park.example')->get('/ses')->assertRedirect();
+        $this->as('ses1w@park.example')->get('/ses')->assertRedirect();
         // 新しくログインもできない
-        $this->post('/login', ['email' => 'ses1@park.example', 'password' => 'park1234'])->assertSessionHas('flash.type', 'bad');
+        $this->post('/login', ['email' => 'ses1w@park.example', 'password' => 'park1234'])->assertSessionHas('flash.type', 'bad');
 
         // 招待中の人を止めると、止める前のリンクは使えない
         $this->admin()->post("/admin/ses/$sid/users/{$inv->id}/suspend");
@@ -124,8 +127,7 @@ class SuspendLeaveTest extends TestCase
     public function test_t3_resume(): void
     {
         $sid = $this->sesId('ses1@park.example');
-        $uid = $this->uid('ses1@park.example');
-        $this->addSesUser($sid, 'ses1x@park.example', '予備 担当');
+        $uid = $this->addSesUser($sid, 'ses1w@park.example', '停止 太郎'); // 代表者 ses1 は止められないので、ふつうの担当者で確かめる
         $this->admin()->post("/admin/ses/$sid/users/$uid/suspend");
         $this->admin()->post("/admin/ses/$sid/users/$uid/resume")->assertRedirect("/admin/ses/$sid");
         $this->assertSame('ok', $this->flash('type'));
@@ -226,7 +228,10 @@ class SuspendLeaveTest extends TestCase
     public function test_t6_last_usable_user_is_refused(): void
     {
         $sid = $this->sesId('ses1@park.example');
-        $uid = $this->uid('ses1@park.example');
+        $rep = $this->uid('ses1@park.example');
+        // 代表者は止められない（台帳 K21）ので、代表者が使えない形（データで作る）にして、ふつうの担当者を1人だけ使える状態にする
+        $uid = $this->addSesUser($sid, 'ses1f@park.example', '一人目 六郎');
+        DB::table('users')->where('id', $rep)->update(['active' => 0]);
         foreach (['suspend', 'delete'] as $a) {
             $this->admin()->post("/admin/ses/$sid/users/$uid/$a")->assertRedirect("/admin/ses/$sid");
             $this->assertSame('bad', $this->flash('type'));
@@ -264,10 +269,11 @@ class SuspendLeaveTest extends TestCase
         DB::table('users')->where('id', $inv->id)->update(['active' => 0, 'token' => null, 'token_expires' => null]);
 
         $before = DB::table('mail_outbox')->where('kind', 'invite')->count();
-        foreach (['ses1h@park.example', 'ses1i@park.example', 'ses1j@park.example'] as $mail) {
+        // 管理者には、断る理由を別々の文で出す（停止中／退会済。台帳 K30）
+        foreach (['ses1h@park.example' => '停止中', 'ses1i@park.example' => '退会済', 'ses1j@park.example' => '停止中'] as $mail => $why) {
             $this->admin()->post("/admin/ses/$sid/users", ['email' => $mail, 'name_sei' => '山', 'name_mei' => '花']);
             $this->assertSame('bad', $this->flash('type'));
-            $this->assertStringContainsString('停止中か退会済', $this->flash('msg'));
+            $this->assertStringContainsString($why, $this->flash('msg'));
         }
         $this->assertSame($before, DB::table('mail_outbox')->where('kind', 'invite')->count());
         $this->assertNull(DB::table('users')->where('id', $inv->id)->value('token'));
@@ -291,7 +297,7 @@ class SuspendLeaveTest extends TestCase
         $this->assertStringContainsString('>再開</button>', $html);
         $this->assertStringNotContainsString('>停止</button>', $html);
         $this->assertStringContainsString('停止中</span>', $html);
-        $this->assertStringNotContainsString('招待を送る', $html);
+        $this->assertStringNotContainsString('送り直し', $html);
         $this->admin()->get('/admin/engineers')->assertSee('停止中');
 
         // 本人の画面には出ない

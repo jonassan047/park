@@ -91,8 +91,10 @@ class ParkTest extends TestCase
         $this->pages(['/ses', '/ses/engineers', '/ses/cases', '/ses/cases?mine=1', '/ses/applications', '/ses/contracts', '/ses/invoices', '/ses/company', '/cases/1', '/engineers/1', '/engineers/new', '/cases/new']);
         $this->get('/engineers/2')->assertForbidden();
         $this->get('/admin')->assertForbidden();
+        // エンジニアの仮登録は 姓・名・メール の3つだけ（ふりがなや経験年数は送られても入れない。ふりがな・イニシャルは、ご本人が本登録のときに入れる。台帳 K15）
         $this->post('/engineers', ['name' => '新人 一郎', 'kana' => 'しんじん いちろう', 'email' => 'eg-new@park.example', 'years_exp' => '1'])->assertRedirect();
-        $this->assertDatabaseHas('engineers', ['name' => '新人 一郎', 'initials' => 'I.S']);
+        $this->assertDatabaseHas('engineers', ['name' => '新人 一郎', 'name_sei' => '新人', 'name_mei' => '一郎', 'kana' => null, 'initials' => null, 'registered_at' => null]);
+        $this->assertDatabaseHas('users', ['email' => 'eg-new@park.example', 'role' => 'eg', 'registered_at' => null]);
         $this->post('/cases/2/apply', ['engineer_id' => 1, 'start_ok' => 1, 'price_ok' => 1, 'style_ok' => 1])->assertRedirect();
         $this->assertDatabaseHas('applications', ['case_id' => 2, 'engineer_id' => 1]);
         // 二重応募は受け付けない

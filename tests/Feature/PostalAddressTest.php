@@ -99,6 +99,10 @@ class PostalAddressTest extends TestCase
     public function test_v1_existing_direct_engineer_still_works(): void
     {
         $eid = $this->directEngineer();
+        // 今いる直属の人は本登録が済んでいる形にする（仮登録のままだと、上位は技術・住所などを直せない。台帳 K18）
+        $uid = (int) DB::table('users')->where('engineer_id', $eid)->where('role', 'eg')->value('id');
+        DB::table('users')->where('id', $uid)->update(['password' => bcrypt('park1234')]);
+        $this->completeProfile($uid);
         $this->admin();
         $this->get('/admin/engineers')->assertOk()->assertSee('直属</span>', false)->assertSee('直属だけ');
         $this->get('/admin/engineers?ses=direct')->assertOk()->assertSee('直属 一郎')->assertDontSee('山田 太郎');

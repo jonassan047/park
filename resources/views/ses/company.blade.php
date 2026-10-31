@@ -11,7 +11,7 @@
 </dl>
 </x-card>
 </div><div>
-<x-card title="担当者">@if($isRep && $s->status === 'active')<x-slot:actions><a class="btn small" href="{{ url('/ses/company/users/new') }}">担当者を登録</a></x-slot:actions>@endif
+<x-card title="担当者">@if($isRep && $s->status === 'active')<x-slot:actions><a class="btn small" href="{{ url('/ses/company/users/new') }}">担当者を登録</a></x-slot:actions> @endif
 @unless($isRep)<p class="muted">担当者の登録・停止・退会は、代表者だけができます。代表者の交代は、管理者にご依頼ください。</p>@endunless
 <x-table :head="['名前', 'メール', '状態', '最終ログイン', '']" :count="$users->count()">
 @foreach($users as $u)@php

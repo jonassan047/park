@@ -7,8 +7,8 @@
 @if($e->suspended_at)<x-post :action="'/engineers/'.$e->id.'/resume'" label="再開" cls="small" confirm="このエンジニアを再開します。ログインでき、案件の配信の候補にも出るようになります。" />
 @else<x-post :action="'/engineers/'.$e->id.'/suspend'" label="停止" cls="ghost small" :confirm="engineer_stop_confirm((bool) $working, (int) $inSelection)" />@endif
 <x-post :action="'/engineers/'.$e->id.'/delete'" label="退会" cls="danger small" confirm="このエンジニアを退会済にします。ログインできなくなり、元に戻せません（記録は残ります）。よろしいですか？" />@endif
-@if($u->role === 'ses' && $e->email && !($eu && $eu->password) && !$e->suspended_at && $e->status !== 'left')
-<x-post :action="'/engineers/'.$e->id.'/invite'" label="招待を送る" cls="ghost small" />
+@if(in_array($u->role, ['admin', 'ses'], true) && $e->email && !($eu && $eu->registered_at) && !$e->suspended_at && $e->status !== 'left')
+<x-post :action="'/engineers/'.$e->id.'/invite'" label="送り直し" cls="ghost small" />
 @endif
 @if($mine)<a class="btn ghost small" href="{{ url('/account#password') }}">パスワード変更</a>@endif
 <a class="btn small" href="{{ url('/engineers/'.$e->id.'/edit') }}">編集</a>

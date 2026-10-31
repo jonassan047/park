@@ -701,7 +701,8 @@ class Registration
             if ($key === 'ses_name') { $co['name'] = $val; continue; }
             match ($def['store']) {
                 'company' => $co[$key] = $val,
-                'engineer' => [$en[$key] = $val, $key === 'phone' ? $uu['phone'] = $val : null],
+                // エンジニアの電話は、アカウントにも写す。ただし兼任の人（DB の役割が eg でない）の電話は会社のものかもしれないので、写さない
+                'engineer' => [$en[$key] = $val, $key === 'phone' && $u->role === 'eg' ? $uu['phone'] = $val : null],
                 default => $uu[$key] = $val,
             };
         }
@@ -713,6 +714,8 @@ class Registration
             $mei = array_key_exists($b, $uu) ? $uu[$b] : (($eng->$b ?? null) ?: $u->$b);
             $uu[$full] = join_name($sei, $mei);
             if ($eng) $en += [$a => $sei, $b => $mei, $full => $uu[$full]];
+            // 兼任の人（DB の役割が eg でない）は、担当者・管理者のアカウントの氏名・ふりがなを変えない（技術登録だけに入れる）
+            if ($eng && $u->role !== 'eg') unset($uu[$a], $uu[$b], $uu[$full]);
         }
         $c = Requirements::consent($role, $isRep);
         if ($c && !empty($d[$c['key']])) {

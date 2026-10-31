@@ -192,7 +192,11 @@ class ProfileAndDirectTest extends TestCase
     public function test_b_login_bar(): void
     {
         $this->as('admin@park.example')->get('/admin')->assertSee('管理者（見本運営）としてログインしています：'.User::where('email', 'admin@park.example')->value('name'));
-        $this->as('ses1@park.example')->get('/ses')->assertSee('SES（みどり情報システム）のご担当者としてログインしています');
+        // 代表者と担当者で帯の言葉が分かれる（台帳 K13）
+        $this->as('ses1@park.example')->get('/ses')->assertSee('SES（みどり情報システム）の代表者としてログインしています');
+        $staff = W::createUser('ses1s@park.example', '同僚 一郎', 'ses', 'park1234', ['ses_id' => 1]);
+        $this->completeProfile($staff);
+        $this->as('ses1s@park.example')->get('/ses')->assertSee('SES（みどり情報システム）のご担当者としてログインしています');
         $this->as('eg1@park.example')->get('/eg')->assertSee('エンジニアとしてログインしています');
         // 印刷用
         $this->as('admin@park.example')->get('/engineers/1/sheet')->assertOk()->assertDontSee('としてログインしています');

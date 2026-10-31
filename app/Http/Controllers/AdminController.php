@@ -306,7 +306,8 @@ class AdminController extends Controller
     {
         $this->sesOrFail($id);
         if ($r->filled('user_id')) {
-            $uid = is_string($r->input('user_id')) && ctype_digit($r->input('user_id')) ? (int) $r->input('user_id') : 0;
+            $raw = $r->input('user_id');
+            $uid = (is_int($raw) || (is_string($raw) && ctype_digit($raw))) ? (int) $raw : 0;
             $res = Registration::changeRep($id, $uid, $r->user());
         } else {
             [, $sei, $mei] = name_parts($r->all(), 'name', 'name');

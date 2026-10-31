@@ -112,7 +112,7 @@ class UiUnifyTest extends TestCase
     public function test_u3_engineer_new_requires_email_for_admin_and_ses(): void
     {
         $this->admin();
-        $html = $this->get('/engineers/new?ses=1')->assertOk()->assertSee('招待メールは所属の SES が送ります')->getContent();
+        $html = $this->get('/engineers/new?ses=1')->assertOk()->assertSee('姓・名・メールアドレスの3つを入れて、仮登録します。')->getContent();
         $this->assertMatchesRegularExpression('/name="email"[^>]*required/', $html);
         foreach ([
             fn () => $this->admin()->post('/engineers', ['ses_id' => '1', 'name_sei' => '無', 'name_mei' => '一郎', 'email' => '']),
@@ -134,12 +134,11 @@ class UiUnifyTest extends TestCase
         ] as [$who, $extra, $email]) {
             $e0 = $this->rows('engineers'); $m0 = DB::table('mail_outbox')->where('kind', 'invite')->count();
             $this->as($who)->post('/engineers', $extra + ['name_sei' => '登録', 'name_mei' => '太郎', 'email' => $email])
-                ->assertSessionHas('flash.type', 'ok')->assertSessionHas('flash.msg', $who === 'admin@park.example' ? '登録しました。招待メールは、所属の SES から送ってもらいます。' : '登録し、ご本人に招待メールを送りました。');
+                ->assertSessionHas('flash.type', 'ok')->assertSessionHas('flash.msg', '仮登録し、ご本人に仮登録のご案内を送りました。');
             $this->assertSame($e0 + 1, $this->rows('engineers'));
-            // 招待メールを送れるのは SES だけ（管理者の登録では送らない）
-            $sent = $who === 'admin@park.example' ? 0 : 1;
-            $this->assertSame($m0 + $sent, DB::table('mail_outbox')->where('kind', 'invite')->count());
-            $this->assertSame($sent ? 'eg' : null, DB::table('users')->where('email', $email)->value('role'));
+            // 仮登録のご案内は、管理者の登録でもその場で本人に届く（台帳 K15・K23。以前の「招待は所属の SES から」はやめた）
+            $this->assertSame($m0 + 1, DB::table('mail_outbox')->where('kind', 'invite')->count());
+            $this->assertSame('eg', DB::table('users')->where('email', $email)->value('role'));
         }
     }
 
@@ -162,7 +161,10 @@ class UiUnifyTest extends TestCase
         $this->assertPair($show, 'rep', 'SES の編集'); // 担当者の欄は、会社の編集から除いた（台帳 B3）
         $this->assertPair($this->get('/admin/ses/1/users/new')->getContent(), 'name', 'SES の担当者追加');
         $eg = $this->get('/engineers/new?ses=1')->getContent();
-        $this->assertPair($eg, 'name', 'エンジニアの登録'); $this->assertPair($eg, 'kana', 'エンジニアの登録');
+        $this->assertPair($eg, 'name', 'エンジニアの仮登録'); // ふりがなは仮登録では聞かず、本登録の画面で聞く（台帳 K15）
+        $this->post('/engineers', ['ses_id' => '1', 'name_sei' => '並び', 'name_mei' => '確認', 'email' => 'ui-pair@park.example']);
+        $reg = $this->get('/invite/'.DB::table('users')->where('email', 'ui-pair@park.example')->value('token'))->assertOk()->getContent();
+        $this->assertPair($reg, 'name', 'エンジニアの本登録'); $this->assertPair($reg, 'kana', 'エンジニアの本登録');
         $edit = $this->get('/engineers/1/edit')->getContent();
         $this->assertPair($edit, 'name', 'プロフィールの編集'); $this->assertPair($edit, 'kana', 'プロフィールの編集');
         $acc = $this->get('/account')->getContent();
@@ -204,10 +206,13 @@ class UiUnifyTest extends TestCase
     {
         DB::table('ses_companies')->where('id', 2)->update(['status' => 'suspended']);
         $this->admin();
-        foreach (['/engineers/new', '/engineers/new?ses=99999', '/engineers/new?ses=2', '/engineers/new?ses=4', '/engineers/new?ses=abc'] as $url) {
+        foreach (['/engineers/new?ses=99999', '/engineers/new?ses=2', '/engineers/new?ses=4', '/engineers/new?ses=abc'] as $url) {
             $this->get($url)->assertRedirect(url('/admin/ses'))->assertSessionHas('flash.type', 'warn')
                 ->assertSessionHas('flash.msg', 'エンジニアは、SES の画面で SES を選んでから登録します。');
         }
+        // SES を指定しないとき（SES の画面を通らないとき）は、参加中の SES から選ぶ画面になる（台帳 K15。停止中・申込中の SES は選べない）
+        $suspended = DB::table('ses_companies')->where('id', 2)->value('name');
+        $this->get('/engineers/new')->assertOk()->assertSee('name="ses_id"', false)->assertSee(DB::table('ses_companies')->where('id', 1)->value('name'))->assertDontSee($suspended);
     }
 
     public function test_u5_new_with_ses_shows_fixed_affiliation(): void
