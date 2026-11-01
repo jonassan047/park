@@ -43,7 +43,7 @@ class RegistrationFoundationTest extends TestCase
 
     private function company(string $name): int
     {
-        return DB::table('ses_companies')->insertGetId(['name' => $name, 'kind' => 'ses', 'status' => 'active', 'rep_name' => '手書きの代表者', 'created_at' => now_str(), 'updated_at' => now_str()]);
+        return DB::table('ses_companies')->insertGetId(['name' => $name, 'kind' => 'ses', 'status' => 'active', 'rep_name' => '手書きの SES', 'created_at' => now_str(), 'updated_at' => now_str()]);
     }
 
     public function test_s1_01_version_is_in_the_footer(): void
@@ -122,7 +122,7 @@ class RegistrationFoundationTest extends TestCase
         $this->assertSame($s3b, $rep($c3));
         $this->assertSame($s4a, $rep($c4));
         $this->assertNull($rep($c5));
-        $this->assertSame('手書きの代表者', DB::table('ses_companies')->where('id', $c1)->value('rep_name')); // rep_* には書かない
+        $this->assertSame('手書きの SES', DB::table('ses_companies')->where('id', $c1)->value('rep_name')); // rep_* には書かない
 
         // エンジニア：ログインのある人は日時が入り、ログインのない人は空
         $withLogin = User::where('email', 'eg1@park.example')->value('engineer_id');
@@ -170,7 +170,7 @@ class RegistrationFoundationTest extends TestCase
     public function test_s1_29_missing_person_cannot_open_account_and_required_fields_cannot_be_emptied(): void
     {
         DB::table('users')->where('email', 'ses1@park.example')->update(['phone' => null]);
-        // 代表者（ses1）は会社の電話が必須で、本人の電話は必須ではない
+        // SES（ses1）は会社の電話が必須で、本人の電話は必須ではない
         $this->as('ses1@park.example')->get('/account')->assertOk();
         // 担当者（会社の2人目）は電話が必須：足りないと /account も開けない
         $sid = $this->user('ses1@park.example')->ses_id;
@@ -200,7 +200,7 @@ class RegistrationFoundationTest extends TestCase
         $this->assertSame('03-9999-0000', DB::table('ses_companies')->find($sid)->phone);
     }
 
-    // ---------- S1-30：企業名・代表者の欄は代表者と管理者だけ ----------
+    // ---------- S1-30：企業名・SES の欄は SES と管理者だけ ----------
     public function test_s1_30_only_rep_and_admin_change_company(): void
     {
         $sid = $this->user('ses1@park.example')->ses_id;
@@ -213,7 +213,7 @@ class RegistrationFoundationTest extends TestCase
         // アカウントの画面から企業名は変えられない
         $this->post('/account', ['name_sei' => '担当', 'name_mei' => '次郎', 'phone' => '03-0000-0009', 'ses_name' => '乗っ取り'])->assertRedirect();
         $this->assertSame($s->name, DB::table('ses_companies')->find($sid)->name);
-        // 代表者は /ses/company と /account から姓を直せて、会社の代表者の欄も同じになる
+        // SES は /ses/company と /account から姓を直せて、会社の SES の欄も同じになる
         $this->as('ses1@park.example')->get('/ses/company')->assertOk()->assertSee('/ses/company/edit', false);
         $this->post('/ses/company', ['name' => $s->name, 'rep_sei' => '新緑', 'rep_mei' => '一郎', 'phone' => $s->phone, 'postal_code' => '100-0001', 'address' => $s->address])->assertRedirect('/ses/company');
         $this->assertSame('新緑', DB::table('ses_companies')->find($sid)->rep_sei);
@@ -259,7 +259,7 @@ class RegistrationFoundationTest extends TestCase
     // ---------- S1-32：必須項目の表 ----------
     public static function requirementRows(): array
     {
-        // [立場, 代表者か, 項目, 必須か, mode, しまう場所]
+        // [立場, SES か, 項目, 必須か, mode, しまう場所]
         return [
             ['admin', false, 'company_name', true, 'confirm', 'users'], ['admin', false, 'name_sei', true, 'confirm', 'users'], ['admin', false, 'name_mei', true, 'confirm', 'users'],
             ['admin', false, 'email', false, 'view', 'users'], ['admin', false, 'phone', true, 'self', 'users'], ['admin', false, 'kana_sei', false, 'opt', 'users'],
@@ -370,7 +370,7 @@ class RegistrationFoundationTest extends TestCase
     public function test_s1_34_status_shows_registration_counts_without_personal_data(): void
     {
         DB::table('users')->insert(['email' => 'status-prov@example.com', 'name' => '仮 人', 'role' => 'ses', 'active' => 1, 'created_at' => now_str(), 'updated_at' => now_str()]);
-        $this->artisan('park:status')->expectsOutputToContain('アカウント：参加中')->expectsOutputToContain('アカウント：仮登録')->expectsOutputToContain('代表者のいない会社')
+        $this->artisan('park:status')->expectsOutputToContain('アカウント：参加中')->expectsOutputToContain('アカウント：仮登録')->expectsOutputToContain('SES のいない会社')
             ->expectsOutputToContain('本登録の日時が無い')->doesntExpectOutputToContain('status-prov@example.com')->assertExitCode(0);
         $json = json_decode($this->runStatusJson(), true);
         $this->assertSame(0, $json['アカウント：パスワードがあるのに本登録の日時が無い（0 のはず）']);

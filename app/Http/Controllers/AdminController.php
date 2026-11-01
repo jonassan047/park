@@ -73,7 +73,7 @@ class AdminController extends Controller
         return view('admin.dashboard', [
             'start' => $sesCount === 0 && $engCount === 0 && $caseCount === 0 ? [
                 ['ほかの管理者を登録する（任意）', '/admin/admins/new', $adminCount >= 2, '管理者を登録する'],
-                ['SES を仮登録して、代表者にご案内を送る', '/admin/ses/new', $sesCount >= 1, 'SES を仮登録する'],
+                ['SES を仮登録して、SES にご案内を送る', '/admin/ses/new', $sesCount >= 1, 'SES を仮登録する'],
                 ['エンジニアを登録する（SES を選んでから）', '/admin/ses', $engCount >= 1, 'SES を選ぶ'],
                 ['案件を登録する', '/cases/new', $caseCount >= 1, '案件を登録する'],
             ] : null,
@@ -115,7 +115,7 @@ class AdminController extends Controller
             ->selectSub(DB::table('engineers')->whereColumn('ses_id', 's.id')->selectRaw('count(*)'), 'engs')
             ->selectSub(DB::table('contracts')->whereColumn('ses_id', 's.id')->where('status', 'active')->selectRaw('count(*)'), 'working')
             ->orderBy('status')->orderBy('name')->get();
-        // 代表者の人（状態を出すため）
+        // SES の人（状態を出すため）
         $reps = DB::table('users')->whereIn('id', $list->pluck('rep_user_id')->filter()->all())->get()->keyBy('id');
         return view('admin.ses-index', compact('list', 'reps'));
     }
@@ -124,12 +124,12 @@ class AdminController extends Controller
 
     public function adminNew() { return view('admin.admin-new'); }
 
-    // 管理者が SES を仮登録する：企業正式名称・代表者の姓・名・メールの4つだけ。登録すると代表者に仮登録のご案内が届く
+    // 管理者が SES を仮登録する：企業正式名称・SES の姓・名・メールの4つだけ。登録すると SES に仮登録のご案内が届く
     public function sesStore(Request $r)
     {
         $res = Registration::provisionalSes(['name' => $r->input('name'), 'sei' => $r->input('rep_sei'), 'mei' => $r->input('rep_mei'), 'email' => $r->input('email')], $r->user());
         if (isset($res['bad'])) return back()->withInput()->with('flash', ['msg' => $res['bad'], 'type' => 'bad']);
-        return $this->go("/admin/ses/{$res['ses_id']}", '仮登録し、代表者に仮登録のご案内を送りました。');
+        return $this->go("/admin/ses/{$res['ses_id']}", '仮登録し、SES に仮登録のご案内を送りました。');
     }
 
     // SES の画面で扱ってよい会社だけ返す（管理者の直属の入れ物は 404）
@@ -152,7 +152,7 @@ class AdminController extends Controller
         // エンジニアの状態（ログインの人の状態。兼任の人はエンジニアの行 role='eg' を優先）
         $egUsers = DB::table('users')->whereIn('engineer_id', $egIds)->orderByRaw("case when role = 'eg' then 1 else 0 end")->get()->keyBy('engineer_id');
         foreach ($engs as $e) { $e->account = engineer_state($e, $egUsers[$e->id] ?? null); $e->login_id = SesController::provisionalLoginId($egUsers[$e->id] ?? null); }
-        // 代表者の交代で選べる人：この会社の、本登録が済んだ担当者（今の代表者を除く）
+        // SES の交代で選べる人：この会社の、本登録が済んだ担当者（今の SES を除く）
         $repCandidates = $users->filter(fn ($x) => $x->active && !$x->left_at && $x->registered_at && (int) $x->id !== (int) $s->rep_user_id)->values();
         return view('admin.ses-show', [
             's' => $s, 'repName' => Registration::repName($s)[0],
@@ -204,7 +204,7 @@ class AdminController extends Controller
     public function sesUpdate(Request $r, int $id)
     {
         $s = $this->sesOrFail($id);
-        // 仮登録の間は、企業正式名称・代表者の姓・名・メールの4つだけ直せる（電話・住所などは送られても入れない）
+        // 仮登録の間は、企業正式名称・SES の姓・名・メールの4つだけ直せる（電話・住所などは送られても入れない）
         if ($s->status === 'provisional') {
             $res = Registration::editProvisionalSes($s, ['name' => $r->input('name'), 'sei' => $r->input('rep_sei'), 'mei' => $r->input('rep_mei'), 'email' => $r->input('email')], $r->user());
             if (isset($res['bad'])) return back()->withInput()->with('flash', ['msg' => $res['bad'], 'type' => 'bad']);
@@ -222,7 +222,7 @@ class AdminController extends Controller
         return $this->go("/admin/ses/$id", '保存しました。');
     }
 
-    // 本登録が済んだ会社の編集（管理者）。企業名・代表者の姓名・電話・住所などを直す。必須の欄は空にできない
+    // 本登録が済んだ会社の編集（管理者）。企業名・SES の姓名・電話・住所などを直す。必須の欄は空にできない
     private function updateRegisteredSes(Request $r, object $s)
     {
         $in = Registration::companyInput($r->all());
@@ -248,14 +248,14 @@ class AdminController extends Controller
         return view('admin.ses-new', ['approve' => $s, 'v' => (object) ['name' => $s->name, 'rep_sei' => $sei, 'rep_mei' => $mei, 'email' => $s->email]]);
     }
 
-    // 承認：同じ入力（企業正式名称・代表者の姓名・メール）で仮登録に進める。申し込んだアドレスにも承認を知らせる
+    // 承認：同じ入力（企業正式名称・SES の姓名・メール）で仮登録に進める。申し込んだアドレスにも承認を知らせる
     public function sesApprove(Request $r, int $id)
     {
         $s = $this->sesOrFail($id);
         if ($s->status !== 'pending') return $this->go("/admin/ses/$id", '申込中の SES だけ、承認できます。', 'bad');
         $res = Registration::provisionalSes(['name' => $r->input('name'), 'sei' => $r->input('rep_sei'), 'mei' => $r->input('rep_mei'), 'email' => $r->input('email')], $r->user(), $s);
         if (isset($res['bad'])) return back()->withInput()->with('flash', ['msg' => $res['bad'], 'type' => 'bad']);
-        return $this->go("/admin/ses/$id", '承認し、代表者に仮登録のご案内を送りました。');
+        return $this->go("/admin/ses/$id", '承認し、SES に仮登録のご案内を送りました。');
     }
 
     // SES の停止・再開・退会のあとの戻り先。一覧から押したら一覧へ（絞り込みを保つ）、それ以外は SES の詳細
@@ -301,7 +301,7 @@ class AdminController extends Controller
         return $this->go("/admin/ses/$id", '担当者を仮登録し、仮登録のご案内を送りました。');
     }
 
-    // 代表者の交代：本登録済みの担当者を選ぶ（user_id）。担当者がいない会社は、次の代表者を仮登録する（sei・mei・email）
+    // SES の交代：本登録済みの担当者を選ぶ（user_id）。担当者がいない会社は、次の SES を仮登録する（sei・mei・email）
     public function changeRep(Request $r, int $id)
     {
         $this->sesOrFail($id);
@@ -317,7 +317,7 @@ class AdminController extends Controller
     }
 
     // 担当者の停止・再開・退会（手続きは Workflow）。管理者はどの会社でも、SES は自社の担当者だけ（ご自身は不可）。
-    // 担当者の登録・停止・退会は代表者と管理者だけ（担当者は 403。K13）。代表者は交代のあとでなければ止められない（Workflow の repGuard）。
+    // 担当者の登録・停止・退会は SES と管理者だけ（担当者は 403。K13）。SES は交代のあとでなければ止められない（Workflow の repGuard）。
     // 戻り先は、管理者なら SES の詳細、SES なら会社情報
     private function sesUserDo(Request $r, int $id, int $uid, string $method)
     {

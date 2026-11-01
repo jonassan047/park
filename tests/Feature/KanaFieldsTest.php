@@ -37,7 +37,7 @@ class KanaFieldsTest extends TestCase
         $this->get("/admin/admins/{$u->id}")->assertSee('やまた たろう');
     }
 
-    // SES の仮登録は4つの項目だけで、ふりがなの欄は無い（ふりがなは、代表者が本登録のときに任意で入れる）
+    // SES の仮登録は4つの項目だけで、ふりがなの欄は無い（ふりがなは、SES が本登録のときに任意で入れる）
     public function test_ses_provisional_form_has_no_kana(): void
     {
         $this->admin()->get('/admin/ses/new')->assertOk()->assertDontSee('ふりがな');

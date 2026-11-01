@@ -221,7 +221,7 @@ Route::middleware('role:ses')->prefix('ses')->group(function () {
     Route::get('/company', [Ses::class, 'company']);
     Route::get('/company/edit', [Ses::class, 'companyEdit']);
     Route::post('/company', [Ses::class, 'saveCompany']);
-    // 担当者の仮登録は代表者だけ（担当者は 403）
+    // 担当者の仮登録は SES だけ（担当者は 403）
     Route::get('/company/users/new', [Ses::class, 'userNew']);
     Route::post('/company/users', [Ses::class, 'userStore'])->middleware('throttle:20,1');
 });

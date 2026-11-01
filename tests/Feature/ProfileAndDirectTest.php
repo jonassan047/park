@@ -90,7 +90,7 @@ class ProfileAndDirectTest extends TestCase
         $this->unfinish('admin@park.example', 'ses1@park.example', 'eg1@park.example');
         DB::table('users')->where('email', 'admin@park.example')->update(['phone' => null]);
         $this->as('admin@park.example')->get('/register/complete')->assertOk()->assertSee('足りない項目')->assertSee('企業名')->assertSee('電話番号')->assertDontSee('SES名');
-        // SES の代表者：会社の電話が空なら、それだけを聞く（氏名は入っているので聞かない）
+        // SES：会社の電話が空なら、それだけを聞く（氏名は入っているので聞かない）
         $sid = User::where('email', 'ses1@park.example')->value('ses_id');
         DB::table('users')->where('email', 'ses1@park.example')->update(['name_sei' => '緑川', 'name_mei' => '一郎']);
         DB::table('ses_companies')->where('id', $sid)->update(['phone' => null]);
@@ -121,7 +121,7 @@ class ProfileAndDirectTest extends TestCase
         $this->assertDatabaseHas('users', ['email' => 'admin@park.example', 'name' => '登録 太郎', 'phone' => '03-0000-0000', 'company_name' => '見本運営株式会社']);
         $this->assertNotNull(DB::table('users')->where('email', 'admin@park.example')->value('profile_completed_at'));
 
-        // SES：登録のあとは、確認の画面を挟まずダッシュボードへ（代表者は、氏名が足りなければ氏名を入れる）
+        // SES：登録のあとは、確認の画面を挟まずダッシュボードへ（SES は、氏名が足りなければ氏名を入れる）
         $this->as('ses1@park.example')->post('/register/complete', ['name_sei' => '緑川', 'name_mei' => '一郎'])->assertRedirect(url('/ses'));
 
         // エンジニア：本人の確認がまだなら自分の画面（ふりがな・電話・郵便番号・住所も、足りなければここで取る）
@@ -195,8 +195,8 @@ class ProfileAndDirectTest extends TestCase
     public function test_b_login_bar(): void
     {
         $this->as('admin@park.example')->get('/admin')->assertSee('管理者（見本運営）としてログインしています：'.User::where('email', 'admin@park.example')->value('name'));
-        // 代表者と担当者で帯の言葉が分かれる（台帳 K13）
-        $this->as('ses1@park.example')->get('/ses')->assertSee('SES（みどり情報システム）の代表者としてログインしています');
+        // SES と担当者で帯の言葉が分かれる（台帳 K13）
+        $this->as('ses1@park.example')->get('/ses')->assertSee('SES（みどり情報システム）としてログインしています');
         $staff = W::createUser('ses1s@park.example', '同僚 一郎', 'ses', 'park1234', ['ses_id' => 1]);
         $this->completeProfile($staff);
         $this->as('ses1s@park.example')->get('/ses')->assertSee('SES（みどり情報システム）のご担当者としてログインしています');
@@ -282,7 +282,7 @@ class ProfileAndDirectTest extends TestCase
     public function test_d_admin_registers_ses(): void
     {
         $this->as('admin@park.example');
-        $this->get('/admin/ses/new')->assertOk()->assertSee('仮登録すると、代表者に仮登録のご案内（7日以内に本登録）が届きます。');
+        $this->get('/admin/ses/new')->assertOk()->assertSee('仮登録すると、SES に仮登録のご案内（7日以内に本登録）が届きます。');
         $notes = DB::table('app_notifications')->count();
         $this->post('/admin/ses', ['name' => '管理者登録 SES', 'rep_sei' => '担当', 'rep_mei' => '花子', 'email' => 'reg-ses@park.example'])->assertRedirect();
         $s = DB::table('ses_companies')->where('name', '管理者登録 SES')->first();
@@ -644,7 +644,7 @@ class ProfileAndDirectTest extends TestCase
         $this->as('admin@park.example')->get('/admin/admins')->assertOk()->assertSee('企業名')->assertSee('<td>見本運営株式会社</td>', false);
     }
 
-    // SES の会社名（企業正式名称）は、代表者が「SES」の会社情報で直す。足りないときだけ、足りない項目の画面で聞く（以前は、最初の情報登録の画面と「アカウント」でも直せた）
+    // SES の会社名（企業正式名称）は、SES が「SES」の会社情報で直す。足りないときだけ、足りない項目の画面で聞く（以前は、最初の情報登録の画面と「アカウント」でも直せた）
     private function companyPost(array $over = []): array
     {
         $s = DB::table('ses_companies')->find(1);
@@ -783,7 +783,7 @@ class ProfileAndDirectTest extends TestCase
         $this->post('/register/complete', ['name_sei' => '管理', 'name_mei' => '太郎', 'company_name' => '運営社', 'ses_name' => '混ぜた名前'])->assertRedirect(url('/admin'));
         $this->assertSame('みどり情報システム', $this->sesName());
         $this->assertSame('運営社', DB::table('users')->where('email', 'admin@park.example')->value('company_name'));
-        // SES の代表者に、管理者の企業名の欄は出ない
+        // SES に、管理者の企業名の欄は出ない
         DB::table('users')->where('email', 'ses1@park.example')->update(['name_sei' => null]);
         $this->as('ses1@park.example')->get('/register/complete')->assertDontSee('企業名');
         $this->post('/register/complete', ['name_sei' => '担当', 'name_mei' => '太郎', 'ses_name' => '混ぜた名前', 'company_name' => '混ぜた会社'])->assertRedirect();

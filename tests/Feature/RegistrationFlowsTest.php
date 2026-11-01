@@ -57,8 +57,8 @@ class RegistrationFlowsTest extends TestCase
             '管理者 → SES' => ['admin@park.example', 'ses', ['admin@park.example', 'admin2-flow@example.com'], ['/admin/ses']],
             '管理者 → 担当者' => ['admin@park.example', 'staff', ['admin@park.example', 'ses1@park.example'], ['/admin/ses/1']],
             '管理者 → EG' => ['admin@park.example', 'eg', ['admin@park.example', 'ses1@park.example'], ['/admin/engineers']],
-            '代表者 → 担当者' => ['ses1@park.example', 'staff', ['ses1@park.example'], ['/ses/company']],
-            '代表者 → EG' => ['ses1@park.example', 'eg', ['ses1@park.example'], ['/ses/engineers']],
+            'SES → 担当者' => ['ses1@park.example', 'staff', ['ses1@park.example'], ['/ses/company']],
+            'SES → EG' => ['ses1@park.example', 'eg', ['ses1@park.example'], ['/ses/engineers']],
             '担当者 → EG' => ['mate-flow@example.com', 'eg', ['mate-flow@example.com', 'ses1@park.example'], ['/ses/engineers']],
         ];
     }

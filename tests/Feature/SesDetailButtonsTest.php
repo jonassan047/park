@@ -86,7 +86,7 @@ class SesDetailButtonsTest extends TestCase
     public function test_ac2_ses_user_rows_have_buttons(): void
     {
         $sid = $this->sesId('ses1@park.example');
-        $rep = $this->uid('ses1@park.example'); // 代表者（交代のあとでなければ止められない。台帳 K21）
+        $rep = $this->uid('ses1@park.example'); // SES（交代のあとでなければ止められない。台帳 K21）
         $mine = $this->addSesUser($sid, 'ses1a@park.example', '同僚 一郎'); // ふつうの担当者
         $stopped = $this->addSesUser($sid, 'ses1b@park.example', '停止 次郎');
         DB::table('users')->where('id', $stopped)->update(['active' => 0]);
@@ -308,8 +308,8 @@ class SesDetailButtonsTest extends TestCase
         $r = $this->admin()->get("/admin/ses/$sid/users/$uid")->assertOk();
         foreach (['状態', 'SES', '氏名', 'ふりがな', 'メールアドレス', '電話番号', '所属・役職', 'エンジニア兼任', '最終ログイン', '登録日', 'SES の詳細に戻る', $name, $comp, 'ses1@park.example'] as $t) $r->assertSee($t);
         $r->assertSee('—')->assertSee('なし')->assertDontSee('編集');
-        // 代表者の詳細には、停止・退会のボタンは出ない（交代のあとでなければ止められない。台帳 K21）
-        $r->assertSee('（代表者）');
+        // SES の詳細には、停止・退会のボタンは出ない（交代のあとでなければ止められない。台帳 K21）
+        $r->assertSee('（SES）');
         foreach (['suspend', 'resume', 'delete'] as $a) $r->assertDontSee("/admin/ses/$sid/users/$uid/$a");
         $r->assertSee('href="' . url("/admin/ses/$sid") . '"', false);
         // ふつうの担当者の詳細には、停止・退会のボタンがあり、詳細に戻る印（back=detail）が付く

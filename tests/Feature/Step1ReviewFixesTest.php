@@ -34,7 +34,7 @@ class Step1ReviewFixesTest extends TestCase
         return $over + ['name' => $s->name, 'rep_sei' => '緑川', 'rep_mei' => '一郎', 'phone' => $s->phone, 'postal_code' => $s->postal_code, 'address' => $s->address];
     }
 
-    // M1：長さ・形がだめな入力は、代表者の画面でも管理者の画面でも断り、何も変えない
+    // M1：長さ・形がだめな入力は、SES の画面でも管理者の画面でも断り、何も変えない
     public function test_m1_company_edit_checks_length_and_format(): void
     {
         $before = (array) DB::table('ses_companies')->find(1);

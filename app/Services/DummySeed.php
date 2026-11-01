@@ -111,7 +111,7 @@ class DummySeed
         // 会社の状態の件数（申込中は ses≥3、停止は ses≥4、仮登録は ses≥5 のときだけ。残りは参加中）
         $nPending = $ses >= 3 ? max(1, (int) round($ses * 0.15)) : 0;
         $nSuspended = $ses >= 4 ? max(1, (int) round($ses * 0.10)) : 0;
-        $nProvisional = $ses >= 5 ? 1 : 0; // 仮登録の会社は、代表者（仮登録）が1人だけ。エンジニアはいない
+        $nProvisional = $ses >= 5 ? 1 : 0; // 仮登録の会社は、SES（仮登録）が1人だけ。エンジニアはいない
         $nOpen = $ses - $nPending - $nProvisional; // 担当者・エンジニアがいる会社（参加中・停止）
         if ($staff < $nOpen) return ['errors' => ["担当者は最低 {$nOpen} 人です（参加中・停止の SES 1社に1人ずつ）。"], 'env' => $env];
 
@@ -140,7 +140,7 @@ class DummySeed
         }
         $open = array_keys(array_filter($companies, fn ($c) => in_array($c['status'], ['active', 'suspended'], true)));
 
-        // 担当者：参加中・停止の各社に1人目（会社の email と同じ。会社の代表者。停止中にしない）。残りは各社にランダムに配る
+        // 担当者：参加中・停止の各社に1人目（会社の email と同じ。会社の SES。停止中にしない）。残りは各社にランダムに配る
         $st = self::stateList($rng, $staff);
         for ($k = 0; $k < $nOpen; $k++) {
             if ($st[$k] !== 'E') continue;
@@ -157,7 +157,7 @@ class DummySeed
             $people[] = $p + ['ci' => $ci, 'state' => $st[$k], 'days' => $rng->getInt(1, 30), 'expired' => $rng->getInt(1, 20), 'first' => $seq[$ci] === 1,
                 'email' => $seq[$ci] === 1 ? sprintf('ses-d%02d', $no).self::SUFFIX : sprintf('ses-d%02d-%d', $no, $seq[$ci]).self::SUFFIX];
         }
-        // 仮登録の会社の代表者（仮登録のまま。上の担当者の人数には数えない）
+        // 仮登録の会社の SES（仮登録のまま。上の担当者の人数には数えない）
         foreach ($companies as $ci => $c) {
             if ($c['status'] !== 'provisional') continue;
             $people[] = $c['rep'] + ['ci' => $ci, 'state' => 'C', 'days' => 1, 'expired' => 1, 'first' => true, 'email' => sprintf('ses-d%02d', $c['no']).self::SUFFIX];
@@ -255,13 +255,13 @@ class DummySeed
                         'contact_kana_sei' => $c['contact']['kana_sei'], 'contact_kana_mei' => $c['contact']['kana_mei']]),
                     'email' => $c['email'], 'employees' => $c['employees'], 'strengths' => $c['strengths'],
                     'message' => $pending ? 'テスト用のダミーの申し込みです。' : null, 'status' => $c['status'],
-                    // 仮登録の会社は、代表者の本登録で同意・参加日が入る
+                    // 仮登録の会社は、SES の本登録で同意・参加日が入る
                     'agreed_at' => $prov ? null : now_str(), 'self_confirmed_at' => ($pending || $prov) ? null : now_str(), 'joined_at' => ($pending || $prov) ? null : today_str(),
                     'created_at' => now_str(), 'updated_at' => now_str(),
                 ]);
             }
 
-            // SES の担当者（各社の1人目は代表者。代表者が本登録済み・停止なら、会社の電話・住所も入れる）
+            // SES の担当者（各社の1人目は SES。SES が本登録済み・停止なら、会社の電話・住所も入れる）
             $repState = [];
             foreach ($spec['people'] as $p) {
                 $uid = self::createUser($hash, $p, 'ses', $sesIds[$p['ci']], null);
@@ -272,7 +272,7 @@ class DummySeed
                 }
             }
             foreach ($repState as $ci => $state) {
-                if ($state === 'B' || $spec['companies'][$ci]['status'] === 'provisional') continue; // 必須項目が足りない代表者の会社は、会社の項目も空のまま
+                if ($state === 'B' || $spec['companies'][$ci]['status'] === 'provisional') continue; // 必須項目が足りない SES の会社は、会社の項目も空のまま
                 DB::table('ses_companies')->where('id', $sesIds[$ci])->update(['phone' => self::DUMMY_PHONE, 'postal_code' => self::DUMMY_POSTAL, 'address' => self::DUMMY_ADDRESS]);
             }
 

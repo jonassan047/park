@@ -402,7 +402,7 @@ class AdminAccountTest extends TestCase
 
     // ---------- R. SES の登録 ----------
 
-    // SES の登録は、企業正式名称・代表者の姓・名・メールの4つだけ（仮登録。担当者の欄は無くなった）
+    // SES の登録は、企業正式名称・SES の姓・名・メールの4つだけ（仮登録。担当者の欄は無くなった）
     private function sesIn(array $over = []): array
     {
         return $over + ['name' => '登録商事', 'rep_sei' => '代表', 'rep_mei' => '花', 'email' => 'Reg-R@park.example'];
@@ -410,10 +410,10 @@ class AdminAccountTest extends TestCase
 
     public function test_r1_form_labels(): void
     {
-        $html = $this->as('admin@park.example')->get('/admin/ses/new')->assertOk()->assertSee('企業正式名称')->assertSee('代表者名（姓）')->assertSee('代表者名（名）')
-            ->assertSee('代表者のメールアドレス')->assertSee('仮登録してメールを送る')->assertDontSee('ご担当者名')->getContent();
-        $this->assertLessThan(strpos($html, '代表者名（姓）'), strpos($html, '企業正式名称'));
-        $this->assertLessThan(strpos($html, '代表者のメールアドレス'), strpos($html, '代表者名（名）'));
+        $html = $this->as('admin@park.example')->get('/admin/ses/new')->assertOk()->assertSee('企業正式名称')->assertSee('SES の氏名（姓）')->assertSee('SES の氏名（名）')
+            ->assertSee('SES のメールアドレス')->assertSee('仮登録してメールを送る')->assertDontSee('ご担当者名')->getContent();
+        $this->assertLessThan(strpos($html, 'SES の氏名（姓）'), strpos($html, '企業正式名称'));
+        $this->assertLessThan(strpos($html, 'SES のメールアドレス'), strpos($html, 'SES の氏名（名）'));
         // 公開の申し込み（/apply）の画面は変えない（K09）
         auth()->logout();
         $this->flushSession();
@@ -424,7 +424,7 @@ class AdminAccountTest extends TestCase
     {
         $m0 = $this->invites();
         $this->as('admin@park.example')->post('/admin/ses', $this->sesIn())
-            ->assertSessionHas('flash.type', 'ok')->assertSessionHas('flash.msg', '仮登録し、代表者に仮登録のご案内を送りました。');
+            ->assertSessionHas('flash.type', 'ok')->assertSessionHas('flash.msg', '仮登録し、SES に仮登録のご案内を送りました。');
         $sid = (int) DB::table('ses_companies')->where('name', '登録商事')->value('id');
         $this->assertSame('provisional', DB::table('ses_companies')->where('id', $sid)->value('status'));
         $u = DB::table('users')->where('email', 'reg-r@park.example')->first();
@@ -455,10 +455,10 @@ class AdminAccountTest extends TestCase
     {
         $s0 = DB::table('ses_companies')->count(); $u0 = $this->users(); $m0 = DB::table('mail_outbox')->count();
         $cases = [
-            [['rep_sei' => ''], '代表者の姓を入れてください。'],
-            [['rep_sei' => '　 '], '代表者の姓を入れてください。'],
-            [['rep_mei' => ''], '代表者の名を入れてください。'],
-            [['rep_mei' => '　 '], '代表者の名を入れてください。'],
+            [['rep_sei' => ''], 'SES の姓を入れてください。'],
+            [['rep_sei' => '　 '], 'SES の姓を入れてください。'],
+            [['rep_mei' => ''], 'SES の名を入れてください。'],
+            [['rep_mei' => '　 '], 'SES の名を入れてください。'],
         ];
         foreach ($cases as [$over, $msg]) {
             $this->as('admin@park.example')->post('/admin/ses', $this->sesIn($over + ['name' => '宛名無し商事', 'email' => 'noname@park.example']))

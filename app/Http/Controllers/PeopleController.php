@@ -43,7 +43,7 @@ class PeopleController extends Controller
     {
         $t = $this->target($r, $id);
         abort_unless(in_array($t->role, ['ses', 'eg'], true) && !$t->registered_at, 404);
-        if (Requirements::isRep($t)) return redirect("/admin/ses/{$t->ses_id}/edit"); // 代表者の仮登録は、SES の編集の画面で直す（管理者だけがここに来る）
+        if (Requirements::isRep($t)) return redirect("/admin/ses/{$t->ses_id}/edit"); // SES の仮登録は、SES の編集の画面で直す（管理者だけがここに来る）
         [$sei, $mei] = ($t->name_sei || $t->name_mei) ? [$t->name_sei, $t->name_mei] : split_name($t->name);
         return view('people.edit', [
             't' => $t, 'sei' => $sei, 'mei' => $mei, 'company' => Registration::companyOf($t), 'back' => $this->back($r, $t),

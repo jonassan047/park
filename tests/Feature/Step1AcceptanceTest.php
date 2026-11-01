@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
-// v0.2.0 テスト設計書（段階1：管理者 → SES 代表者）の F1〜F15・S1-01〜S1-17 のうち、ほかのテストに無かった境界を足す。
+// v0.2.0 テスト設計書（段階1：管理者 → SES SES）の F1〜F15・S1-01〜S1-17 のうち、ほかのテストに無かった境界を足す。
 // 7日ちょうど／8日目、同じ人への通知の重複、立場ちがいの操作、「見」の項目。アドレスはすべて example.com
 class Step1AcceptanceTest extends TestCase
 {
@@ -200,7 +200,7 @@ class Step1AcceptanceTest extends TestCase
         $this->assertSame(1, DB::table('mail_outbox')->where('to_email', 'admin@park.example')->where('subject', 'like', '%本登録が完了しました%')->count());
     }
 
-    // ---------- S1-03：会社の代表者はこの人を指し、会社の欄に同じ姓名が出る ----------
+    // ---------- S1-03：会社の SES はこの人を指し、会社の欄に同じ姓名が出る ----------
     public function test_s1_03_company_rep_points_to_the_person_and_shows_the_same_name(): void
     {
         [$sid, $uid, $token] = $this->create();

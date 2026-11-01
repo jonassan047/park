@@ -4,7 +4,7 @@ namespace App\Support;
 
 use Illuminate\Support\Facades\DB;
 
-// 必須項目の決まり（4つの立場：管理者・SES の代表者・担当者・エンジニア）。台帳 8章の表をそのままコードにしたもの。
+// 必須項目の決まり（4つの立場：管理者・SES・担当者・エンジニア）。台帳 8章の表をそのままコードにしたもの。
 // 本登録の画面・足りない項目の画面・編集の入口が、すべてここを見る。
 // 「足りないか」は保存した印ではなく、今の値と立場から毎回計算する。
 //
@@ -20,12 +20,12 @@ class Requirements
     const OPT = 'opt';
 
     // 立場の名前（画面・メールで使う）
-    const ROLE_NAMES = ['admin' => '管理者', 'rep' => 'SES の代表者', 'staff' => 'SES のご担当者', 'eg' => 'エンジニア'];
+    const ROLE_NAMES = ['admin' => '管理者', 'rep' => 'SES', 'staff' => 'SES のご担当者', 'eg' => 'エンジニア'];
 
     // 同意の入力欄の名前（管理者は同意なし）
     const CONSENT_KEYS = ['rep' => 'agree', 'staff' => 'agree', 'eg' => 'consent'];
 
-    // 立場の種類：admin・rep（SES の代表者）・staff（SES の担当者）・eg
+    // 立場の種類：admin・rep（SES）・staff（SES の担当者）・eg
     public static function kind(string $role, bool $isRep): string
     {
         return $role === 'ses' ? ($isRep ? 'rep' : 'staff') : $role;
@@ -77,7 +77,7 @@ class Requirements
         return self::ROLE_NAMES[self::kind($role, $isRep)];
     }
 
-    // その人が、会社の代表者（または次の代表者）か
+    // その人が、会社の SES（または次の SES）か
     public static function isRep(?object $u): bool
     {
         if (!$u || ($u->role ?? '') !== 'ses' || empty($u->ses_id)) return false;

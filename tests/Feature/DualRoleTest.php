@@ -692,7 +692,7 @@ class DualRoleTest extends TestCase
         // ほかに担当者がいる（最後の1人でない）
         $other = W::createUser('ses1c@park.example', '緑川 三郎', 'ses', 'park1234', ['ses_id' => $sid]);
         $this->completeProfile($other, ['password' => bcrypt('park1234')]);
-        // 代表者の退会は交代のあと（K21）：先に、ほかの担当者を代表者にする
+        // SES の退会は交代のあと（K21）：先に、ほかの担当者をSES にする
         $this->assertSame('ok', Registration::changeRep($sid, $other, $this->row(self::ADMIN))['type']);
         $this->as(self::ADMIN, 'admin')->post("/admin/ses/$sid/users/$uid/delete")
             ->assertSessionHas('flash.msg', '緑川 一郎 さんを SES 担当者から外しました。エンジニアとしては引き続き入れます。');
@@ -714,7 +714,7 @@ class DualRoleTest extends TestCase
         $sid = $this->sesId(self::SES1);
         $other = W::createUser('ses1c@park.example', '緑川 三郎', 'ses', 'park1234', ['ses_id' => $sid]);
         $this->completeProfile($other);
-        // 代表者の停止は交代のあと（K21）：先に、ほかの担当者を代表者にする
+        // SES の停止は交代のあと（K21）：先に、ほかの担当者をSES にする
         $this->assertSame('ok', Registration::changeRep($sid, $other, $this->row(self::ADMIN))['type']);
         $this->as(self::ADMIN, 'admin')->post("/admin/ses/$sid/users/$uid/suspend")->assertSessionHas('flash.msg');
         $this->assertSame(0, (int) $this->row(self::SES1)->active);

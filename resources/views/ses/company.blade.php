@@ -4,7 +4,7 @@
 <x-card title="会社情報"><x-slot:actions><a class="btn ghost small" href="{{ url('/account#password') }}">パスワード変更</a>
 @if($isRep)<a class="btn small" href="{{ url('/ses/company/edit') }}">編集</a>@endif
 </x-slot:actions><dl class="dl">
-<dt>状態</dt><dd>{{ badge('sesStatus', $s->status) }}</dd><dt>代表者</dt><dd>{{ $repName ?: '—' }}</dd>
+<dt>状態</dt><dd>{{ badge('sesStatus', $s->status) }}</dd><dt>SES</dt><dd>{{ $repName ?: '—' }}</dd>
 <dt>メール</dt><dd>{{ $s->email ?: '—' }}</dd><dt>電話</dt><dd>{{ $s->phone ?: '—' }}</dd><dt>所在地</dt><dd>{{ postal_address($s->postal_code, $s->address) }}</dd>
 <dt>人数</dt><dd>{{ $s->employees ?? '—' }}</dd><dt>得意な分野</dt><dd>{{ $s->strengths ?: '—' }}</dd><dt>ひとこと</dt><dd>{!! nl2br(e($s->message)) ?: '—' !!}</dd>
 <dt>守秘義務への同意</dt><dd>{{ fmt_dt($s->agreed_at) }}</dd><dt>参加日</dt><dd>{{ fmt_date($s->joined_at) }}</dd>
@@ -12,14 +12,14 @@
 </x-card>
 </div><div>
 <x-card title="担当者">@if($isRep && $s->status === 'active')<x-slot:actions><a class="btn small" href="{{ url('/ses/company/users/new') }}">担当者を登録</a></x-slot:actions> @endif
-@unless($isRep)<p class="muted">担当者の登録・停止・退会は、代表者だけができます。代表者の交代は、管理者にご依頼ください。</p>@endunless
+@unless($isRep)<p class="muted">担当者の登録・停止・退会は、SES だけができます。SES の交代は、管理者にご依頼ください。</p>@endunless
 <x-table :head="['名前', 'メール', '状態', '最終ログイン', '']" :count="$users->count()">
 @foreach($users as $u)@php
 $state = user_state($u);
 $base = '/admin/ses/'.$s->id.'/users/'.$u->id;
 $self = (int) $u->id === (int) auth()->id(); // ご自身の行には操作を出さない
-$isRepRow = (int) $u->id === (int) $repId || (int) $u->id === (int) $s->next_rep_user_id; // 代表者（次の代表者）の行は、交代のあとでなければ止められない
-@endphp<tr><td>{{ $u->name }}@if((int) $u->id === (int) $repId) <span class="badge info">代表者</span>@elseif((int) $u->id === (int) $s->next_rep_user_id) <span class="badge info">次の代表者</span>@endif
+$isRepRow = (int) $u->id === (int) $repId || (int) $u->id === (int) $s->next_rep_user_id; // SES（次の SES）の行は、交代のあとでなければ止められない
+@endphp<tr><td>{{ $u->name }}@if((int) $u->id === (int) $repId) <span class="badge info">SES</span>@elseif((int) $u->id === (int) $s->next_rep_user_id) <span class="badge info">次の SES</span>@endif
 @if($u->engineer_id) <a class="badge info" href="{{ url('/engineers/'.$u->engineer_id) }}">エンジニア兼任</a>@endif</td><td>{{ $u->email }}</td><td>{{ $state }}</td>
 <td>{{ fmt_dt($u->last_login) }}</td><td>@if($isRep && !$isRepRow && is_provisional_state($state))<x-post :action="'/people/'.$u->id.'/resend'" label="送り直し" cls="ghost small" />
 <a class="btn ghost small" href="{{ url('/people/'.$u->id.'/edit') }}">仮登録の内容を直す</a>

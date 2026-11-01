@@ -19,7 +19,7 @@ class Workflow
         return Registration::issueToken($userId, $days, $kind);
     }
 
-    // 会社の代表者（または次の代表者）か
+    // 会社の SES（または次の SES）か
     public static function isRep(?object $u): bool
     {
         return Requirements::isRep($u);
@@ -46,11 +46,11 @@ class Workflow
         return ['type' => 'bad', 'msg' => 'この会社で使える担当者が、この人だけです。停止・退会にはできません。会社ごと止めるときは、SES の「停止」か「退会」を使ってください。'];
     }
 
-    // 代表者（または次の代表者）は、交代のあとでなければ停止・退会にできない（会社に代表者がいない状態を作らない。K21）
+    // SES（または次の SES）は、交代のあとでなければ停止・退会にできない（会社に SES がいない状態を作らない。K21）
     private static function repGuard(object $u): ?array
     {
         if (!Requirements::isRep($u)) return null;
-        return ['type' => 'bad', 'msg' => '代表者は、停止・退会にできません。先に、管理者に代表者の交代をご依頼ください。会社ごと止めるときは、SES の「停止」か「退会」を使ってください。'];
+        return ['type' => 'bad', 'msg' => 'SES は、停止・退会にできません。先に、管理者にSES の交代をご依頼ください。会社ごと止めるときは、SES の「停止」か「退会」を使ってください。'];
     }
 
     public static function suspendSesUser(int $sesId, int $uid, $actor): ?array
@@ -220,7 +220,7 @@ class Workflow
         return ['kana_sei' => self::cut50($ks), 'kana_mei' => self::cut50($km), 'kana' => join_name($ks, $km)];
     }
 
-    // SES の代表者・担当者の氏名の列（姓・名の2欄、または古い1欄から）
+    // SES・担当者の氏名の列（姓・名の2欄、または古い1欄から）
     public static function sesPeopleCols(array $d): array
     {
         [$rep, $rs, $rm] = name_parts($d, 'rep', 'rep_name');
@@ -508,7 +508,7 @@ class Workflow
         $warn = null;
         DB::transaction(function () use ($user, $upd, $ns, $nm) {
             DB::table('users')->where('id', $user->id)->update($upd);
-            // 代表者が姓名を直したら、会社の代表者の欄も同じにする（企業名はここでは変えられない）
+            // SES が姓名を直したら、会社の SES の欄も同じにする（企業名はここでは変えられない）
             if ($user->role === 'ses' && ($ns !== null || $nm !== null) && Requirements::isRep($user)) Registration::syncRepName((int) $user->ses_id, $ns, $nm);
         });
         self::syncEngineerFromUser($user->id); // エンジニア本人なら、技術登録にもそろえる（兼任の人は対象外）

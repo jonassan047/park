@@ -258,7 +258,7 @@ class PostalAddressTest extends TestCase
     public function test_v4_5_ses_register_update_company_apply(): void
     {
         $this->admin();
-        // 仮登録の画面には、郵便番号・住所の欄はない（本登録で代表者が入れる。台帳 K02）
+        // 仮登録の画面には、郵便番号・住所の欄はない（本登録で SES が入れる。台帳 K02）
         $this->get('/admin/ses/new')->assertOk()->assertDontSee('name="postal_code"', false);
         $this->post('/admin/ses', ['name' => '郵便商事', 'rep_sei' => '担当', 'rep_mei' => '花', 'email' => 'pa-ses@park.example', 'postal_code' => '1000001', 'address' => '東京都千代田区'])
             ->assertSessionHas('flash.type', 'ok');

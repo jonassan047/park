@@ -114,7 +114,7 @@ class SesController extends Controller
         ]);
     }
 
-    // 担当者の仮登録は代表者だけ（担当者は 403。K13）。入れるのは 姓・名・メール の3つだけ
+    // 担当者の仮登録は SES だけ（担当者は 403。K13）。入れるのは 姓・名・メール の3つだけ
     public function userNew(Request $r)
     {
         abort_unless(Requirements::isRep($r->user()), 403);
@@ -133,7 +133,7 @@ class SesController extends Controller
         return $this->go('/ses/company', '担当者を仮登録し、仮登録のご案内を送りました。');
     }
 
-    // 会社情報の編集は代表者だけ（担当者は見るだけ。K34）
+    // 会社情報の編集は SES だけ（担当者は見るだけ。K34）
     public function companyEdit(Request $r)
     {
         abort_unless(Requirements::isRep($r->user()), 403);
@@ -146,7 +146,7 @@ class SesController extends Controller
     {
         abort_unless(Requirements::isRep($r->user()), 403);
         $in = Registration::companyInput($r->all());
-        // 必須の欄（企業名・代表者の姓名・電話・郵便番号・住所）は、空にできない。長さ・形も確かめる
+        // 必須の欄（企業名・SES の姓名・電話・郵便番号・住所）は、空にできない。長さ・形も確かめる
         if ($bad = Requirements::checkNotEmpty('ses', true, $in) ?? Registration::checkCompanyInput($in)) return back()->withInput()->with('flash', ['msg' => $bad, 'type' => 'bad']);
         $ad = W::addressCols($r->all(), '所在地');
         if (isset($ad['bad'])) return back()->withInput()->with('flash', ['msg' => $ad['bad'], 'type' => 'bad']);
@@ -158,7 +158,7 @@ class SesController extends Controller
             DB::table('ses_companies')->where('id', $sesId)->update([
                 'phone' => $in['phone'], ...$ad['ok'], 'employees' => int_or_null($r->input('employees')), 'strengths' => str_in($r->input('strengths')), 'updated_at' => now_str(),
             ]);
-            Registration::syncRepName($sesId, $in['name_sei'], $in['name_mei']); // 代表者の姓名は、会社の欄と本人の氏名の両方に
+            Registration::syncRepName($sesId, $in['name_sei'], $in['name_mei']); // SES の姓名は、会社の欄と本人の氏名の両方に
         });
         return $warn ? $this->go('/ses/company', '保存しました。'.$warn, 'warn') : $this->go('/ses/company', '保存しました。');
     }

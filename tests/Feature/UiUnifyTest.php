@@ -92,7 +92,7 @@ class UiUnifyTest extends TestCase
     {
         $html = $this->admin()->get('/admin/ses/new')->assertOk()->getContent();
         $this->assertMatchesRegularExpression('/name="email"[^>]*required/', $html);
-        $this->assertMatchesRegularExpression('/name="rep_sei"[^>]*required/', $html); // 仮登録は、代表者の姓・名・企業正式名称・メールの4つ（台帳 K15）
+        $this->assertMatchesRegularExpression('/name="rep_sei"[^>]*required/', $html); // 仮登録は、SES の姓・名・企業正式名称・メールの4つ（台帳 K15）
         $s0 = $this->rows('ses_companies'); $u0 = $this->rows('users'); $m0 = $this->rows('mail_outbox');
         $this->post('/admin/ses', ['name' => '必須商事', 'contact_name' => '担当 者'])->assertSessionHas('flash.type', 'bad');
         $this->assertSame([$s0, $u0, $m0], [$this->rows('ses_companies'), $this->rows('users'), $this->rows('mail_outbox')]);
@@ -105,7 +105,7 @@ class UiUnifyTest extends TestCase
         $this->assertNotEmpty($m);
         $this->assertDoesNotMatchRegularExpression('/name="email"[^>]*required/', $m[0]);
         $this->assertDoesNotMatchRegularExpression('/name="contact_sei"[^>]*required/', $m[0]);
-        // 本登録のあとの編集にメールの欄は無い（出すだけ）。必須の欄（企業正式名称・代表者の姓名・電話・郵便番号・住所）がそろえば、メールが無くても保存できる
+        // 本登録のあとの編集にメールの欄は無い（出すだけ）。必須の欄（企業正式名称・SES の姓名・電話・郵便番号・住所）がそろえば、メールが無くても保存できる
         $this->post('/admin/ses/1', ['name' => '会社名そのまま', 'rep_sei' => '緑川', 'rep_mei' => '一郎', 'phone' => '03-0000-0002', 'postal_code' => '100-0001', 'address' => '東京都千代田区（見本）', 'email' => ''])->assertSessionHas('flash.type', 'ok');
     }
 

@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
-// 管理者 → SES（代表者）の仮登録 → 本登録の流れ（PLAN 2026-10-31 の S1-06〜S1-28・S1-35・S1-36）。アドレスはすべて example.com
+// 管理者 → SES の仮登録 → 本登録の流れ（PLAN 2026-10-31 の S1-06〜S1-28・S1-35・S1-36）。アドレスはすべて example.com
 class AdminToSesRegistrationTest extends TestCase
 {
     use RefreshDatabase;
@@ -40,7 +40,7 @@ class AdminToSesRegistrationTest extends TestCase
         return $o + ['name' => '流れ商事株式会社', 'rep_sei' => '流れ', 'rep_mei' => '太郎', 'email' => self::EMAIL];
     }
 
-    // 管理者が SES を仮登録して、[会社 id, 代表者の user id, token] を返す。そのあとはログインしていない状態
+    // 管理者が SES を仮登録して、[会社 id, SES の user id, token] を返す。そのあとはログインしていない状態
     private function createSes(array $o = []): array
     {
         $this->as('admin@park.example')->post('/admin/ses', $this->adminPayload($o))->assertRedirect();
@@ -90,7 +90,7 @@ class AdminToSesRegistrationTest extends TestCase
         $this->assertCount(1, $mails);
         $m = $mails[0];
         $this->assertStringContainsString('仮登録のご案内', $m->subject);
-        foreach (['流れ商事株式会社', '流れ', '太郎', 'SES の代表者', url('/invite/'.$u->token), '7日以内', '心当たりがない'] as $part) $this->assertStringContainsString($part, $m->body);
+        foreach (['流れ商事株式会社', '流れ', '太郎', 'SES', url('/invite/'.$u->token), '7日以内', '心当たりがない'] as $part) $this->assertStringContainsString($part, $m->body);
         $this->assertStringContainsString('見本運営', $m->body); // 登録した人の企業名（見本の管理者）
         $this->assertStringContainsString('会社の電話番号', $m->body);
         $this->assertStringNotContainsString('ご招待', $m->body.$m->subject);
@@ -632,7 +632,7 @@ class AdminToSesRegistrationTest extends TestCase
         $rep = $this->user('ses1@park.example');
         $this->as('admin@park.example')->post("/people/{$rep->id}/cancel")->assertSessionHas('flash', fn ($f) => $f['type'] === 'bad');
         $this->assertNotNull(DB::table('users')->find($rep->id));
-        // パスワードのない行でも、本登録の日時がある人・参加中の会社の代表者は断る
+        // パスワードのない行でも、本登録の日時がある人・参加中の会社の SES は断る
         DB::table('users')->where('id', $rep->id)->update(['password' => null, 'registered_at' => null]);
         $this->post("/people/{$rep->id}/cancel")->assertSessionHas('flash', fn ($f) => $f['type'] === 'bad');
         $this->assertNotNull(DB::table('users')->find($rep->id));

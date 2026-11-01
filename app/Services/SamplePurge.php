@@ -41,7 +41,7 @@ class SamplePurge
         $keptEngs = DB::table('engineers')->whereIn('ses_id', $s)->whereNotIn('id', $e)->pluck('id')->all();
         // 残る人の「登録した人」が消す人を指していたら、消す前に空にする（空でも本登録の状態は変わらない）
         $regBy = DB::table('users')->whereNotIn('id', $u)->whereIn('registered_by', $u)->pluck('id')->all();
-        // 見本ではない SES の代表者（または次の代表者）が見本の人なら、会社に代表者がいなくなるので止める
+        // 見本ではない SES（または次の SES）が見本の人なら、会社に SES がいなくなるので止める
         $repGuard = DB::table('ses_companies')->whereNotIn('id', $s)->where(fn ($q) => $q->whereIn('rep_user_id', $u)->orWhereIn('next_rep_user_id', $u))->count();
 
         // SES で決まる行は、残す人のものを除く
@@ -98,7 +98,7 @@ class SamplePurge
                 .'管理者の直属へ移して続けるときだけ --move-kept-to-direct を付けます。';
         }
         if ($repGuard) {
-            $guards[] = "見本ではない SES の代表者が、見本の人になっています（{$repGuard}社）。消すと代表者がいなくなるので、止めました。tezzo に確かめてください。";
+            $guards[] = "見本ではない SES が、見本の人になっています（{$repGuard}社）。消すと SES がいなくなるので、止めました。tezzo に確かめてください。";
         }
         if ($keptSesUsers) {
             $guards[] = "見本の SES に、見本ではない SES の担当者などが {$keptSesUsers}人入っています。オプションを付けても移せないので、止めました。tezzo に確かめてください。";

@@ -183,7 +183,7 @@ class EngineerController extends Controller
     public function invite(Request $r, int $id)
     {
         $e = $this->load($r, $id);
-        // 送り直しの権限は1か所（管理者は全部、代表者・担当者は自社のエンジニア）。ログインの無いエンジニアは、ここでアカウントを作る
+        // 送り直しの権限は1か所（管理者は全部、SES・担当者は自社のエンジニア）。ログインの無いエンジニアは、ここでアカウントを作る
         abort_unless(Registration::canManage($r->user(), (object) ['role' => 'eg', 'ses_id' => $e->ses_id, 'id' => 0]), 403);
         $res = Registration::resendEngineer($e, $r->user());
         return $this->go("/engineers/$id", $res['msg'], $res['type']);

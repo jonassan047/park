@@ -37,7 +37,7 @@ class EmptyStateTest extends TestCase
         return User::find($id);
     }
 
-    // 管理者が SES を仮登録したあと、代表者が本登録を済ませた形にする（画面の流れは AdminToSesRegistrationTest で確かめている）
+    // 管理者が SES を仮登録したあと、SES が本登録を済ませた形にする（画面の流れは AdminToSesRegistrationTest で確かめている）
     private function finishSes(string $email): void
     {
         $u = DB::table('users')->where('email', $email)->first();
@@ -71,7 +71,7 @@ class EmptyStateTest extends TestCase
         $r = $this->as($a)->get('/admin')->assertOk();
         $r->assertSee('PARK をはじめましょう');
         $r->assertSeeInOrder(['href="'.url('/admin/admins/new').'"', 'href="'.url('/admin/ses/new').'"', 'href="'.url('/admin/ses').'"', 'href="'.url('/cases/new').'"'], false);
-        $r->assertSee('ほかの管理者を登録する')->assertSee('SES を仮登録して、代表者にご案内を送る')->assertSee('エンジニアを登録する（SES を選んでから）')->assertSee('案件を登録する');
+        $r->assertSee('ほかの管理者を登録する')->assertSee('SES を仮登録して、SES にご案内を送る')->assertSee('エンジニアを登録する（SES を選んでから）')->assertSee('案件を登録する');
         $r->assertDontSee('<span class="badge ok">済み</span>', false);
     }
 
@@ -180,7 +180,7 @@ class EmptyStateTest extends TestCase
         $this->assertSame('ses', $contact->role);
         $this->assertNull($contact->password);
 
-        // 代表者が仮登録のリンクから本登録する（企業名・氏名・電話・住所・パスワード・守秘義務。確認コードを通ったとき保存される）
+        // SES が仮登録のリンクから本登録する（企業名・氏名・電話・住所・パスワード・守秘義務。確認コードを通ったとき保存される）
         auth()->logout();
         $this->flushSession();
         $this->get('/invite/'.$contact->token)->assertOk()->assertSee('守秘義務');

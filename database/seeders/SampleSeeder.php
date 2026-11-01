@@ -32,7 +32,7 @@ class SampleSeeder extends Seeder
                 'phone' => '03-0000-0002', 'postal_code' => '100-0001', 'address' => '東京都千代田区（見本）',
                 'strengths' => $str, 'agreed_at' => now_str(), 'self_confirmed_at' => now_str(), 'joined_at' => today_str(), 'created_at' => now_str(), 'updated_at' => now_str()]);
             $uid = W::createUser($email, $contact, 'ses', $pw, ['ses_id' => $id]);
-            // 各社の1人目が代表者。守秘義務も同意済みにする
+            // 各社の1人目が SES。守秘義務も同意済みにする
             DB::table('users')->where('id', $uid)->update(['secrecy_agreed_at' => now_str(), 'phone' => '03-0000-0003']);
             DB::table('ses_companies')->where('id', $id)->update(['rep_user_id' => $uid]);
             $ses[] = $id;

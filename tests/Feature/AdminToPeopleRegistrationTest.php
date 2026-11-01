@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
-// v0.2.0 段階 2：管理者 → 担当者・エンジニアの仮登録（PLAN 2026-10-31 の S2-05・S2-06・S2-24・S2-31）。見本の SES 1 の代表者は ses1@park.example
+// v0.2.0 段階 2：管理者 → 担当者・エンジニアの仮登録（PLAN 2026-10-31 の S2-05・S2-06・S2-24・S2-31）。見本の SES 1 の SES は ses1@park.example
 class AdminToPeopleRegistrationTest extends TestCase
 {
     use RefreshDatabase;
@@ -71,7 +71,7 @@ class AdminToPeopleRegistrationTest extends TestCase
         $u = DB::table('users')->where('email', 'staff5@example.com')->first();
         $this->assertSame(['ses', 1, $this->uid('admin@park.example')], [$u->role, (int) $u->ses_id, (int) $u->registered_by]);
         $this->assertNull($u->registered_at);
-        // 所属 SES の代表者にメールとベル
+        // 所属 SES にメールとベル
         $rep = $this->uid('ses1@park.example');
         $this->assertSame(1, DB::table('app_notifications')->where('user_id', $rep)->where('title', 'like', '管理者が%を仮登録しました%')->count());
         $this->assertSame(1, DB::table('mail_outbox')->where('to_email', 'ses1@park.example')->where('subject', 'like', '%仮登録しました%')->count());
@@ -143,7 +143,7 @@ class AdminToPeopleRegistrationTest extends TestCase
         $this->guest();
         $this->get('/invite/'.$u->token)->assertOk()->assertDontSee('管理者の直属');
 
-        // 本登録を通すと参加中になり、知らせは管理者全員（代表者がいないため）
+        // 本登録を通すと参加中になり、知らせは管理者全員（SES がいないため）
         $this->finish($u->token, $this->egPayload());
         $this->assertSame('参加中', user_state(DB::table('users')->find($u->id)));
         foreach ([$this->uid('admin@park.example'), $second] as $adminId) {

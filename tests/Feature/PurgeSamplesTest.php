@@ -271,7 +271,7 @@ class PurgeSamplesTest extends TestCase
         $this->assertSame(1, DB::table('ses_companies')->where('kind', 'ses')->count());
     }
 
-    // v0.2.0：見本ではない会社の代表者が見本の人なら、会社に代表者がいなくなるので止める
+    // v0.2.0：見本ではない会社の SES が見本の人なら、会社に SES がいなくなるので止める
     public function test_q10_non_sample_ses_with_sample_representative_stops(): void
     {
         $this->real();

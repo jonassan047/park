@@ -47,7 +47,7 @@ class ParkTest extends TestCase
             '/engineers/1/projects/new', '/engineers/1/projects/1/edit', '/engineers/2/messages', '/applications/1', '/applications/2', '/interviews/1', '/contracts/1',
             '/notifications', '/account', '/engineers/new?ses=1', '/admin/admins/new']);
 
-        // 申込中の会社の承認は、仮登録と同じ入力（企業正式名称・代表者の姓名・メール）を通して、仮登録に進む
+        // 申込中の会社の承認は、仮登録と同じ入力（企業正式名称・SES の姓名・メール）を通して、仮登録に進む
         $this->post('/admin/ses/4/approve', ['name' => 'こもれび開発', 'rep_sei' => '木下', 'rep_mei' => 'さくら', 'email' => 'ses4@park.example'])->assertRedirect();
         $this->assertDatabaseHas('ses_companies', ['id' => 4, 'status' => 'provisional']);
 

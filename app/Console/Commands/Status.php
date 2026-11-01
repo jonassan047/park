@@ -29,7 +29,7 @@ class Status extends Command
             'アカウント：仮登録（心当たりなし）' => $declined,
             'アカウント：停止' => $u()->whereNull('left_at')->where('active', 0)->count(),
             'アカウント：退会済' => $u()->whereNotNull('left_at')->count(),
-            'SES：代表者のいない会社（申込中を除く）' => DB::table('ses_companies')->where('kind', 'ses')->where('status', '!=', 'pending')->whereNull('rep_user_id')->count(),
+            'SES：SES のいない会社（申込中を除く）' => DB::table('ses_companies')->where('kind', 'ses')->where('status', '!=', 'pending')->whereNull('rep_user_id')->count(),
             'アカウント：パスワードがあるのに本登録の日時が無い（0 のはず）' => $u()->whereNotNull('password')->whereNull('registered_at')->count(),
         ];
     }

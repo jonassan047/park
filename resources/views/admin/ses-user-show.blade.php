@@ -4,7 +4,7 @@
     $state = user_state($u);
     $base = '/admin/ses/'.$s->id.'/users/'.$u->id;
     $back = ['back' => 'detail'];
-    $isRepRow = (int) $u->id === (int) $s->rep_user_id || (int) $u->id === (int) $s->next_rep_user_id; // 代表者（次の代表者）は、交代のあとでなければ止められない
+    $isRepRow = (int) $u->id === (int) $s->rep_user_id || (int) $u->id === (int) $s->next_rep_user_id; // SES（次の SES）は、交代のあとでなければ止められない
 @endphp
 <x-card title="担当者情報">
 <x-slot:actions>@if(is_provisional_state($state))<x-post :action="'/people/'.$u->id.'/resend'" label="送り直し" cls="ghost small" />
@@ -15,7 +15,7 @@
 @if(!$isRepRow && $state !== '退会済')<x-post :action="$base.'/delete'" label="退会" cls="danger small" :fields="$back" :confirm="$u->name.' さんを退会済にします。ログインできなくなり、元に戻せません（記録は残ります）。よろしいですか？'" />@endif
 </x-slot:actions>
 <dl class="dl">
-<dt>状態</dt><dd>{{ $state }}@if((int) $u->id === (int) $s->rep_user_id)（代表者）@elseif((int) $u->id === (int) $s->next_rep_user_id)（次の代表者）@endif</dd>
+<dt>状態</dt><dd>{{ $state }}@if((int) $u->id === (int) $s->rep_user_id)（SES）@elseif((int) $u->id === (int) $s->next_rep_user_id)（次の SES）@endif</dd>
 <dt>SES</dt><dd>{{ $s->name }}</dd>
 <dt>氏名</dt><dd>{{ $u->name }}</dd>
 <dt>ふりがな</dt><dd>{{ $u->kana ?: '—' }}</dd>

@@ -12,8 +12,8 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
-// v0.2.0 段階 2：SES（代表者・担当者）→ 担当者・エンジニアの仮登録 → 本登録（PLAN 2026-10-31 の S2-01〜S2-04・S2-07〜S2-19・S2-27・S2-28・S2-30）。
-// 見本の SES 1（みどり情報システム）の代表者は ses1@park.example。アドレスはすべて example.com か見本のもの
+// v0.2.0 段階 2：SES（SES・担当者）→ 担当者・エンジニアの仮登録 → 本登録（PLAN 2026-10-31 の S2-01〜S2-04・S2-07〜S2-19・S2-27・S2-28・S2-30）。
+// 見本の SES 1（みどり情報システム）の SES は ses1@park.example。アドレスはすべて example.com か見本のもの
 class SesToPeopleRegistrationTest extends TestCase
 {
     use RefreshDatabase;
@@ -43,7 +43,7 @@ class SesToPeopleRegistrationTest extends TestCase
         return DB::table('users')->where('email', $email)->first();
     }
 
-    // 会社 1 に、本登録が済んだ担当者を足す（代表者ではない）
+    // 会社 1 に、本登録が済んだ担当者を足す（SES ではない）
     private function staff(string $email = 'mate@example.com', string $name = '同僚 一郎'): int
     {
         $id = W::createUser($email, $name, 'ses', 'park1234', ['ses_id' => 1]);
@@ -51,7 +51,7 @@ class SesToPeopleRegistrationTest extends TestCase
         return $id;
     }
 
-    // 担当者を仮登録する（代表者・担当者・管理者のどれか）。users の行を返す
+    // 担当者を仮登録する（SES・担当者・管理者のどれか）。users の行を返す
     private function provisionStaff(string $who, string $email, array $o = []): object
     {
         $url = $who === 'admin@park.example' ? '/admin/ses/1/users' : '/ses/company/users';
@@ -145,7 +145,7 @@ class SesToPeopleRegistrationTest extends TestCase
             $this->assertSame(1, (int) $u->ses_id);
             $this->assertSame(1, (int) DB::table('engineers')->find($u->engineer_id)->ses_id);
         }
-        // 担当者の登録は代表者だけ。会社の指定を混ぜても自社に入る
+        // 担当者の登録は SES だけ。会社の指定を混ぜても自社に入る
         $this->as('ses1@park.example')->post('/ses/company/users', ['ses_id' => '2', 'name_sei' => '他社', 'name_mei' => '担当', 'email' => 'other-staff@example.com'])->assertSessionHas('flash.type', 'ok');
         $this->assertSame(1, (int) $this->row('other-staff@example.com')->ses_id);
         // 管理者の入口は使えない
@@ -347,7 +347,7 @@ class SesToPeopleRegistrationTest extends TestCase
         $this->guest();
         $this->get('/invite/'.$old)->assertOk()->assertSee(T::LINK_UNUSABLE);
 
-        // 代表者が所属を混ぜても変わらない
+        // SES が所属を混ぜても変わらない
         $this->as('ses1@park.example')->post("/people/{$e->id}", ['name_sei' => '直し', 'name_mei' => '技術', 'email' => 'e15b@example.com', 'ses_id' => '2'])->assertSessionHas('flash.type', 'ok');
         $this->assertSame([1, 1], [(int) DB::table('users')->find($e->id)->ses_id, (int) DB::table('engineers')->find($e->engineer_id)->ses_id]);
         // 管理者は参加中の SES に直せる（2か所がそろう）。参加中でない SES（申込中）は断る
