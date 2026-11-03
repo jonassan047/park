@@ -11,7 +11,10 @@
 @if($e->strengths)<p class="lead">{{ $e->strengths }}</p>@endif
 <h2>自己PR</h2><p>{!! nl2br(e($e->summary)) !!}</p>
 @if($c)<h2>案件の必須要件との対応</h2><table class="grid">@foreach($reqRows as [$k, $v])<tr><th>{{ $k }}</th><td>{{ $v }}</td></tr>@endforeach</table>@endif
-<h2>スキル</h2><table class="grid">@foreach($byCat as $cat => $list)<tr><th>{{ lbl('skillCat', $cat) }}</th><td>@foreach($list as $s)<span class="sk2 {{ $isHit($s->name) ? 'hit' : '' }}">{{ $s->name }}{{ $s->years ? '（'.num_disp($s->years).'年）' : '' }}</span>@endforeach</td></tr>@endforeach</table>
+<h2>スキル</h2>
+@php $primary = $byCat->flatten(1)->filter(fn ($s) => !empty($s->is_primary)); @endphp
+@if($primary->isNotEmpty())<p class="lead">得意な技術：{{ $primary->pluck('name')->implode('、') }}</p>@endif
+<table class="grid">@foreach($byCat as $cat => $list)<tr><th>{{ lbl('skillCat', $cat) }}</th><td>@foreach($list as $s)<span class="sk2 {{ $isHit($s->name) ? 'hit' : '' }}">{{ $s->name }}{{ $s->years ? '（'.num_disp($s->years).'年）' : '' }}@if(!$anon && $s->note)<small class="muted"> {{ $s->note }}</small>@endif</span>@endforeach</td></tr>@endforeach</table>
 <h2>経歴</h2>
 @foreach($projects as $i => $p)<section class="sp"><div class="sph"><b>{{ $i + 1 }}. {{ $p->title }}</b><span>{{ $p->period_from ?: '?' }}〜{{ $p->period_to ?: '現在' }}</span></div>
 <div class="spm">{{ implode('／', array_filter([$p->industry, $p->role, $p->team_size ? $p->team_size.'名体制' : ''])) }}　@if($p->phases)<span class="muted">工程：{{ $p->phases }}</span>@endif</div>

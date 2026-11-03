@@ -8,10 +8,10 @@
 <x-field label="開始（年月）" name="period_from" type="month" :value="$p->period_from ?? null" />
 <x-field label="終了（年月、空なら現在）" name="period_to" type="month" :value="$p->period_to ?? null" />
 <x-field label="チームの人数" name="team_size" type="number" min="1" :value="$p->team_size ?? null" />
-<x-field label="使った技術（フレームワークなど）" name="tech" :value="$p->tech ?? null" placeholder="Laravel、Spring Boot、AWS（「、」区切り）" />
-<x-field label="機種・OS・ツール" name="os_tools" :value="$p->os_tools ?? null" placeholder="Linux、Windows、GitLab" />
-<x-field label="言語" name="langs" :value="$p->langs ?? null" placeholder="PHP、JavaScript" />
-<x-field label="DB" name="dbs" :value="$p->dbs ?? null" placeholder="MySQL、Oracle" />
+<x-field label="使った技術（フレームワークなど）" name="tech" :value="$p->tech ?? null" list="tl-tech" placeholder="Laravel、Spring Boot、AWS（「、」区切り）" />
+<x-field label="機種・OS・ツール" name="os_tools" :value="$p->os_tools ?? null" list="tl-os_tools" placeholder="Linux、Windows、GitLab" />
+<x-field label="言語" name="langs" :value="$p->langs ?? null" list="tl-langs" placeholder="PHP、JavaScript" />
+<x-field label="DB" name="dbs" :value="$p->dbs ?? null" list="tl-dbs" placeholder="MySQL、Oracle" />
 <x-field label="並び順（業務経歴書の No.。空なら新しい順）" name="sort" type="number" :value="$p->sort ?? null" />
 </div>
 @php $phases = parse_list($p->phases ?? ''); @endphp
@@ -19,6 +19,24 @@
 <x-field label="作業内容" name="description" type="textarea" rows="4" :value="$p->description ?? null" hint="何を・どこまで担当したか。40字以上で具体的に。" />
 <x-field label="成果（できれば数字で）" name="achievements" type="textarea" rows="2" :value="$p->achievements ?? null" placeholder="例：バッチの処理時間を 4時間→40分に短縮" />
 <p class="muted">事実だけを書いてください。盛った内容は、面談や配属後のトラブルの元になります。</p>
+{{-- 技術の欄の候補（確かめ済みの言葉）。「、」の前までを頭に付けて、続きを選べるようにする。候補に無い言葉も、そのまま入れられる --}}
+<datalist id="tl-tech"></datalist><datalist id="tl-os_tools"></datalist><datalist id="tl-langs"></datalist><datalist id="tl-dbs"></datalist>
+<script>
+(function () {
+    var terms = @json($techTerms);
+    document.querySelectorAll('input[data-techlist]').forEach(function (inp) {
+        var dl = document.getElementById(inp.getAttribute('list'));
+        function build() {
+            var v = inp.value, i = Math.max(v.lastIndexOf('、'), v.lastIndexOf(','));
+            var head = v.slice(0, i + 1);
+            dl.innerHTML = '';
+            terms.forEach(function (t) { var o = document.createElement('option'); o.value = head + t; dl.appendChild(o); });
+        }
+        inp.addEventListener('input', build);
+        build();
+    });
+})();
+</script>
 <a class="btn ghost" href="{{ url('/engineers/'.$e->id) }}">戻る</a> <button class="btn">保存する</button></form></x-card>
 @isset($p->id)<x-post :action="'/engineers/'.$e->id.'/projects/'.$p->id.'/delete'" label="この案件を削除" cls="danger small" confirm="削除しますか？" />@endisset
 @endsection

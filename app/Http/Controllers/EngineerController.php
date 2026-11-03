@@ -5,7 +5,9 @@ namespace App\Http\Controllers;
 use App\Services\EngineerDocs;
 use App\Services\Matcher;
 use App\Services\Notifier as N;
+use App\Services\ProjectSkills;
 use App\Services\Qa;
+use App\Services\SkillTable;
 use App\Services\Registration;
 use App\Services\Workflow as W;
 use App\Support\Perms;
@@ -115,7 +117,7 @@ class EngineerController extends Controller
         $e = $this->load($r, $id);
         return view('engineers.show', [
             'e' => $e,
-            'skills' => DB::table('engineer_skills')->where('engineer_id', $id)->orderBy('category')->orderByDesc('years')->get(),
+            'skills' => SkillTable::forDisplay($id),
             'projects' => DB::table('engineer_projects')->where('engineer_id', $id)->orderByDesc('period_from')->get(),
             'check' => Qa::sheetCheck($id),
             'apps' => DB::table('applications as a')->join('cases as c', 'c.id', '=', 'a.case_id')->where('a.engineer_id', $id)->select('a.*', 'c.title')->orderByDesc('a.id')->get(),
@@ -241,15 +243,20 @@ class EngineerController extends Controller
     public function skills(Request $r, int $id)
     {
         $e = $this->loadForEdit($r, $id);
-        return view('engineers.skills',['e' => $e, 'skills' => DB::table('engineer_skills')->where('engineer_id', $id)->orderBy('category')->orderByDesc('years')->get(),
-            'terms' => DB::table('skill_terms')->orderBy('category')->orderBy('name')->get(['name', 'category'])]);
+        // 候補（datalist）は、管理者が確かめた言葉だけ
+        return view('engineers.skills', ['e' => $e, 'skills' => SkillTable::forDisplay($id),
+            'terms' => DB::table('skill_terms')->where('reviewed', true)->orderBy('category')->orderBy('name')->get(['name', 'category'])]);
     }
 
     public function saveSkills(Request $r, int $id)
     {
         $this->loadForEdit($r, $id);
-        W::saveSkills($id, $r->all());
+        $res = W::saveSkills($id, $r->all());
+        if (isset($res['bad'])) return back()->withInput()->with('flash', ['msg' => $res['bad'], 'type' => 'bad']);
         W::editedBy($id, $r->user());
+        // 記録には技術の名前だけを書く（ひとことなど、中身の文は書かない）
+        $actor = $r->user();
+        N::audit($actor->id, 'skill-save', W::selfMark($actor, $id).'エンジニア #'.$id.'：'.implode('、', $res['names']));
         return $this->go("/engineers/$id", 'スキルを保存しました。');
     }
 
@@ -261,7 +268,9 @@ class EngineerController extends Controller
         // ホームの「経歴の更新」から：成約した案件の名前と期間を入れておく
         $k = $this->contractOf($r, $id);
         if ($k && !$pid) $p = (object) ['title' => $k->title, 'period_from' => substr($k->start_date, 0, 7), 'period_to' => $k->status === 'ended' && $k->end_date ? substr($k->end_date, 0, 7) : null];
-        return view('engineers.project', ['e' => $e, 'p' => $p, 'contract' => $k, 'action' => $pid ? "/engineers/$id/projects/$pid" : "/engineers/$id/projects"]);
+        // 技術の欄の候補：確かめ済みの、技術の分類の言葉だけ
+        $techTerms = DB::table('skill_terms')->where('reviewed', true)->whereIn('category', ProjectSkills::TECH_CATS)->orderBy('name')->pluck('name')->all();
+        return view('engineers.project', ['e' => $e, 'p' => $p, 'contract' => $k, 'techTerms' => $techTerms, 'action' => $pid ? "/engineers/$id/projects/$pid" : "/engineers/$id/projects"]);
     }
 
     private function contractOf(Request $r, int $id)
@@ -274,6 +283,11 @@ class EngineerController extends Controller
     {
         $this->loadForEdit($r, $id);
         if (!str_in($r->input('title'))) return back()->withInput()->with('flash', ['msg' => '案件名を入れてください。', 'type' => 'bad']);
+        // 期間は 2019-04 の形だけ（空は通す。空の始まりは月数に数えないだけ）
+        foreach (['period_from', 'period_to'] as $f) {
+            $ym = str_in($r->input($f));
+            if ($ym !== null && !ym_valid($ym)) return back()->withInput()->with('flash', ['msg' => '期間は 2019-04 の形で入れてください。', 'type' => 'bad']);
+        }
         W::saveProject($id, $r->all(), $pid);
         W::editedBy($id, $r->user());
         // 本人が成約した案件を書いたら、経歴の更新は済み
@@ -284,7 +298,13 @@ class EngineerController extends Controller
     public function deleteProject(Request $r, int $id, int $pid)
     {
         $this->loadForEdit($r, $id);
-        DB::table('engineer_projects')->where('id', $pid)->where('engineer_id', $id)->delete();
+        // 経歴を消す前に、その経歴の技術の索引を消す（外部キーの連鎖に頼らない）
+        if (DB::table('engineer_projects')->where('id', $pid)->where('engineer_id', $id)->exists()) {
+            DB::transaction(function () use ($pid, $id) {
+                DB::table('engineer_project_skills')->where('project_id', $pid)->delete();
+                DB::table('engineer_projects')->where('id', $pid)->where('engineer_id', $id)->delete();
+            });
+        }
         W::editedBy($id, $r->user());
         return $this->go("/engineers/$id", '削除しました。');
     }
@@ -294,7 +314,7 @@ class EngineerController extends Controller
     {
         $e = $this->load($r, $id);
         $c = $r->query('case') ? DB::table('cases')->find((int) $r->query('case')) : null;
-        $skills = DB::table('engineer_skills')->where('engineer_id', $id)->orderBy('category')->orderByDesc('years')->get();
+        $skills = SkillTable::dedupe(DB::table('engineer_skills')->where('engineer_id', $id)->orderBy('category')->orderByDesc('years')->orderBy('id')->get());
         $projects = DB::table('engineer_projects')->where('engineer_id', $id)->orderByDesc('period_from')->get()->all();
         $want = $c ? array_map('norm_skill', array_merge(parse_list($c->required_skills), parse_list($c->preferred_skills))) : [];
         $isHit = function ($t) use ($want) {

@@ -42,8 +42,10 @@
 </dl></x-card>
 
 <x-card title="スキル"><x-slot:actions><a class="btn small" href="{{ url('/engineers/'.$e->id.'/skills') }}">スキルを編集</a></x-slot:actions>
-@if($skills->count())<div class="skillgrid">@foreach($skills as $s)<div class="sk"><b>{{ $s->name }}</b><span>{{ lbl('skillCat', $s->category) }}</span><span>{{ $s->years ? num_disp($s->years).'年' : '' }}</span>
-<span class="lv">{{ str_repeat('★', (int) $s->level) }}{{ str_repeat('☆', 5 - (int) $s->level) }}</span></div>@endforeach</div>
+@if($skills->count())<div class="skillgrid">@foreach($skills as $s)<div class="sk"><b>{{ $s->name }}</b>@if($s->is_primary) <span class="badge">得意</span>@endif<span>{{ lbl('skillCat', $s->category) }}</span><span>{{ $s->years ? num_disp($s->years).'年' : '' }}</span>
+@if($s->projects)<span class="muted">経歴 {{ fmt_months((int) $s->months) }}</span>@endif
+<span class="lv">{{ str_repeat('★', (int) $s->level) }}{{ str_repeat('☆', 5 - (int) $s->level) }}</span>@if($s->note)<small class="muted">{{ $s->note }}</small>@endif
+@if($s->warn && auth()->user()->role === 'eg')<small class="warn">経歴に書かれていない期間があります。</small>@endif</div>@endforeach</div>
 @else<p class="empty">まだ登録がありません。</p>@endif</x-card>
 
 <x-card title="経験票（これまでの案件）"><x-slot:actions><a class="btn small" href="{{ url('/engineers/'.$e->id.'/projects/new') }}">案件を追加</a></x-slot:actions>

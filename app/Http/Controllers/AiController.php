@@ -91,6 +91,8 @@ class AiController extends Controller
         $j = $this->job($r, $id);
         abort_unless($j->status === 'done' && $j->kind === 'resume', 400);
         $eid = (int) json_decode($j->input, true)['engineer_id'];
+        // 仮登録中のエンジニアには、上位が取り込めない（K18。queueResume と同じ守り）
+        abort_if($r->user()->role !== 'eg' && DB::table('users')->where('engineer_id', $eid)->where('role', 'eg')->whereNull('registered_at')->exists(), 403);
         $p = (AiJobs::items($j) ?? [])[$n] ?? null;
         abort_unless(is_array($p) && !empty($p['title']), 404);
         $p = array_map(fn ($v) => is_array($v) ? $v : (string) $v, $p);

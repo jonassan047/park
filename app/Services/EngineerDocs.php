@@ -37,7 +37,8 @@ class EngineerDocs
     // 期間（YYYY-MM〜YYYY-MM）の長さ「1年5月」
     private static function span(?string $from, ?string $to): string
     {
-        if (!$from) return '';
+        // 始まり・終わりが「2019-04」の形でなければ空（落ちない）
+        if (!ym_valid($from) || ($to && !ym_valid($to))) return '';
         $n = month_diff($from, $to ?: date('Y-m')) + 1;
         return intdiv($n, 12).'年'.($n % 12).'月';
     }
@@ -66,11 +67,22 @@ class EngineerDocs
         return [$book, $ws];
     }
 
+    // 業務経歴書の「保有スキル」の行。同じ技術は1つにまとめ、得意の印の付いた技術を「【得意】…」で先頭に出す（ひとことは出さない）
+    public static function skillLines(int $engineerId): array
+    {
+        $skills = SkillTable::dedupe(DB::table('engineer_skills')->where('engineer_id', $engineerId)->orderBy('category')->orderByDesc('years')->orderBy('id')->get());
+        $text = fn ($s) => $s->name.($s->years ? '（'.num_disp($s->years).'年）' : '');
+        $lines = [];
+        $primary = $skills->filter(fn ($s) => !empty($s->is_primary));
+        if ($primary->isNotEmpty()) $lines[] = '【得意】'.implode('、', $primary->map($text)->all());
+        foreach ($skills->groupBy('category') as $cat => $list) $lines[] = '【'.lbl('skillCat', $cat).'】'.implode('、', $list->map($text)->all());
+        return $lines;
+    }
+
     // ---------- 業務経歴書（スキルシート） ----------
     public static function careersheet(int $engineerId, bool $anon = false): Spreadsheet
     {
         $e = DB::table('engineers')->find($engineerId);
-        $skills = DB::table('engineer_skills')->where('engineer_id', $engineerId)->orderBy('category')->orderByDesc('years')->get()->groupBy('category');
         $certs = DB::table('engineer_certs')->where('engineer_id', $engineerId)->orderBy('sort')->get();
         $projects = DB::table('engineer_projects')->where('engineer_id', $engineerId)->orderByRaw('sort is null, sort')->orderByDesc('period_from')->get();
         [$book, $ws] = self::book('業務経歴書');
@@ -101,11 +113,9 @@ class EngineerDocs
             foreach (["A$r", "F$r"] as $h) self::box($ws, $h, true);
             $r++;
         }
-        $skillText = [];
-        foreach ($skills as $cat => $list) $skillText[] = '【'.lbl('skillCat', $cat).'】'.implode('、', $list->map(fn ($s) => $s->name.($s->years ? '（'.num_disp($s->years).'年）' : ''))->all());
         $blocks = [
             ['職務概要', $e->career_summary ?: $e->summary],
-            ['保有スキル', implode("\n", $skillText)],
+            ['保有スキル', implode("\n", self::skillLines($engineerId))],
             ['希望業務', $e->desired_roles],
             ['資格', implode("\n", $certs->map(fn ($c) => trim($c->name.'　'.self::ymText($c->ym)))->all())],
         ];
@@ -127,7 +137,8 @@ class EngineerDocs
         $ws->getStyle("A$r:H$r")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
         $r++;
         foreach ($projects as $i => $p) {
-            $period = self::ymText($p->period_from).'〜'.($p->period_to ? self::ymText($p->period_to) : '現在')."\n（".self::span($p->period_from, $p->period_to).'）';
+            $span = self::span($p->period_from, $p->period_to);
+            $period = self::ymText($p->period_from).'〜'.($p->period_to ? self::ymText($p->period_to) : '現在').($span !== '' ? "\n（{$span}）" : '');
             $content = $p->title.($p->industry ? "（{$p->industry}）" : '')."\n".trim((string) $p->description).($p->achievements ? "\n【成果】".$p->achievements : '');
             $role = trim(($p->role ?: '').($p->team_size ? "\n{$p->team_size}名" : ''));
             $row = [$i + 1, $period, $content, str_replace('、', "\n", (string) $p->phases), $role, str_replace('、', "\n", (string) ($p->os_tools ?: $p->tech)),

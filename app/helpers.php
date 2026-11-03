@@ -154,9 +154,35 @@ function month_end(string $date, int $n = 0): string
 }
 function month_diff(string $fromYm, string $toYm): int
 {
-    [$y1, $m1] = array_map('intval', explode('-', $fromYm));
-    [$y2, $m2] = array_map('intval', explode('-', $toYm));
+    // 先頭7文字が「2019-04」の形でなければ 0 を返す（「2019/4」などで落ちないように）
+    if (!ym_valid(substr($fromYm, 0, 7)) || !ym_valid(substr($toYm, 0, 7))) return 0;
+    [$y1, $m1] = array_map('intval', explode('-', substr($fromYm, 0, 7)));
+    [$y2, $m2] = array_map('intval', explode('-', substr($toYm, 0, 7)));
     return ($y2 - $y1) * 12 + ($m2 - $m1);
+}
+// 年月が「2019-04」の形か（月は 01〜12）
+function ym_valid($s): bool
+{
+    return is_string($s) && preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $s) === 1;
+}
+// 年月の期間を、月の通し番号（年×12＋月−1）の並びにする。始まりや終わりの形が違う・期間が逆なら空。
+// 終わりが空なら今月まで、今月より先なら今月で打ち切る
+function ym_months(?string $from, ?string $to): array
+{
+    if (!ym_valid($from)) return [];
+    $serial = fn (string $ym) => (int) substr($ym, 0, 4) * 12 + (int) substr($ym, 5, 2) - 1;
+    $cur = $serial(now()->format('Y-m'));
+    if ($to === null || $to === '') $end = $cur;
+    elseif (ym_valid($to)) $end = min($serial($to), $cur);
+    else return [];
+    $start = $serial($from);
+    return $end < $start ? [] : range($start, $end);
+}
+// 月数を「1年3か月」の言い方にする
+function fmt_months(int $n): string
+{
+    if ($n < 12) return $n.'か月';
+    return intdiv($n, 12).'年'.($n % 12 ? ($n % 12).'か月' : '');
 }
 function days_between(string $a, string $b): int { return (int) round((strtotime(substr($b, 0, 10)) - strtotime(substr($a, 0, 10))) / 86400); }
 

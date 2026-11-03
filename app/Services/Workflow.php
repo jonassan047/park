@@ -705,27 +705,16 @@ class Workflow
             ->select('k.*', 'c.title')->orderByDesc('k.start_date')->get();
     }
 
-    public static function saveSkills(int $engineerId, array $d): void
+    // スキル表の保存の入口（中身は SkillTable::save）。戻り値は ['ok' => true, 'names' => [...]] か ['bad' => '理由']
+    public static function saveSkills(int $engineerId, array $d): array
     {
-        $names = (array) ($d['skill_name'] ?? []); $cats = (array) ($d['skill_cat'] ?? []);
-        $years = (array) ($d['skill_years'] ?? []); $levels = (array) ($d['skill_level'] ?? []);
-        DB::transaction(function () use ($engineerId, $names, $cats, $years, $levels) {
-            DB::table('engineer_skills')->where('engineer_id', $engineerId)->delete();
-            foreach ($names as $i => $n) {
-                if (trim((string) $n) === '') continue;
-                // 技術マスタにある言葉は正式な名前・分類にそろえる。無い言葉はマスタに足す（管理者が分類を確かめる）
-                $t = SkillCatalog::find(trim($n));
-                if (!$t && SkillCatalog::ensure(trim($n), $cats[$i] ?? 'other')) $t = SkillCatalog::find(trim($n));
-                DB::table('engineer_skills')->insert(['engineer_id' => $engineerId, 'name' => $t[1] ?? trim($n), 'category' => $t[2] ?? ($cats[$i] ?? 'other'), 'term_id' => $t[0] ?? null,
-                    'years' => num_or_null($years[$i] ?? null), 'level' => int_or_null($levels[$i] ?? null) ?: 3]);
-            }
-        });
-        DB::table('engineers')->where('id', $engineerId)->update(['updated_at' => now_str()]);
+        return SkillTable::save($engineerId, $d);
     }
 
     const PROJ_FIELDS = ['title', 'industry', 'period_from', 'period_to', 'role', 'team_size', 'tech', 'phases', 'description', 'achievements', 'os_tools', 'langs', 'dbs', 'sort'];
 
-    public static function saveProject(int $engineerId, array $d, ?int $projectId = null): void
+    // 経歴を保存して、その経歴の id を返す（技術の索引も作り直す）。別のエンジニアの経歴 id を渡されたら何もしない（0 を返す）
+    public static function saveProject(int $engineerId, array $d, ?int $projectId = null): int
     {
         $v = [];
         foreach (self::PROJ_FIELDS as $f) {
@@ -734,9 +723,18 @@ class Workflow
             else $v[$f] = str_in($d[$f] ?? '');
         }
         if ($v['sort'] === null) unset($v['sort']);
-        if ($projectId) DB::table('engineer_projects')->where('id', $projectId)->where('engineer_id', $engineerId)->update($v);
-        else DB::table('engineer_projects')->insert($v + ['engineer_id' => $engineerId]);
-        DB::table('engineers')->where('id', $engineerId)->update(['updated_at' => now_str()]);
+        return DB::transaction(function () use ($engineerId, $v, $projectId) {
+            if ($projectId) {
+                if (!DB::table('engineer_projects')->where('id', $projectId)->where('engineer_id', $engineerId)->exists()) return 0;
+                DB::table('engineer_projects')->where('id', $projectId)->update($v);
+                $pid = $projectId;
+            } else {
+                $pid = (int) DB::table('engineer_projects')->insertGetId($v + ['engineer_id' => $engineerId]);
+            }
+            ProjectSkills::rebuild($pid);
+            DB::table('engineers')->where('id', $engineerId)->update(['updated_at' => now_str()]);
+            return $pid;
+        });
     }
 
     // 学歴・職歴・資格（行ごとに送られてくる。空の行は捨てる）
