@@ -1,6 +1,326 @@
+# PLAN：PARK v0.3.0 EG のスキル登録（2026-11-03）
+
+> **これが今の計画**。下にある v0.2.0（2026-10-31）・ダミーデータ（2026-10-30）・EG 同期（2026-10-28）は前の計画で、そのまま残している。
+> 依頼者：経済大臣 Leo。決定の正本：41_Park-Project の `41_開発/v0.3.0/v0.3.0-02-課題検討及びスコープ定義書.md`（台帳 S01〜S16、6章、8章、9章）と `v0.3.0-03-テスト設計書.md`（D・K・P・A・M・R）。**この計画と台帳が食い違ったら台帳が正。** 受け入れ条件の番号はテスト設計書の番号をそのまま使う。
+> プレーヤー：管理者・SES・担当者・EG の4つ（担当者を抜かさない）。
+> 15章の「Leo への確認」は、推奨で仮置きして作る。違えば Leo が直す。
+
+## 0. コードで確かめた今の形
+
+- 表は `DB::table` だけで扱っている（Eloquent のモデルは `User` だけ）。技術マスタの関数は `App\Support\SkillCatalog`（`find`・`ensure`・`map`・`forget`・`detect`）。`ensure()` は 40 文字を超えると null を返す（`SkillCatalog.php:117`）。
+- スキル表の保存は `W::saveSkills`（`Workflow.php:708`）で、**全部消して入れ直す**。`SampleSeeder:73` と `DummySeed:295` も呼ぶ。経歴の保存は `W::saveProject`（`Workflow.php:728`。id を返さない）で、画面（`EngineerController::saveProject`）と AI の下書き（`AiController::addProject`）の両方が通る。
+- `editedBy()`（`Workflow.php:689`）は「いまの立場」（`ActingRole` が `$u->role` を差し替え）で判定。兼任の印は `W::selfMark`。
+- 仮登録の守りは `EngineerController::loadForEdit`（上位の編集を `/people/{uid}/edit` へ回す）と `AiController::queueResume`（403）。**`AiController::addProject` には仮登録の守りが無い**（9章の「AI の下書きの取り込みも断る」に足りない。6-1 で足す）。
+- `month_diff()`（`helpers.php:155`）は `2019/4` などで `explode` の2つ目が無く落ちる。`EngineerDocs::span`（41 行）・`Billing:31` が使う。
+- `Matcher::score` は1人ごとに `skillIndex()`（2回の問い合わせ）。呼ぶ所：`forCase`、`CaseController:85・92・121`、`SesController:70`（案件 × 人）、`CaseMail:97`、`W::distribute:810`、`Qa`。
+- 技術マスタのまとめる処理（`AdminController::mergeSkill`）は transaction が無い。「使っている人」はスキル表の行数（`used`）。
+- スキル表の画面の候補（datalist）は、確認待ち（`reviewed=false`）の言葉も出している（`EngineerController::skills:245`）。経歴の画面には候補が無い。
+- スキル表の画面に、S04 と違うレベルの目安の文がある（`skills.blade.php:14`）。
+- バージョンは `config/park.php` の `version` の1か所（足元に出る）。`RegistrationFoundationTest:52` が `'v0.2.0'` を比べている。
+- `SeedDummyTest` は `audit_log` の件数が増えないことを見ている → スキルの記録（K-07）は `W::saveSkills` の中ではなく、コントローラで書く。
+- マニュアルは `resources/manuals/` の admin・ses・engineer（各 `.md` と `-steps.md`）。担当者は ses の中の節（v0.2.0 の決定 10）。
+
+## 1. DB（マイグレーション2本。S01・S09・8章）
+
+### 1-1. `2026_11_03_000001_skill_tables.php`（表と列）
+
+- 新しい表 `engineer_project_skills`：`id()`、`foreignId('project_id')->constrained('engineer_projects')->cascadeOnDelete()`、`foreignId('term_id')->constrained('skill_terms')`（消すときは止める。まとめる処理で先に付け替える）、`unique(['project_id', 'term_id'])`。`engineer_id` は持たない（8-4・H4）。
+- `engineer_skills` に足す：`char('last_used_ym', 7)->nullable()`、`boolean('is_primary')->default(false)`、`string('note', 200)->nullable()`、`timestamps()`（空可。今ある行は空のまま）、`index(['engineer_id', 'term_id'])`（一意にしない。S05）。
+- down：新しい表を落とす → 索引を落とす → 足した列を落とす（SQLite は索引を先に落とす）。
+
+### 1-2. `2026_11_03_000002_fill_project_skills.php`（データの移し替え）
+
+- up：`SkillCatalog::forget()` → `ProjectSkills::rebuildAll()`（2-1）。**マスタに足さない（`ensure` を呼ばない）。今の表の行は消さない・書き換えない。** 何度流しても同じ。
+- down：`engineer_project_skills` の行を消すだけ（新しい表の中だけ。元の文字列は残る）。
+
+## 2. 共通の部品
+
+### 2-1. `app/Services/ProjectSkills.php`（経歴の索引。S02・S11・8-4・8-5）
+
+- `const TECH_CATS = ['lang', 'fw', 'db', 'os', 'cloud', 'infra', 'tool', 'other'];`（`method`・`domain`・`role` は入れない。S11）
+- `rebuild(int $projectId): void` — **索引を作る関数はこれ1つ。経歴の保存（画面）・AI の下書きの取り込み・移し替えの3か所がこれを通る**（画面と AI は `W::saveProject` の中で呼ぶ）。経歴の行を読み、`project_techs()` で分け、`SkillCatalog::find()` で引き、分類が `TECH_CATS` の term_id だけを集める（重複は PHP の配列で1つに）。transaction で、その経歴の行を消して `insertOrIgnore` で入れ直す。経歴が無ければ行を消すだけ。マスタに無い言葉は入れない（文字列にだけ残る）。
+- `rebuildAll(): void` — `engineer_projects` を id 順に `chunkById(200)` で読み、1件ずつ `rebuild` と同じ処理をする。
+- `stats(array $engineerIds): array` — `[engineer_id][term_id] => ['months' => int, 'projects' => int, 'last' => ?'YYYY-MM']`。新しい表と経歴を join して **1回** で読む（500 件ずつ）。月の集まりは `ym_months()`（2-2）の和集合で、重なりは1回（8-5）。`projects` はその技術が付いた経歴の件数（期間が数えられなくても数える）。`last` は数えた月の最後。
+- `statsFromRows(...)` — Matcher が読んだ行から同じ計算をする内部の関数（問い合わせを足さないため）。
+
+### 2-2. helpers.php に足す・直す（S13）
+
+- `ym_valid($s): bool` — `^\d{4}-(0[1-9]|1[0-2])$` だけを通す。
+- `ym_months(?string $from, ?string $to): array` — 月の通し番号（年×12＋月）の配列。始まりが空・形が違う → `[]`。終わりが空 → 今月。**終わりの形が違う → `[]`**（仮定：始まりと同じ扱い）。終わりが今月より後 → 今月で打ち切り。終わりが始まりより前（打ち切りのあとも）→ `[]`。
+- `fmt_months(int $n): string` — 12 未満は「◯か月」、ちょうどの年は「◯年」、ほかは「◯年◯か月」（例 15 → 1年3か月、24 → 2年）。
+- `month_diff()` を直す：先頭7文字が `ym_valid` でなければ 0 を返す（落ちない）。`Billing` の正しい値の結果は変わらない。`EngineerDocs::span` は始まり・終わりが `ym_valid` でなければ空の文字を返す。
+
+### 2-3. `app/Services/SkillTable.php`（スキル表。S04〜S07・S15）
+
+- `const LEVELS`（S04。画面とマニュアルの文の正本）：1 学んだが業務では未経験／2 指示を受けて作れる／3 一人で作れる／4 設計・レビューができる／5 人に教え、技術を選べる。
+- `mergeRows(iterable $rows): object` — 同じ技術の行を1つにする決まり（保存・表示・マスタのまとめるで共通）：`years`・`level`・`last_used_ym` は大きいほう、`is_primary` はどれかが付いていれば付ける、`note` は先の行（id の小さい順・送った順）の空でないもの。
+- `dedupe($rows): Collection` — 表示用。`term_id` があればそれで、無ければ `'n:'.norm_skill(name)` でまとめる（K-12。DB は触らない）。
+- `forDisplay(int $engineerId): Collection` — `dedupe` に、`ProjectSkills::stats` の月数・件数・最後の年月を付ける。`term_id` が空の行は `SkillCatalog::find(name)` で引いて付ける（K-11）。行ごとに `warn`（S03：その技術の経歴が1件以上、申告があり、`years×12 − 月数 ≥ 12`）を付ける。
+- `save(int $engineerId, array $d): array` — 3章。戻り値は `['ok' => true, 'names' => [...]]` か `['bad' => '理由']`。
+- `mergeTerms(int $fromId, int $toId): void` — 7章。
+- `usedCounts(): array` — `term_id => 人数`（スキル表と経歴の両方。同じ人は1回）。
+
+`W::saveSkills($id, $d)` は `SkillTable::save` を呼ぶだけの入口にして残す（`SampleSeeder`・`DummySeed` がそのまま動く。新しい欄が無くても既定値で通る）。
+
+## 3. スキル表の保存（K-01〜K-12。S05〜S07）
+
+送られる欄（行ごとの配列。今の4つに3つ足す）：`skill_name[]`・`skill_cat[]`・`skill_years[]`・`skill_level[]`・`skill_last[]`（`type=month`）・`skill_primary[]`（`0`/`1` の select。行の並びをずらさないため checkbox にしない）・`skill_note[]`。
+
+1. **検査（DB に書く前に全部）**。1つでも当たれば何も保存せず、理由を出して戻す（入力は `old()` で画面に戻す）。
+   - 名前が空の行は捨てる。名前が 41 文字以上 → 断る（40 文字は通す。K-04）。
+   - レベル：空は 3、1〜5 以外は断る。
+   - 年数：空は null。数でない・0 未満・100 以上は断る（仮定。列が decimal(4,1) のため）。
+   - 最後に使った年月：空は通す。`ym_valid` でない・今月より後 → 断る（K-09）。
+   - ひとこと：201 文字以上 → 断る（K-10）。
+2. **transaction の中で**、行ごとに `SkillCatalog::find(name)`、無ければ `ensure(name, 分類)` して引き直す（K-03：`reviewed=false` で足され、行に term_id が入る）。それでも引けなければ断る（全部戻す）。失敗で戻したら `SkillCatalog::forget()`。
+3. 同じ term_id の行を `mergeRows` で1つにする（K-05。別名・大文字小文字・全角も `find` で同じ term になる）。
+4. 得意の印が 6 つ以上 → 断る（全部戻す。K-08）。
+5. 今ある行と突き合わせる（S07。全部消して入れ直さない）。
+   - 送られた技術 T ごとに、今ある行のうち term_id が T の行（id の小さい順）、無ければ term_id が空で名前を `find` すると T になる行を「残す行」にする。あれば値が変わったときだけ update（term_id を埋める＝K-11、`name`・`category` はマスタの正式な名前と分類、`updated_at`）。無ければ insert（`created_at`・`updated_at`）。
+   - T に当たる残りの行（DB にある重複）は消す（保存のときに1つにまとめる。S05）。
+   - どの T にも当たらない今ある行（画面で消した行）は消す。
+6. `engineers.updated_at` を更新。
+
+コントローラ（`EngineerController::saveSkills`）：`loadForEdit` → `W::saveSkills` → `bad` なら戻す → `W::editedBy`（今の判定のまま。S07）→ `N::audit($actor->id, 'skill-save', W::selfMark($actor, $id).'エンジニア #'.$id.'：'.技術の名前を「、」でつないだもの)`（ひとことなど中身の文は書かない。K-07）。
+
+分類（仮置き。15章の 1）：スキル表は今のまま全部の分類を受け付ける。新しい表だけ技術の分類に限る。
+
+## 4. 経歴の保存（P-01〜P-03・P-09。S02・S13）
+
+- `W::saveProject` は transaction で保存し、経歴の id を返す（insert は `insertGetId`。update は `engineer_id` が合わず0件なら何もしない）。保存のあと `ProjectSkills::rebuild($pid)`。
+- `EngineerController::saveProject`：保存の前に期間の形を検査する。始まり・終わりが空でなく `ym_valid` でなければ「期間は 2019-04 の形で入れてください。」で戻す（P-09）。空の始まり・空の終わりは通す（仮定：始まりの空は今も通り、数えないだけ）。
+- AI の下書き（`AiController::addProject`）は `W::saveProject` を通るので索引が作られる（P-02）。期間の検査はしない（仮置き。15章の 5）。
+- `EngineerController::deleteProject`：経歴を消す前に `engineer_project_skills` のその経歴の行を消す（FK の cascade に頼らない。P-03）。
+
+## 5. 月数と注意（P-04〜P-08・P-10〜P-13。S03・S13・8-5）
+
+- 計算は 2-1・2-2 のとおり。保存しない。表示と候補選びのときに計算する。
+- 注意の文「経歴に書かれていない期間があります」は、エンジニアの立場で見ているとき（台帳の「本人に」）だけ、スキル表の編集画面と詳細画面の、その技術の行に出す。
+
+## 6. 権限（A-01〜A-09。9章・S07・S14）
+
+今の動きのまま（`Perms::engineer`・`loadForEdit`・`role` ミドルウェア）。
+
+| 操作 | 管理者 | SES | 担当者 | EG |
+|---|---|---|---|---|
+| 自分のスキル表・経歴 | － | － | － | ○（「確認しました」はそのまま） |
+| 自社の EG（参加中・停止中） | ○（全員・直属） | ○ | ○ | － |
+| 仮登録中の EG（AI の取り込みを含む） | × | × | × | － |
+| 他社の EG | ○ | 403 | 403 | 403 |
+| マスタを確かめる・まとめる | ○ | 403 | 403 | 403 |
+
+- 6-1：`AiController::addProject` に、`queueResume` と同じ守りを足す：エンジニアの立場でない人が、仮登録中（`users.role='eg'` かつ `registered_at` が空）の EG に取り込む → 403。
+- EG 以外が直したら `self_confirmed_at` を消す（`editedBy`。今のまま）。兼任は入るときに選んだ立場で判定する。
+
+## 7. マスタ（M-01〜M-03。S10）
+
+`AdminController::mergeSkill` は `SkillTable::mergeTerms($t->id, $to->id)` を呼ぶ。中身は1つの transaction：
+
+1. まとめる先 A の別名に B の名前と別名を足す（今のまま）。
+2. 新しい表：`term_id=B` の行を A に付け替える（`insertOrIgnore` で `(project_id, A)` を入れる）→ `term_id=B` の行を消す。
+3. スキル表：`term_id=B` の行を A（名前・分類も A）にする → B を持っていた EG ごとに、`term_id=A` の行が2つ以上なら `mergeRows` で1つにし（id の小さい行を残す）、ほかを消す。
+4. マスタの B を消す。
+5. transaction のあとで `SkillCatalog::forget()`、`N::audit`（今のまま）。
+
+- 「使っている人」は `SkillTable::usedCounts()` にし、見出しを「使っている人（スキル表・経歴）」にする（M-03）。
+- 仮置き（15章の 2）：`addSkill`・`updateSkill` で保存したあと、`ProjectSkills::rebuildAll()` を呼ぶ（あとから足された言葉・変わった分類と別名を、経歴の索引に合わせるため）。
+- まとめた結果、得意の印が 5 つを超える人がいても、まとめる処理では断らない（次にその人が保存するときに 5 つに減らしてもらう。仮定）。
+
+## 8. 候補選び（R-01・R-02。S16）
+
+- `Matcher::skillIndexMany(array $engineerIds): array`（`engineer_id => idx`）：スキル表・経歴・新しい表を、人数によらず3回の問い合わせで読む（500 人ずつ）。idx の作り方は今のまま（スキル表の行が先、経歴の文字列の言葉はまだ無い言葉だけ `fromProject=true`）。新しい表から作った `months` を、その技術の項目に付ける（点数には使わない。次のバージョンの準備）。
+- `skillIndex($id)` は `skillIndexMany([$id])[$id] ?? []`。`score($c, $e, ?array $idx = null)`：渡されなければ今のとおり読む。**点数の計算は1文字も変えない。**
+- まとめて読む所：`forCase`（必須）、`CaseController:85`、`SesController::cases`（案件の外で1回）、`CaseMail` の候補の繰り返し、`W::distribute`。
+
+## 9. 画面
+
+- **スキル表の編集**（`engineers/skills.blade.php`、`EngineerController::skills`）：列は スキル・分類・年数（申告）・経歴から（月数と件数。見るだけ）・レベル（`SkillTable::LEVELS` の文で選ぶ）・最後に使った年月（`type=month`。空なら下に「経歴から：◯◯」）・得意（— ／ 得意）・ひとこと（`maxlength=200`）・削除。行は `SkillTable::forDisplay` から作る（重複は1行）。上の目安の文を S04 の文に替え、「得意は5つまで」「ひとことは、名前を伏せたスキルシートには出ません」を添える。候補（datalist）は `reviewed=true` の言葉だけ（S12）。入力の誤りで戻ったときは `old()` の値で行を作る。
+- **詳細**（`engineers/show.blade.php`）：スキルの欄を `forDisplay` に替える（重複は1つ）。申告の年数と「経歴 ◯年◯か月」を並べ、得意の印（バッジ「得意」）、ひとこと、エンジニアの立場なら注意の文。
+- **経歴**（`engineers/project.blade.php`）：使った技術・機種 OS ツール・言語・DB の4つの欄に、`reviewed=true` かつ技術の分類の言葉を候補に出す（datalist 1つ。入力のたびに「、」の前までを頭に付けた候補に作り直す数行の JS。外部のライブラリは使わない。`x-field` が `list` を渡せなければ、部品に属性を足すか、この4つだけ素の input にする）。文字列の入力はそのまま（S02）。
+- **スキルシート**（`engineers/sheet.blade.php`、`EngineerController::sheet`）：スキルを `dedupe` に替える。スキルの見出しのすぐ下に「得意な技術：…」（K-14）。名前ありのときだけ、技術の後ろにひとことを小さく出す（`?anon=1` では出さない。K-13・S15）。
+- **業務経歴書の Excel**（`EngineerDocs::careersheet`）：保有スキルの行を新しい `EngineerDocs::skillLines(int $id): array` で作る（`dedupe`、頭に「【得意】…」。ひとことは出さない。仮置き：15章の 4）。テストはこの関数で見る（手元の CLI に zip が無いため）。
+- **技術マスタ**（`admin/skills.blade.php`）：「使っている人（スキル表・経歴）」。
+- SES・管理者のエンジニアの一覧の「スキル」の文字は、名前の重複を除いて出す（`array_unique`）。
+
+## 10. 消す処理（R-04・R-05）
+
+- `SamplePurge::ORDER` の `engineer_projects` の前に `'engineer_project_skills' => 'id'` を足す。消す行は、消す EG の経歴の id につながる行。バックアップの JSON にも入る（ORDER の全部の表を書き出す作りなので、ORDER に足せば入る）。
+- `tests/Feature/EmptyStateTest.php` の setUp の表の並びにも、`engineer_projects` の前に足す。
+- 仮登録の取り消し（`Registration::cancel`）はコードを変えない。技術データが無い EG だけ engineers を消す（経歴が無いので新しい表の行も無い）。経歴がある EG は v0.2.0 のとおり技術登録を残す（15章の 3）。
+
+## 11. バージョン・マニュアル（R-06・R-07）
+
+- `config/park.php` を `'version' => 'v0.3.0'`。`RegistrationFoundationTest:52` の比べる値も `v0.3.0` に直す。
+- マニュアル（`resources/manuals/`）
+  - `engineer.md`「スキル」・`engineer-steps.md` 3-3 の 2：レベルの5つの文（`LEVELS` と同じ文）、最後に使った年月、得意（5つまで。スキルシートの頭に出る）、ひとこと（名前を伏せたスキルシートには出ない）、「経歴から数えた月数」が並んで出ること、注意の文の意味（盛らない）、同じ技術は1つにまとまること、候補は確認済みの言葉だけ。
+  - `ses.md`・`ses-steps.md`（SES と担当者の節の両方）：自社の EG のスキル表・経歴を直せること、直すと EG の「確認しました」がやり直しになること、仮登録中は直せないこと、スキルシートの得意とひとこと。
+  - `admin.md`（技術マスタの節）・`admin-steps.md`：「使っている人」は経歴の分も数えること、統合で経歴の索引とスキル表の重複も1つになること、確認済みにすると経歴の索引が作り直されること。スキルシートの得意とひとこと。
+- 41_Park-Project の `04_Manuals` の写しは Leo が写し直す。
+
+## 12. 受け入れ条件とテスト
+
+- ファイル：`tests/Feature/V030DbTest.php`（D）、`V030SkillsTest.php`（K）、`V030ProjectMonthsTest.php`（P）、`V030PermsTest.php`（A）、`V030MasterTest.php`（M）、`V030RegressionTest.php`（R）。
+- テストの名前：`test_<記号の小文字>_<2桁>_<短い英語>`（例 `test_k_05_merges_same_term`、`test_p_04_overlap_counts_once`）。1つの番号に複数の関数を作るときは、同じ頭に続けて書く（`test_a_05_ses_other_company_skills`・`test_a_05_ses_other_company_projects`）。各ファイルの先頭のコメントに「v0.3.0 テスト設計書 版 01」と書く。
+- 月数のテストは `$this->travelTo('2026-11-15')` で今月を決める。アドレスは `@example.com` か見本の `@park.example` だけ。データの作り方は今のテスト（`ParkTest`・`DualRoleTest`・`SesToPeopleRegistrationTest`）の作法に合わせる。
+
+### 12-1. DB と移し替え（`V030DbTest.php`）
+
+| AC | 手順 → 期待 |
+|---|---|
+| D-01 | `Schema::hasTable('engineer_project_skills')`・`hasColumns`。同じ `(project_id, term_id)` を2回 insert → 例外。`engineer_skills` に同じ `(engineer_id, term_id)` を2行 insert → 通る。`Schema::getIndexes('engineer_skills')` に `[engineer_id, term_id]` の一意でない索引 |
+| D-02 | 経歴に `tech='Laravel、要件定義、ZzNoMaster'`・`langs='PHP(Laravel)'` を直接 insert → 新しい表を空にする → 移し替えのクラスの `up()` を呼ぶ（`(require database_path('migrations/2026_11_03_000002_fill_project_skills.php'))->up()`）→ Laravel・PHP だけが入る。要件定義（method）・ZzNoMaster は無い。`skill_terms` の件数が同じ |
+| D-03 | `up()` を2回 → 新しい表の件数と中身が同じ、`skill_terms` の件数が同じ |
+| D-04 | 移し替えの前後で、`engineer_projects` の4つの文字列と `engineer_skills` の全部の行（`term_id` が空の行を含む）が同じ |
+| D-05 | 2本の `down()` を新しい順に呼ぶ → 新しい表と列が無い、経歴の文字列が残る → `up()` を古い順に呼んで戻す |
+| D-06 | 手動（12-7）。結果はエビデンスに書く |
+
+### 12-2. スキル表（`V030SkillsTest.php`。立場は EG 本人。POST `/engineers/{id}/skills`）
+
+| AC | 手順 → 期待 |
+|---|---|
+| K-01 | 7つの欄を入れて保存 → DB に全部、GET `/engineers/{id}`・`/skills` に出る |
+| K-02 | GET `/engineers/{id}/skills` に `SkillTable::LEVELS` の5つの文 |
+| K-03 | `ZzNewTech` を保存 → `skill_terms` に `reviewed=0`、行の `term_id` が入る。管理者で GET `/admin/skills` に `ZzNewTech` と「確認待ち」 |
+| K-04 | 41 文字 → flash に理由、行もマスタも増えない。40 文字 → 通る |
+| K-05 | `PostgreSQL`・`postgres`・全角の `ＰｏｓｔｇｒｅＳＱＬ` の3行 → 1行（値は `mergeRows` の決まり） |
+| K-06 | 3行を保存 → id と `created_at` を控える → 1行のレベルを変え、1行を外して保存 → 残った2行の id・`created_at` が同じ、外した行だけ無い |
+| K-07 | 保存のあと `audit_log` に `skill-save`。detail に技術の名前があり、ひとことの文が無い |
+| K-08 | 得意を6行 → 断る、DB は保存の前のまま |
+| K-09 | `2019/04`・来月 → 断る。空・`2020-05` → 通る |
+| K-10 | ひとこと 201 文字 → 断る。200 文字 → 通る |
+| K-11 | EG1・EG2 に `term_id` が空の `Laravel` の行を直接入れる → EG1 が保存 → 埋まる（行の id は同じ）。EG2 の GET 詳細・`/skills`・`/sheet` が 200、`EngineerDocs::skillLines` が落ちない、行は空のまま |
+| K-12 | 経歴の無い EG に同じ term の2行を直接入れる → 詳細のスキルの欄と `skillLines` に1回だけ。DB は2行のまま |
+| K-13 | ひとことのある EG で GET `/sheet?anon=1` に出ない、`/sheet` に出る |
+| K-14 | 得意を付けた技術が「得意な技術：」の行に出る（`/sheet`）。`skillLines` の頭が「【得意】」 |
+
+### 12-3. 経歴と月数（`V030ProjectMonthsTest.php`）
+
+| AC | 手順 → 期待 |
+|---|---|
+| P-01 | EG が POST `/engineers/{id}/projects`（`tech='Laravel、Docker'`）→ 新しい表に2行 → 同じ経歴を `Laravel、AWS` で保存 → Docker が消え AWS が入る |
+| P-02 | `ai_jobs`（kind=resume・status=done・下書きに経歴1件）を作る → POST `/ai-jobs/{id}/project/0` → 新しい表に行（下書きの形は `AiJobs::items` に合わせる） |
+| P-03 | POST `/engineers/{id}/projects/{pid}/delete` → その経歴の新しい表の行が0 |
+| P-04 | Laravel の経歴 2019-04〜2020-03 と 2020-01〜2020-06 → `ProjectSkills::stats` で 15 |
+| P-05 | 2026-01〜空 → 11（今月まで） |
+| P-06 | 始まりが空・`2019/4`・`令和1年` → 0。その EG で詳細・`/sheet`・`/skills`・`skillLines`・`Matcher::forCase` が落ちない。`month_diff('2019/4', '2020-01')` が 0 |
+| P-07 | 2020-05〜2020-01 → 0 |
+| P-08 | 2026-01〜2027-12 → 11（今月で打ち切り） |
+| P-09 | POST で `period_from='2019/04'` → 断る、行が増えない。`period_to='abc'` → 断る。`period_to` が空 → 通る |
+| P-10 | 申告 5 年、経歴 24 か月 → EG で GET `/skills` に注意の文 |
+| P-11 | 申告 3 年、経歴 25 か月 → 出ない |
+| P-12 | 申告 10 年、その技術の経歴0件 → 出ない |
+| P-13 | GET `/skills` と詳細に「5年」と「経歴 2年」が並ぶ |
+| P-14 | `reviewed=1` の `ZzReviewed`・`reviewed=0` の `ZzUnreviewed` を足す → GET `/engineers/{id}/projects/new` に前者があり後者が無い。`/skills` も同じ |
+
+### 12-4. 権限（`V030PermsTest.php`。スキル表と経歴の両方をデータプロバイダで回す）
+
+| AC | 手順 → 期待 |
+|---|---|
+| A-01 | EG が自分を直す → 通る、`self_confirmed_at` が残る |
+| A-02 | 管理者が SES の EG と直属の EG を直す → 通る、`self_confirmed_at` が null |
+| A-03 | SES（代表者）が自社の EG（参加中・`suspended_at` あり）を直す → 通る、null |
+| A-04 | 担当者が自社の EG を直す → 通る、null |
+| A-05 | SES・担当者が他社の EG に POST → 403、行は変わらない |
+| A-06 | EG が他の EG に POST → 403 |
+| A-07 | 仮登録中の EG に、管理者・SES・担当者が POST → `/people/{uid}/edit` に回され、行は変わらない。`ai_jobs` を作って POST `/ai-jobs/{id}/project/0` → 403、経歴が増えない |
+| A-08 | 管理者を兼ねる EG・担当者を兼ねる EG：エンジニアの立場で自分を直す → `self_confirmed_at` が残る。管理者・担当者の立場で入って直す → null（立場の入り方は `DualRoleTest` に合わせる） |
+| A-09 | SES・担当者・EG で GET `/admin/skills`、POST `/admin/skills/{id}/merge` → 403 |
+
+### 12-5. マスタ（`V030MasterTest.php`）
+
+| AC | 手順 → 期待 |
+|---|---|
+| M-01 | B（`ZzOld`）を使う経歴・スキル表、同じ経歴に A と B、同じ EG のスキル表に A と B を作る → 管理者で POST `/admin/skills/{B}/merge`（to=A）→ 新しい表は A だけで経歴ごとに1行、スキル表は A の1行、B がマスタに無い |
+| M-02 | SQLite の trigger（`BEFORE DELETE ON skill_terms` で `RAISE(ABORT)`。`SeedDummyTest:299` と同じやり方）→ `SkillTable::mergeTerms` が例外 → 新しい表・スキル表・A の別名が元のまま |
+| M-03 | スキル表だけ・経歴だけ・両方の3人が A を使う → `SkillTable::usedCounts()[A] === 3`。GET `/admin/skills` が 200 |
+
+### 12-6. 今の機能（`V030RegressionTest.php` と今のテスト）
+
+| AC | 手順 → 期待 |
+|---|---|
+| R-01 | 今の Matcher のテストが通る。加えて：スキル表に PHP（3年）、経歴に Laravel の EG、必須 `Laravel、PHP`・尚可なし・年数なし・単価なし・開始日なし・働き方 any の案件 → `Matcher::score` が 82（55×1.8/2＋7.5＋8＋5＋6＋6）。`forCase` の結果の点数も 82 |
+| R-02 | `DB::enableQueryLog()`。経歴のある EG 3人で `forCase` の問い合わせの数を数える → 3人足して数え直す → 同じ（先に1回呼んでマスタの読み込みを済ませる） |
+| R-03 | `EngineerDetailTest`（Excel）・Q&A のテストが通る（Excel は zip の無い既知の1件を除く） |
+| R-04 | 見本の EG に経歴と新しい表の行を作る → `park:purge-samples --yes` → その行が0、バックアップの JSON に `engineer_project_skills` |
+| R-05 | 15章の 3 のとおり：技術データの無い仮登録の EG を取り消す → 通る。経歴のある仮登録の EG を取り消す → 通り、`engineer_project_skills` に親の無い行が0 |
+| R-06 | GET `/login` に `v0.3.0`、`config('park.version') === 'v0.3.0'` |
+| R-07 | GET `/manual/engineer` に `LEVELS` の文・「得意」・「ひとこと」、`/manual/ses` に「確認しました」のやり直し、`/manual/admin` に「経歴」の数え方。写しとの一致は Leo が見る |
+| R-08 | `php artisan test --testsuite=Feature` が通る（zip の既知の1件を除く） |
+
+### 12-7. D-06：手元の MariaDB で移し替え（手動。implementer か tester）
+
+`jonassan_park` には触らない。GENESIS は `.env` を作らないので、環境変数で捨ててよいテスト用の DB を指す。
+
+1. MariaDB が動いているか確かめる（止まっていれば `mysqld.exe --defaults-file=D:\xampp\mysql\bin\my.ini --standalone`）。
+2. `CREATE DATABASE park_v030_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`
+3. Git Bash で `APP_KEY=… DB_CONNECTION=mysql DB_HOST=127.0.0.1 DB_DATABASE=park_v030_test DB_USERNAME=root /d/xampp/php/php.exe artisan migrate --seed`。
+4. 同じ環境で `migrate:rollback --step=2` → 経歴に `laravel、ＬＡＲＡＶＥＬ、Laravel、TCP/IP、ZzNoMaster` などを足す（SQL か tinker）→ `migrate` → 新しい表の件数・`skill_terms` の件数を控える。
+5. `migrate:rollback --step=1` → `migrate`（移し替えの2回目）→ 件数が同じ、止まらない。
+6. 結果をエビデンスに書く。`park_v030_test` は消さずに残し、Leo に伝える。
+
+## 13. 作業手順（implementer は上から順に。段階ごとに `php artisan test --testsuite=Feature`）
+
+**段階 1：DB と部品**
+1. helpers.php：`ym_valid`・`ym_months`・`fmt_months`、`month_diff` の直し。
+2. マイグレーション2本（1章）。
+3. `ProjectSkills`（2-1）。
+4. `V030DbTest.php`（D-01〜D-05）。
+
+**段階 2：経歴**
+5. `W::saveProject`（id を返す・`rebuild`）、`EngineerController::saveProject` の期間の検査、`deleteProject`。
+6. `AiController::addProject` の仮登録の守り（6-1）。
+7. `EngineerDocs::span` の直し。
+8. 経歴の画面の候補（9章）。
+9. `V030ProjectMonthsTest.php` の P-01〜P-09・P-14。
+
+**段階 3：スキル表**
+10. `SkillTable`（`LEVELS`・`mergeRows`・`dedupe`・`forDisplay`・`save`）、`W::saveSkills` を入口に。
+11. `EngineerController::saveSkills`（断り・`old()`・記録）・`skills`（候補を確認済みだけ）・`show`・`sheet`。
+12. 画面：`skills`・`show`・`sheet`、`EngineerDocs::skillLines` と careersheet。
+13. `V030SkillsTest.php`（K）、P-10〜P-13。
+
+**段階 4：権限**
+14. `V030PermsTest.php`（A）。足りない守りが見つかれば直す（動きは今のまま）。
+
+**段階 5：マスタ**
+15. `SkillTable::mergeTerms`・`usedCounts`、`AdminController::mergeSkill`・`skills`・`addSkill`・`updateSkill`（`rebuildAll`）、画面の見出し。
+16. `V030MasterTest.php`（M）。
+
+**段階 6：候補選び・消す処理**
+17. `Matcher::skillIndexMany`・`score` の引数、8章の呼ぶ所。
+18. `SamplePurge::ORDER`、`EmptyStateTest` の setUp。
+19. `V030RegressionTest.php` の R-01・R-02・R-04・R-05。
+
+**段階 7：仕上げ**
+20. バージョン（`config/park.php`・`RegistrationFoundationTest`）、R-06。
+21. マニュアル（11章）、R-07。
+22. 全体（R-08）、D-06（12-7）。
+23. park-reviewer → park-tester。commit・push・`park-deploy.sh` は Leo。
+
+## 14. TEZZO の了承が要るもの
+
+- 公開版の `.env` の書き換え、データの削除（`purge-samples --yes`、公開版での rollback）、メールの一斉送信。
+- コードの反映（push → `park-deploy.sh`。migrate は新しい表と列を足し、新しい表に索引を入れるだけ）は常時了承の範囲。反映の前後に Leo が `park-remote-status.sh` で数を見る。
+- レベルの5つの文（S04）は外の人に見せる文なので、TEZZO のレビューの項目に入れる（画面の見た目も）。
+
+## 15. Leo への確認（推奨で仮置きして作る）
+> **2026-11-03 Leo が5件とも推奨どおりに決めた**（決めた人：Leo。記録は 41_Park-Project の `41_開発/v0.3.0/v0.3.0-03-テスト設計書.md` の末尾）。R-05 はテスト設計書も読み替えた。
+
+**1** スキル表に入れる分類：8-2 は「新しい表とスキル表に入れるのは技術の分類だけ」、S11 は新しい表だけを書いている。今のスキル表は全部の分類を受け付け、`DummySeed` の見本（公開版のダミー 80 人）にも「基本設計」（method）・「金融」（domain）の行がある。スキル表でも断ると、見本の作り直しと、その行を持つ人の保存が止まる。**推奨：S11 のとおり新しい表だけに限り、スキル表は今のまま。** 答え方：推奨でよい／スキル表も限る（そのときは新しい行だけ断り、今ある行は残す）。
+
+**2** 経歴の索引が古くなる件：台帳は「経歴を保存するたびに作り直す」だけ。あとからマスタに言葉が足された・分類や別名が直された・確認待ちの言葉が確かめられたとき、保存しない経歴の索引は古いまま（月数・使っている人に出ない）。**推奨：管理者の「追加」「保存（確認済みにする）」のあとに、全部の経歴の索引を作り直す（`rebuildAll`。今の件数なら一瞬）。案件メールから自動で足された言葉は、管理者が確かめたときに入る。** 答え方：推奨でよい／作り直さない。
+
+**3** 仮登録の取り消し（R-05・5章）：「新しい表の行も消え、通る」とあるが、今の取り消しは、技術データ（経歴など）がある EG の技術登録を消さずに残す（v0.2.0 の決まり）。技術データの無い EG には経歴が無いので、消える行がそもそも無い。**推奨：R-05 の期待を「取り消しが通り、新しい表に親の無い行が残らない」と読み替える（コードは変えない）。** テスト設計書の R-05 も合わせて直す。答え方：推奨でよい／経歴ごと消す（データの削除になるので TEZZO の了承が要る）。
+
+**4** Excel の業務経歴書：K-13・K-14 は「スキルシート」、3-1 は「Excel は今のまま文字列を読む」。Excel は名前を伏せた版も、元請けに出す実物。**推奨：Excel にも得意を保有スキルの頭に出し（K-14）、ひとことは名前のあり・なしにかかわらず Excel に出さない。画面のスキルシートは K-13 のとおり。** 答え方：推奨でよい／Excel は変えない（重複のまとめ K-12 だけ）。
+
+**5** AI の下書きの期間：S13 は「経歴の保存のときに形を検査」、理由に「AI の下書きもそのまま入る」。AI が `2019/4` と出すと、取り込みで断れば下書きが使えない。**推奨：画面の保存だけ検査し、AI の取り込みは断らずに入れる（数えないだけ。経歴の画面で直すときに検査が効く）。** 答え方：推奨でよい／AI の取り込みも断る。
+
+---
+
 # PLAN：PARK v0.2.0 仮登録 → 本登録（2026-10-31）
 
-> **これが今の計画**。下にある 2026-10-30（ダミーデータ）と 2026-10-28（EG 同期）は前の計画で、そのまま残している。2026-10-28 は S2-25・S2-26（B1）で使う。
+> 前の計画（v0.2.0）。下にある 2026-10-30（ダミーデータ）と 2026-10-28（EG 同期）は前の計画で、そのまま残している。2026-10-28 は S2-25・S2-26（B1）で使う。
 > 依頼者：経済大臣 Leo。決定の正本：41_Park-Project の `41_開発/v0.2.0/v0.2.0-02-課題検討及びスコープ定義書.md`（台帳 K01〜K36、6章、8章）。この計画と台帳が食い違ったら台帳が正。
 > 呼び名：プレーヤーは 管理者・SES（代表者）・担当者・エンジニア（EG）の4つ。
 
