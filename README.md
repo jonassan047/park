@@ -140,6 +140,14 @@ FOCUS では、Windows の起動で自動で動く（2026-10-16〜）。Ollama �
 
 まだやっていないこと：返信を PARK が受け取って AI に渡すこと（受信用のメールボックスと、手元の AI が要る）。
 
+## EG のスキル登録（v0.3.0。2026-11-03）
+
+- スキル表（`engineer_skills`）に、最後に使った年月（`last_used_ym`）・得意（`is_primary`、5つまで）・ひとこと（`note`、200文字まで）を足した。レベルの文は `SkillTable::LEVELS` が正本（画面とマニュアルの文）。保存は `SkillTable::save`（検査を先に全部行い、transaction の中で書く。全部消して入れ直さず、残す行の id は変わらない）。
+- 経歴の技術は、元の文字列に加えて、経歴ごとの索引 `engineer_project_skills`（技術マスタの言葉だけ）を持つ。作るのは `ProjectSkills::rebuild` の1つだけ（経歴の保存・AI の下書きの取り込み・移し替えが通る）。月数は保存せず、見るたびに数える（重なった月は1回）。
+- 技術マスタの「統合」は `SkillTable::mergeTerms`（1つの transaction。索引・スキル表・別名を付け替えてから、マスタの言葉を消す）。「使っている人」は `SkillTable::usedCounts`（スキル表と経歴の両方）。管理者が言葉を追加・確認済みにしたら、`ProjectSkills::rebuildAll` で索引を作り直す。
+- マッチングは `Matcher::skillIndexMany` で、人数によらず問い合わせ3回でスキルを読む（点数の計算は変えていない）。
+- 見本データを消す処理（`park:purge-samples`）は、`engineer_project_skills` も消してバックアップに入れる。
+
 ## 仮登録 → 本登録（v0.2.0。2026-10-31。段階 1：管理者 → SES、段階 2：SES・管理者 → 担当者・エンジニア）
 
 - プレーヤーは 管理者・SES・担当者・エンジニア の4つ。上の立場の人が、下の人を「企業名・姓・名・メール」だけで**仮登録**する。メール（文面は `app/Support/RegistrationText.php` の1か所）のリンクから、本人が**本登録**（確かめる項目・必須項目・パスワード・同意を1画面で）を入れ、**確認コードを通ったときに**保存して「参加中」になる（途中でやめたら何も残らず、リンクは7日まで使える）。
@@ -198,6 +206,8 @@ php artisan test
 | `app/Services/Registration.php` | 仮登録 → 本登録の手続き（リンク・完了・送り直し・取り消し・権限） |
 | `app/Support/Requirements.php` | 必須項目の決まり（4つの立場） |
 | `app/Support/RegistrationText.php` | 仮登録メール・同意・知らせの文面 |
+| `app/Services/SkillTable.php` | スキル表（保存・同じ技術のまとめ・技術マスタの統合・使っている人の数） |
+| `app/Services/ProjectSkills.php` | 経歴ごとの技術の索引と、経歴から数えた月数 |
 | `app/Services/Matcher.php` | マッチングの点数 |
 | `app/Services/Qa.php` | 面談対策の Q&A、スキルシートの完成度 |
 | `app/Services/CaseParser.php` | 案件メールの取り込み |

@@ -168,6 +168,58 @@ class SkillTable
         return array_values(array_map(fn ($r) => $r->name, $merged));
     }
 
+    // 技術マスタの言葉 B（fromId）を A（toId）にまとめる。B は A の別名になり、B を使っていた経歴の索引とスキル表の行は A になる。
+    // 全部で1つの transaction。途中で失敗したら全部元に戻る
+    public static function mergeTerms(int $fromId, int $toId): void
+    {
+        try {
+            DB::transaction(function () use ($fromId, $toId) {
+                $from = DB::table('skill_terms')->find($fromId);
+                $to = DB::table('skill_terms')->find($toId);
+                if (!$from || !$to || $fromId === $toId) throw new \DomainException('まとめる言葉が見つかりません。');
+
+                // 1. A の別名に B の名前と別名を足す
+                $aliases = array_unique(array_merge(parse_list($to->aliases), [$from->name], parse_list($from->aliases)));
+                DB::table('skill_terms')->where('id', $toId)->update(['aliases' => implode('、', $aliases), 'updated_at' => now()]);
+
+                // 2. 経歴の索引：B の行を A に付け替える（同じ経歴にすでに A があれば、そのまま1つ）。元の行は消す
+                foreach (DB::table('engineer_project_skills')->where('term_id', $fromId)->pluck('project_id') as $pid) {
+                    DB::table('engineer_project_skills')->insertOrIgnore(['project_id' => $pid, 'term_id' => $toId]);
+                }
+                DB::table('engineer_project_skills')->where('term_id', $fromId)->delete();
+
+                // 3. スキル表：B の行を A にし、同じ人に A が2つ以上できたら1つにまとめる（id の小さい行を残す）
+                $owners = DB::table('engineer_skills')->where('term_id', $fromId)->distinct()->pluck('engineer_id');
+                DB::table('engineer_skills')->where('term_id', $fromId)->update(['term_id' => $toId, 'name' => $to->name, 'category' => $to->category]);
+                foreach ($owners as $eid) {
+                    $rows = DB::table('engineer_skills')->where('engineer_id', $eid)->where('term_id', $toId)->orderBy('id')->get();
+                    if ($rows->count() < 2) continue;
+                    $m = self::mergeRows($rows);
+                    DB::table('engineer_skills')->where('id', $rows[0]->id)->update(['years' => $m->years, 'level' => $m->level,
+                        'last_used_ym' => $m->last_used_ym, 'is_primary' => $m->is_primary, 'note' => $m->note, 'updated_at' => now_str()]);
+                    DB::table('engineer_skills')->whereIn('id', $rows->skip(1)->pluck('id')->all())->delete();
+                }
+
+                // 4. マスタの B を消す
+                DB::table('skill_terms')->where('id', $fromId)->delete();
+            });
+        } finally {
+            SkillCatalog::forget(); // 成功しても失敗しても、覚えていた辞書は捨てる
+        }
+    }
+
+    // 技術マスタの言葉ごとの、使っている人数（スキル表と経歴の両方。同じ人は1回）。[term_id => 人数]
+    public static function usedCounts(): array
+    {
+        $people = [];
+        foreach (DB::table('engineer_skills')->whereNotNull('term_id')->distinct()->get(['term_id', 'engineer_id']) as $r) {
+            $people[(int) $r->term_id][(int) $r->engineer_id] = true;
+        }
+        $rows = DB::table('engineer_project_skills as ps')->join('engineer_projects as p', 'p.id', '=', 'ps.project_id')->distinct()->get(['ps.term_id', 'p.engineer_id']);
+        foreach ($rows as $r) $people[(int) $r->term_id][(int) $r->engineer_id] = true;
+        return array_map('count', $people);
+    }
+
     // 今の行と値が違うか（年数は数で比べる）
     private static function changed(object $row, array $values): bool
     {

@@ -12,17 +12,40 @@ class Matcher
     // エンジニアのスキル（スキル表＋経験票で使った技術）
     public static function skillIndex(int $engineerId): array
     {
-        $idx = [];
-        foreach (DB::table('engineer_skills')->where('engineer_id', $engineerId)->get() as $s) {
-            $idx[norm_skill($s->name)] = ['name' => $s->name, 'years' => $s->years !== null ? (float) $s->years : null, 'fromProject' => false];
-        }
-        foreach (DB::table('engineer_projects')->where('engineer_id', $engineerId)->get(['tech', 'os_tools', 'langs', 'dbs']) as $p) {
-            foreach (project_techs($p) as $t) {
-                $k = norm_skill($t);
-                if (!isset($idx[$k])) $idx[$k] = ['name' => $t, 'years' => null, 'fromProject' => true];
+        return self::skillIndexMany([$engineerId])[$engineerId] ?? [];
+    }
+
+    // 何人分でも、問い合わせ3回（スキル表・経歴・経歴の索引）で作る。[engineer_id => スキルの索引]
+    // 経歴の月数（months）は次のバージョンの準備で、点数の計算には使わない
+    public static function skillIndexMany(array $engineerIds): array
+    {
+        $out = [];
+        foreach (array_unique(array_map('intval', $engineerIds)) as $id) $out[$id] = [];
+        foreach (array_chunk(array_keys($out), 500) as $chunk) {
+            $termKeys = []; // [engineer_id][term_id] => 索引の鍵（月数を付ける先）
+            foreach (DB::table('engineer_skills')->whereIn('engineer_id', $chunk)->get() as $s) {
+                $k = norm_skill($s->name);
+                $out[$s->engineer_id][$k] = ['name' => $s->name, 'years' => $s->years !== null ? (float) $s->years : null, 'fromProject' => false];
+                if ($s->term_id) $termKeys[$s->engineer_id][(int) $s->term_id] = $k;
+            }
+            foreach (DB::table('engineer_projects')->whereIn('engineer_id', $chunk)->get(['engineer_id', 'tech', 'os_tools', 'langs', 'dbs']) as $p) {
+                foreach (project_techs($p) as $t) {
+                    $k = norm_skill($t);
+                    if (!isset($out[$p->engineer_id][$k])) $out[$p->engineer_id][$k] = ['name' => $t, 'years' => null, 'fromProject' => true];
+                }
+            }
+            $rows = DB::table('engineer_project_skills as ps')->join('engineer_projects as p', 'p.id', '=', 'ps.project_id')->join('skill_terms as t', 't.id', '=', 'ps.term_id')
+                ->whereIn('p.engineer_id', $chunk)->get(['p.engineer_id', 'ps.term_id', 'p.period_from', 'p.period_to', 't.name']);
+            $names = [];
+            foreach ($rows as $r) $names[$r->engineer_id][(int) $r->term_id] = $r->name;
+            foreach (ProjectSkills::statsFromRows($rows) as $eid => $terms) {
+                foreach ($terms as $termId => $st) {
+                    $k = $termKeys[$eid][$termId] ?? norm_skill($names[$eid][$termId]);
+                    if (isset($out[$eid][$k])) $out[$eid][$k]['months'] = $st['months'];
+                }
             }
         }
-        return $idx;
+        return $out;
     }
 
     public static function hasSkill(array $idx, string $name): ?array
@@ -35,10 +58,11 @@ class Matcher
         return null;
     }
 
-    public static function score(object $c, object $e): array
+    // $idx は、まとめて読んだスキルの索引（skillIndexMany）。渡さなければここで読む
+    public static function score(object $c, object $e, ?array $idx = null): array
     {
         $W = self::WEIGHTS;
-        $idx = self::skillIndex($e->id);
+        $idx ??= self::skillIndex($e->id);
         $reasons = []; $missing = []; $score = 0.0;
 
         $req = parse_list($c->required_skills);
@@ -91,9 +115,10 @@ class Matcher
         $applied = DB::table('applications')->where('case_id', $caseId)->pluck('engineer_id')->all();
         $offered = DB::table('case_offers')->where('case_id', $caseId)->pluck('status', 'engineer_id')->all();
         $out = [];
-        foreach ($q->get() as $e) {
-            if (in_array($e->id, $applied)) continue;
-            $out[] = ['engineer' => $e, 'offered' => $offered[$e->id] ?? null] + self::score($c, $e);
+        $engs = $q->get()->filter(fn ($e) => !in_array($e->id, $applied))->values();
+        $idxs = self::skillIndexMany($engs->pluck('id')->all()); // 人数によらず問い合わせは決まった回数
+        foreach ($engs as $e) {
+            $out[] = ['engineer' => $e, 'offered' => $offered[$e->id] ?? null] + self::score($c, $e, $idxs[$e->id] ?? []);
         }
         usort($out, fn ($a, $b) => $b['score'] <=> $a['score']);
         return $out;

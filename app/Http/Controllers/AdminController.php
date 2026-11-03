@@ -360,7 +360,7 @@ class AdminController extends Controller
             ->selectSub(DB::table('engineer_projects')->whereColumn('engineer_id', 'e.id')->selectRaw('count(*)'), 'projs')->orderByDesc('e.updated_at')->get();
         $skills = DB::table('engineer_skills')->get()->groupBy('engineer_id');
         $egUsers = DB::table('users')->whereIn('engineer_id', $list->pluck('id'))->orderByRaw("case when role = 'eg' then 1 else 0 end")->get()->keyBy('engineer_id');
-        foreach ($list as $e) { $e->skills = implode('、', ($skills[$e->id] ?? collect())->pluck('name')->all()); $e->account = engineer_state($e, $egUsers[$e->id] ?? null); $e->login_id = SesController::provisionalLoginId($egUsers[$e->id] ?? null); }
+        foreach ($list as $e) { $e->skills = implode('、', array_unique(\App\Services\SkillTable::dedupe($skills[$e->id] ?? collect())->pluck('name')->all())); $e->account = engineer_state($e, $egUsers[$e->id] ?? null); $e->login_id = SesController::provisionalLoginId($egUsers[$e->id] ?? null); }
         if ($st) $list = $list->where('status', $st);
         $direct = $r->query('ses') === 'direct';
         if ($direct) $list = $list->where('ses_kind', 'direct');
@@ -611,12 +611,11 @@ class AdminController extends Controller
     public function skills(Request $r)
     {
         $q = trim((string) $r->query('q')); $cat = (string) $r->query('cat');
-        $query = DB::table('skill_terms as t')->select('t.*')
-            ->selectSub(DB::table('engineer_skills')->whereColumn('term_id', 't.id')->selectRaw('count(*)'), 'used')
-            ->orderBy('reviewed')->orderBy('category')->orderBy('name');
+        $query = DB::table('skill_terms as t')->select('t.*')->orderBy('reviewed')->orderBy('category')->orderBy('name');
         if ($cat) $query->where('category', $cat);
         if ($q !== '') $query->where(fn ($w) => $w->where('name', 'like', "%$q%")->orWhere('aliases', 'like', "%$q%"));
-        return view('admin.skills', ['list' => $query->get(), 'q' => $q, 'cat' => $cat,
+        // 使っている人は、スキル表と経歴の両方から数える（同じ人は1回）
+        return view('admin.skills', ['list' => $query->get(), 'used' => \App\Services\SkillTable::usedCounts(), 'q' => $q, 'cat' => $cat,
             'unreviewed' => DB::table('skill_terms')->where('reviewed', false)->count(), 'all' => DB::table('skill_terms')->orderBy('name')->pluck('name', 'id')->all()]);
     }
 
@@ -627,6 +626,7 @@ class AdminController extends Controller
         DB::table('skill_terms')->insert(['name' => $name, 'category' => (string) $r->input('category', 'other'), 'aliases' => str_in($r->input('aliases')),
             'source' => 'user', 'reviewed' => true, 'created_at' => now(), 'updated_at' => now()]);
         \App\Support\SkillCatalog::forget();
+        \App\Services\ProjectSkills::rebuildAll(); // 足した言葉を、経歴の索引に反映する
         N::audit($r->user()->id, 'skill-add', $name);
         return $this->go('/admin/skills', "「{$name}」を追加しました。");
     }
@@ -641,6 +641,7 @@ class AdminController extends Controller
             'aliases' => str_in($r->input('aliases')), 'reviewed' => true, 'updated_at' => now()]);
         DB::table('engineer_skills')->where('term_id', $id)->update(['name' => $name, 'category' => (string) $r->input('category', $t->category)]);
         \App\Support\SkillCatalog::forget();
+        \App\Services\ProjectSkills::rebuildAll(); // 分類・別名の変更や確認済みを、経歴の索引に反映する
         N::audit($r->user()->id, 'skill-update', $name);
         return back()->with('flash', ['msg' => "「{$name}」を確認済みにしました。", 'type' => 'ok']);
     }
@@ -651,11 +652,8 @@ class AdminController extends Controller
         $t = DB::table('skill_terms')->find($id);
         $to = DB::table('skill_terms')->find((int) $r->input('to'));
         abort_unless($t && $to && $t->id !== $to->id, 404);
-        $aliases = array_unique(array_merge(parse_list($to->aliases), [$t->name], parse_list($t->aliases)));
-        DB::table('skill_terms')->where('id', $to->id)->update(['aliases' => implode('、', $aliases), 'updated_at' => now()]);
-        DB::table('engineer_skills')->where('term_id', $t->id)->update(['term_id' => $to->id, 'name' => $to->name, 'category' => $to->category]);
-        DB::table('skill_terms')->where('id', $t->id)->delete();
-        \App\Support\SkillCatalog::forget();
+        // 別名の追加・スキル表と経歴の付け替え・マスタの削除は、全部で1つの transaction（途中で失敗したら全部戻る）
+        \App\Services\SkillTable::mergeTerms($t->id, $to->id);
         N::audit($r->user()->id, 'skill-merge', "{$t->name} → {$to->name}");
         return $this->go('/admin/skills', "「{$t->name}」を「{$to->name}」の別名にまとめました。");
     }

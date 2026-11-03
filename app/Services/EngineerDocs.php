@@ -70,7 +70,7 @@ class EngineerDocs
     // 業務経歴書の「保有スキル」の行。同じ技術は1つにまとめ、得意の印の付いた技術を「【得意】…」で先頭に出す（ひとことは出さない）
     public static function skillLines(int $engineerId): array
     {
-        $skills = SkillTable::dedupe(DB::table('engineer_skills')->where('engineer_id', $engineerId)->orderBy('category')->orderByDesc('years')->orderBy('id')->get());
+        $skills = SkillTable::forDisplay($engineerId);
         $text = fn ($s) => $s->name.($s->years ? '（'.num_disp($s->years).'年）' : '');
         $lines = [];
         $primary = $skills->filter(fn ($s) => !empty($s->is_primary));

@@ -19,7 +19,7 @@ class SamplePurge
     const ORDER = [
         'ai_jobs' => 'id', 'follow_ups' => 'id', 'contracts' => 'id', 'invoices' => 'id', 'application_events' => 'id', 'interviews' => 'id',
         'applications' => 'id', 'case_offers' => 'id', 'case_mails' => 'id', 'messages' => 'id',
-        'engineer_skills' => 'id', 'engineer_projects' => 'id', 'engineer_histories' => 'id', 'engineer_certs' => 'id', 'engineer_files' => 'id',
+        'engineer_skills' => 'id', 'engineer_project_skills' => 'id', 'engineer_projects' => 'id', 'engineer_histories' => 'id', 'engineer_certs' => 'id', 'engineer_files' => 'id',
         'engineers' => 'id', 'cases' => 'id', 'app_notifications' => 'id', 'users' => 'id', 'sessions' => 'id', 'password_reset_tokens' => 'email',
         'ses_companies' => 'id', 'mail_outbox' => 'id', 'audit_log' => 'id',
     ];
@@ -62,7 +62,10 @@ class SamplePurge
             'application_events' => DB::table('application_events')->whereIn('application_id', $a)->pluck('id')->all(),
             'interviews' => $iv, 'applications' => $a,
             'case_offers' => $cs('case_offers'), 'case_mails' => $cs('case_mails'), 'messages' => $byEng('messages'),
-            'engineer_skills' => $byEng('engineer_skills'), 'engineer_projects' => $byEng('engineer_projects'), 'engineer_histories' => $byEng('engineer_histories'),
+            'engineer_skills' => $byEng('engineer_skills'),
+            // 経歴の索引：消す人の経歴につながる行
+            'engineer_project_skills' => DB::table('engineer_project_skills')->whereIn('project_id', $byEng('engineer_projects'))->pluck('id')->all(),
+            'engineer_projects' => $byEng('engineer_projects'), 'engineer_histories' => $byEng('engineer_histories'),
             'engineer_certs' => $byEng('engineer_certs'), 'engineer_files' => $files->pluck('id')->all(),
             'engineers' => $e, 'cases' => $c,
             'users' => $u,

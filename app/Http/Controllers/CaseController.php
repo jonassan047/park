@@ -82,7 +82,8 @@ class CaseController extends Controller
             ];
         } elseif ($u->role === 'ses') {
             $engs = Registration::usableEngineers(DB::table('engineers')->where('ses_id', $u->ses_id)->whereNotIn('status', ['unavailable', 'left']))->orderBy('name')->get();
-            $rows = $engs->map(fn ($e) => ['e' => $e] + Matcher::score($c, $e))->sortByDesc('score')->values()->all();
+            $idxs = Matcher::skillIndexMany($engs->pluck('id')->all()); // 人数によらず、まとめて読む
+            $rows = $engs->map(fn ($e) => ['e' => $e] + Matcher::score($c, $e, $idxs[$e->id] ?? []))->sortByDesc('score')->values()->all();
             $data += ['rows' => $rows, 'applied' => DB::table('applications')->where('case_id', $id)->pluck('engineer_id')->all(),
                 'offered' => DB::table('case_offers')->where('case_id', $id)->pluck('status', 'engineer_id')->all()];
         } else {

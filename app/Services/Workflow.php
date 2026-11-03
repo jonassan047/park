@@ -800,12 +800,13 @@ class Workflow
     {
         $c = DB::table('cases')->find($caseId);
         $bySes = []; $count = 0;
+        $idxs = Matcher::skillIndexMany($engineerIds); // 人数によらず、まとめて読む
         foreach (array_map('intval', $engineerIds) as $eid) {
             // 仮登録・停止中・退会済は飛ばす。所属の会社が参加中（active。直属の入れ物も active）でなければ飛ばす
             $e = Registration::usableEngineers(DB::table('engineers')->where('id', $eid)
                 ->whereExists(fn ($q) => $q->select(DB::raw(1))->from('ses_companies')->whereColumn('ses_companies.id', 'engineers.ses_id')->where('ses_companies.status', 'active')))->first();
             if (!$e || DB::table('case_offers')->where('case_id', $caseId)->where('engineer_id', $eid)->exists()) continue;
-            $s = Matcher::score($c, $e);
+            $s = Matcher::score($c, $e, $idxs[$eid] ?? []);
             DB::table('case_offers')->insert(['case_id' => $caseId, 'engineer_id' => $eid, 'score' => $s['score'], 'reasons' => implode(' / ', $s['reasons']),
                 'missing' => implode(' / ', $s['missing']), 'sent_by' => $actor->id, 'sent_at' => now_str()]);
             N::toEg($eid, "あなたに合う案件が届きました：{$c->title}",

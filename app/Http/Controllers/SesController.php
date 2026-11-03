@@ -6,6 +6,7 @@ use App\Services\Billing;
 use App\Services\Matcher;
 use App\Services\Notifier as N;
 use App\Services\Registration;
+use App\Services\SkillTable;
 use App\Services\Workflow as W;
 use App\Support\Requirements;
 use Illuminate\Http\Request;
@@ -47,7 +48,7 @@ class SesController extends Controller
         // ログインの状態：兼任の人も engineer_id で探す（管理者との兼任かどうかは、ここには出さない）
         $users = DB::table('users')->whereIn('engineer_id', $list->pluck('id'))->orderByRaw("case when role = 'eg' then 1 else 0 end")->get()->keyBy('engineer_id');
         foreach ($list as $e) {
-            $e->skills = implode('、', ($skills[$e->id] ?? collect())->pluck('name')->all());
+            $e->skills = implode('、', array_unique(SkillTable::dedupe($skills[$e->id] ?? collect())->pluck('name')->all())); // 同じ技術は1回だけ
             $e->account = engineer_state($e, $users[$e->id] ?? null);
             $e->login_id = self::provisionalLoginId($users[$e->id] ?? null);
         }
@@ -66,8 +67,9 @@ class SesController extends Controller
         $q = DB::table('cases')->orderByDesc('id');
         $mine ? $q->where('source_ses_id', $r->user()->ses_id) : $q->where('status', 'open');
         $engs = Registration::usableEngineers(DB::table('engineers')->where('ses_id', $r->user()->ses_id)->whereIn('status', ['available', 'proposing']))->get();
-        $list = $q->get()->map(function ($c) use ($engs) {
-            $best = $engs->map(fn ($e) => ['e' => $e, 's' => Matcher::score($c, $e)['score']])->sortByDesc('s')->first();
+        $idxs = Matcher::skillIndexMany($engs->pluck('id')->all()); // 案件の数によらず、1回だけまとめて読む
+        $list = $q->get()->map(function ($c) use ($engs, $idxs) {
+            $best = $engs->map(fn ($e) => ['e' => $e, 's' => Matcher::score($c, $e, $idxs[$e->id] ?? [])['score']])->sortByDesc('s')->first();
             $c->best = $best ? "{$best['e']->name}（{$best['s']}点）" : '—';
             return $c;
         });

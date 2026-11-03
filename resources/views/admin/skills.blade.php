@@ -8,13 +8,13 @@
 <x-card title="技術を追加"><form method="post" action="{{ url('/admin/skills') }}"><div class="grid3">
 <x-field label="正式な名前" name="name" required /><x-field label="分類" name="category" type="select" :options="PARK_LABELS['skillCat']" value="other" />
 <x-field label="別名（「、」区切り）" name="aliases" /></div>@csrf<button class="btn small">追加する</button></form></x-card>
-<x-table :head="['状態', '正式な名前・分類・別名', '使っている人', '統合']" :count="$list->count()">
+<x-table :head="['状態', '正式な名前・分類・別名', '使っている人（スキル表・経歴）', '統合']" :count="$list->count()">
 @foreach($list as $t)<tr>
 <td>@if($t->reviewed)<span class="badge ok">確認済み</span>@else<span class="badge warn">確認待ち</span>@endif<div class="muted small">{{ ['master' => '最初から', 'auto' => '自動で追加', 'user' => '手で追加'][$t->source] ?? $t->source }}</div></td>
 <td><form method="post" action="{{ url('/admin/skills/'.$t->id) }}" class="skillrow">@csrf
 <input name="name" value="{{ $t->name }}"><select name="category">@foreach(PARK_LABELS['skillCat'] as $k => $v)<option value="{{ $k }}" @selected($t->category === $k)>{{ $v }}</option>@endforeach</select>
 <input name="aliases" value="{{ $t->aliases }}" placeholder="別名"><button class="btn ghost small">{{ $t->reviewed ? '保存' : '確認済みにする' }}</button></form></td>
-<td>{{ $t->used }}人</td>
+<td>{{ $used[$t->id] ?? 0 }}人</td>
 <td><form method="post" action="{{ url('/admin/skills/'.$t->id.'/merge') }}" class="skillrow" onsubmit="return confirm('この言葉を、選んだ技術の別名にまとめます。よろしいですか？')">@csrf
 <select name="to"><option value="">まとめ先</option>@foreach($all as $id => $n)@if($id !== $t->id)<option value="{{ $id }}">{{ $n }}</option>@endif @endforeach</select><button class="btn ghost small">統合</button></form></td>
 </tr>@endforeach

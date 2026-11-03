@@ -314,7 +314,7 @@ class EngineerController extends Controller
     {
         $e = $this->load($r, $id);
         $c = $r->query('case') ? DB::table('cases')->find((int) $r->query('case')) : null;
-        $skills = SkillTable::dedupe(DB::table('engineer_skills')->where('engineer_id', $id)->orderBy('category')->orderByDesc('years')->orderBy('id')->get());
+        $skills = SkillTable::forDisplay($id); // 詳細・Excel と同じ決まりで、同じ技術を1つにする（K-12）
         $projects = DB::table('engineer_projects')->where('engineer_id', $id)->orderByDesc('period_from')->get()->all();
         $want = $c ? array_map('norm_skill', array_merge(parse_list($c->required_skills), parse_list($c->preferred_skills))) : [];
         $isHit = function ($t) use ($want) {

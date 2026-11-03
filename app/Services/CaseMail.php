@@ -90,11 +90,12 @@ class CaseMail
     {
         $sesId = $u->role === 'ses' ? (int) $u->ses_id : null;
         $n = 0;
+        $idxs = Matcher::skillIndexMany(array_keys($items)); // 人数によらず、まとめて読む
         foreach ($items as $eid => $it) {
             $e = DB::table('engineers')->find((int) $eid);
             if (!$e || !$e->registered_at || DB::table('case_mails')->where('case_id', $c->id)->where('engineer_id', $e->id)->exists()) continue;
             $own = $sesId === null || (int) $e->ses_id === $sesId;
-            $score = Matcher::score($c, $e);
+            $score = Matcher::score($c, $e, $idxs[$e->id] ?? []);
             $body = (string) $it['body'];
             // 返事のリンク：押すだけで PARK に記録され、送った人に知らせが届く（メールで返信してもよい）
             $token = bin2hex(random_bytes(16));
