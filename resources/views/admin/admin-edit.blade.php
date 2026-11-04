@@ -12,7 +12,7 @@
     $postal = postal_norm($u->postal_code) ?: $u->postal_code;
 @endphp
 <x-card>
-<p>状態：{{ $state }}</p>
+<p>状態：{{ $state }}<br><span class="muted">{{ account_mail($u) }}</span></p>
 <form method="post" action="{{ url('/admin/admins/'.$u->id) }}">@csrf
 <div class="pair">
 <x-field label="氏名（姓）" name="name_sei" :value="$nameSei" required />

@@ -50,7 +50,7 @@ class AdminController extends Controller
             if ($state === '仮登録') $until = date('n/j', strtotime($u->token_expires));
             $isAdmin = $u->role === 'admin';
             $rows[] = ['role' => lbl('role', $u->role).(W::isDual($u) ? '（エンジニア兼任）' : ''), 'name' => $u->name, 'org' => $isAdmin ? $u->company_name : ($sesNames[$u->ses_id] ?? null),
-                'state' => $state, 'until' => $until, 'last_login' => $u->last_login,
+                'state' => $state, 'until' => $until, 'mail' => account_mail($u), 'last_login' => $u->last_login,
                 'resend' => is_provisional_state($state) ? $u->id : null, 'open' => $isAdmin ? null : $u->ses_id];
         }
         $noUser = DB::table('ses_companies as s')->where('s.kind', 'ses')->whereIn('s.status', ['active', 'pending'])
@@ -151,7 +151,7 @@ class AdminController extends Controller
         $egIds = $engs->pluck('id');
         // エンジニアの状態（ログインの人の状態。兼任の人はエンジニアの行 role='eg' を優先）
         $egUsers = DB::table('users')->whereIn('engineer_id', $egIds)->orderByRaw("case when role = 'eg' then 1 else 0 end")->get()->keyBy('engineer_id');
-        foreach ($engs as $e) { $e->account = engineer_state($e, $egUsers[$e->id] ?? null); $e->login_id = SesController::provisionalLoginId($egUsers[$e->id] ?? null); }
+        foreach ($engs as $e) { $e->account = engineer_state($e, $egUsers[$e->id] ?? null); $e->mail = account_mail($egUsers[$e->id] ?? null); $e->login_id = SesController::provisionalLoginId($egUsers[$e->id] ?? null); }
         // SES の交代で選べる人：この会社の、本登録が済んだ担当者（今の SES を除く）
         $repCandidates = $users->filter(fn ($x) => $x->active && !$x->left_at && $x->registered_at && (int) $x->id !== (int) $s->rep_user_id)->values();
         return view('admin.ses-show', [
@@ -360,7 +360,7 @@ class AdminController extends Controller
             ->selectSub(DB::table('engineer_projects')->whereColumn('engineer_id', 'e.id')->selectRaw('count(*)'), 'projs')->orderByDesc('e.updated_at')->get();
         $skills = DB::table('engineer_skills')->get()->groupBy('engineer_id');
         $egUsers = DB::table('users')->whereIn('engineer_id', $list->pluck('id'))->orderByRaw("case when role = 'eg' then 1 else 0 end")->get()->keyBy('engineer_id');
-        foreach ($list as $e) { $e->skills = implode('、', array_unique(\App\Services\SkillTable::dedupe($skills[$e->id] ?? collect())->pluck('name')->all())); $e->account = engineer_state($e, $egUsers[$e->id] ?? null); $e->login_id = SesController::provisionalLoginId($egUsers[$e->id] ?? null); }
+        foreach ($list as $e) { $e->skills = implode('、', array_unique(\App\Services\SkillTable::dedupe($skills[$e->id] ?? collect())->pluck('name')->all())); $e->account = engineer_state($e, $egUsers[$e->id] ?? null); $e->mail = account_mail($egUsers[$e->id] ?? null); $e->login_id = SesController::provisionalLoginId($egUsers[$e->id] ?? null); }
         if ($st) $list = $list->where('status', $st);
         $direct = $r->query('ses') === 'direct';
         if ($direct) $list = $list->where('ses_kind', 'direct');

@@ -50,6 +50,7 @@ class SesController extends Controller
         foreach ($list as $e) {
             $e->skills = implode('、', array_unique(SkillTable::dedupe($skills[$e->id] ?? collect())->pluck('name')->all())); // 同じ技術は1回だけ
             $e->account = engineer_state($e, $users[$e->id] ?? null);
+            $e->mail = account_mail($users[$e->id] ?? null);
             $e->login_id = self::provisionalLoginId($users[$e->id] ?? null);
         }
         $egIds = $list->pluck('id');
@@ -105,7 +106,7 @@ class SesController extends Controller
         $egIds = $engs->pluck('id');
         $s = DB::table('ses_companies')->find($id);
         $egUsers = DB::table('users')->whereIn('engineer_id', $egIds)->orderByRaw("case when role = 'eg' then 1 else 0 end")->get()->keyBy('engineer_id');
-        foreach ($engs as $e) { $e->account = engineer_state($e, $egUsers[$e->id] ?? null); $e->login_id = self::provisionalLoginId($egUsers[$e->id] ?? null); }
+        foreach ($engs as $e) { $e->account = engineer_state($e, $egUsers[$e->id] ?? null); $e->mail = account_mail($egUsers[$e->id] ?? null); $e->login_id = self::provisionalLoginId($egUsers[$e->id] ?? null); }
         return view('ses.company', [
             's' => $s, 'repName' => Registration::repName($s)[0], 'isRep' => Requirements::isRep($r->user()), 'repId' => $s->rep_user_id,
             'users' => DB::table('users')->where('ses_id', $id)->where('role', 'ses')->get(),

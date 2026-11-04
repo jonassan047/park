@@ -487,7 +487,7 @@ class SuspendLeaveTest extends TestCase
         $html = $this->admin()->get('/admin')->assertOk()->getContent();
         $this->assertStringNotContainsString('緑川 一郎', $html);
         $this->assertMatchesRegularExpression('#<td>みどり情報システム</td>\s*<td>担当者が未登録#', $html);
-        $this->assertMatchesRegularExpression('#<td>青木 花子</td>\s*<td>あおぞらテック</td>\s*<td>停止#', $html);
+        $this->assertMatchesRegularExpression('#<td>青木 花子(?:<br><small class="muted">[^<]*</small>)?</td>\s*<td>あおぞらテック</td>\s*<td>停止#', $html); // 名前の下にメールアドレス（2026-11-04）
         $this->assertMatchesRegularExpression('#<td>ひだまりソリューションズ</td>\s*<td>参加中#', $html);
         $this->assertNotSame($s1, $s2);
     }

@@ -31,7 +31,7 @@
 <x-card title="登録の状況">
 @if($onlyMe)<p class="muted">まだ誰も登録していません。上の手順から始めます。</p>@endif
 <x-table :head="['立場', '名前', '所属', '状態', '最後のログイン', '']" :count="count($invites)">
-@foreach($invites as $v)<tr><td>{{ $v['role'] }}</td><td>{{ $v['name'] }}</td><td>{{ $v['org'] ?: '—' }}</td>
+@foreach($invites as $v)<tr><td>{{ $v['role'] }}</td><td>{{ $v['name'] }}@if(!empty($v['mail']))<br><small class="muted">{{ $v['mail'] }}</small>@endif</td><td>{{ $v['org'] ?: '—' }}</td>
 <td>{{ $v['state'] }}@if($v['until'])<span class="muted">（{{ $v['until'] }} まで）</span>@endif</td><td>{{ fmt_dt($v['last_login']) }}</td>
 <td>@if($v['resend'])<x-post :action="'/people/'.$v['resend'].'/resend'" label="送り直し" cls="ghost small" />@endif
 @if($v['open'])<a class="btn small" href="{{ url('/admin/ses/'.$v['open']) }}">開く</a>@endif</td></tr>@endforeach

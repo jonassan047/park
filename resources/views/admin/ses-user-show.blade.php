@@ -19,7 +19,7 @@
 <dt>SES</dt><dd>{{ $s->name }}</dd>
 <dt>氏名</dt><dd>{{ $u->name }}</dd>
 <dt>ふりがな</dt><dd>{{ $u->kana ?: '—' }}</dd>
-<dt>メールアドレス</dt><dd>{{ $u->email }}</dd>
+<dt>メールアドレス</dt><dd>{{ account_mail($u) }}</dd>
 <dt>電話番号</dt><dd>{{ $u->phone ?: '—' }}</dd>
 <dt>所属・役職</dt><dd>{{ $u->position ?: '—' }}</dd>
 <dt>エンジニア兼任</dt><dd>@if($u->engineer_id)<a href="{{ url('/engineers/'.$u->engineer_id) }}">あり（エンジニアの詳細）</a>@else なし @endif</dd>

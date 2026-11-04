@@ -84,6 +84,21 @@ function is_provisional_state(string $state): bool
     return str_starts_with($state, '仮登録');
 }
 
+// アカウントのメールアドレスと、仮登録の有効期限（2026-11-04 tezzo）。仮登録でなければメールだけ。
+// 期限切れは「有効期限切れ」と明記する。心当たりなし（リンクを無効にした）も明記する
+function account_mail(?object $u): string
+{
+    if (!$u) return '—';
+    $mail = $u->email ?: '（メールアドレスなし）';
+    $state = user_state($u);
+    if (!is_provisional_state($state)) return $mail;
+    if (!empty($u->reg_declined_at)) return $mail.'／有効期限：—（心当たりなしのため、リンクは無効）';
+    $expired = $state === '仮登録（期限切れ）';
+    if (empty($u->token_expires)) return $mail.'／'.($expired ? '有効期限切れ（期限の記録なし）' : '有効期限：—');
+    $at = fmt_dt($u->token_expires);
+    return $mail.'／'.($expired ? "有効期限切れ（{$at} まで）" : "有効期限：{$at} まで");
+}
+
 // エンジニアの状態の言葉（一覧・詳細）。$u はそのエンジニアのアカウント（無ければ null）。
 // アカウントの状態が基本。ログインの無い仮登録のエンジニアは「仮登録（未送信）」、兼任の人でエンジニアの立場の登録がまだなら付け足す
 function engineer_state(object $e, ?object $u): string

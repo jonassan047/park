@@ -26,7 +26,7 @@
 <dt>所属・役職</dt><dd>{{ $u->position ?: '—' }}</dd>
 <dt>電話番号</dt><dd>{{ $u->phone ?: '—' }}</dd>
 <dt>住所</dt><dd>{{ postal_address($u->postal_code, $u->address) }}</dd>
-<dt>メールアドレス</dt><dd>{{ $u->email }}</dd>
+<dt>メールアドレス</dt><dd>{{ account_mail($u) }}</dd>
 <dt>最終ログイン</dt><dd>{{ fmt_dt($u->last_login) }}</dd>
 </dl>
 <p><a class="btn ghost" href="{{ url('/admin/admins') }}">管理者の一覧に戻る</a></p>

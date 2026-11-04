@@ -11,7 +11,7 @@ $canDo = $state !== '退会済' && (int) $u->id !== (int) auth()->id();
 // 仮登録の行：送り直しと取り消しは、権限のある人（管理者）にだけ出す。本登録が済んだ行には出さない
 $provisional = is_provisional_state($state);
 $canCancel = !$u->registered_at && !$u->password && $state !== '退会済' && \App\Services\Registration::canManage(auth()->user(), $u);
-@endphp<tr><td>{{ $u->name }}@if($u->engineer_id) <a class="badge info" href="{{ url('/engineers/'.$u->engineer_id) }}">エンジニア兼任</a>@endif</td><td>{{ $u->company_name ?: '—' }}</td><td>{{ $u->email }}</td><td>{{ $state }}</td><td>{{ fmt_dt($u->last_login) }}</td>
+@endphp<tr><td>{{ $u->name }}@if($u->engineer_id) <a class="badge info" href="{{ url('/engineers/'.$u->engineer_id) }}">エンジニア兼任</a>@endif</td><td>{{ $u->company_name ?: '—' }}</td><td>{{ account_mail($u) }}</td><td>{{ $state }}</td><td>{{ fmt_dt($u->last_login) }}</td>
 <td>@if($provisional)<x-post :action="'/people/'.$u->id.'/resend'" label="送り直し" cls="ghost small" />@endif
 @if($canDo)@if($state === '停止')<x-post :action="$base.'/resume'" label="再開" cls="small" :fields="$back" :confirm="$u->name.' さんを再開します。'" />
 @else<x-post :action="$base.'/suspend'" label="停止" cls="ghost small" :fields="$back" :confirm="$u->name.' さんを停止します。ログインできなくなります（再開できます）。'.($dual ? 'エンジニアとしても入れなくなります。' : '')" />@endif
