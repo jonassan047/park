@@ -83,6 +83,20 @@ class V030MasterTest extends TestCase
         $this->assertStringContainsString('ZzOld', (string) DB::table('skill_terms')->where('id', $this->new)->value('aliases'));
     }
 
+    // 統合先が技術ではない分類（method）のときは、経歴の索引に入らない
+    public function test_m_01_merge_into_non_tech_term_stays_out_of_project_index(): void
+    {
+        $p = $this->makeProject($this->eid, ['tech' => 'ZzOld']);
+        $this->assertSame(1, $this->projectRows($this->old));
+        DB::table('skill_terms')->where('id', $this->new)->update(['category' => 'method']);
+        SkillCatalog::forget();
+
+        $this->as(self::ADMIN)->post("/admin/skills/{$this->old}/merge", ['to' => $this->new])->assertRedirect('/admin/skills');
+
+        $this->assertSame(0, $this->projectRows($this->new), '技術ではない言葉は索引に入らない');
+        $this->assertSame(0, DB::table('engineer_project_skills')->where('project_id', $p)->count());
+    }
+
     public function test_m_02_failure_rolls_everything_back(): void
     {
         $p = $this->makeProject($this->eid, ['tech' => 'ZzOld']);

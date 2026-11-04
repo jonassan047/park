@@ -654,6 +654,7 @@ class AdminController extends Controller
         abort_unless($t && $to && $t->id !== $to->id, 404);
         // 別名の追加・スキル表と経歴の付け替え・マスタの削除は、全部で1つの transaction（途中で失敗したら全部戻る）
         \App\Services\SkillTable::mergeTerms($t->id, $to->id);
+        \App\Services\ProjectSkills::rebuildAll(); // 統合先が技術ではない分類のとき、経歴の索引に入らないようにする
         N::audit($r->user()->id, 'skill-merge', "{$t->name} → {$to->name}");
         return $this->go('/admin/skills', "「{$t->name}」を「{$to->name}」の別名にまとめました。");
     }

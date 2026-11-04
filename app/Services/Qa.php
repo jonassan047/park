@@ -36,7 +36,7 @@ class Qa
         $add = function ($category, $q, $hint) use (&$qa) { $qa[] = ['category' => $category, 'q' => $q, 'hint' => $hint]; };
 
         // まず、案件とスキルの突き合わせ（面談の前に、本人と SES が同じ認識を持つ）
-        $fit = Matcher::score($c, $e);
+        $fit = Matcher::score($c, $e, $idx);
         $add('確認：案件とスキル', 'この案件で見られるのは、どこですか。', '合う点：'.(implode('、', $fit['reasons']) ?: '—').'。'
             .($fit['missing'] ? '足りない点：'.implode('、', $fit['missing']).'。聞かれたら正直に、近い経験と学んでいることを話す。' : '必須の条件はそろっている。経験を具体的に話せるようにしておく。'));
         // 面談依頼に書かれていた、先方が確かめたいこと

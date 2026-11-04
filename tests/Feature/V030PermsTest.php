@@ -141,6 +141,16 @@ class V030PermsTest extends TestCase
     }
 
     #[DataProvider('kinds')]
+    public function test_a_03_ses_edits_own_company_active_eg(string $kind): void
+    {
+        $eid = $this->target($this->engId(self::EG1)); // 参加中（停止していない）
+        $this->as(self::SES1);
+        $this->edit($kind, $eid)->assertRedirect();
+        $this->assertTrue($this->changed($kind, $eid));
+        $this->assertFalse($this->confirmed($eid));
+    }
+
+    #[DataProvider('kinds')]
     public function test_a_04_staff_edits_own_company_eg(string $kind): void
     {
         $this->staff();
@@ -162,6 +172,25 @@ class V030PermsTest extends TestCase
             $this->as($who);
             $this->edit($kind, $eid)->assertForbidden();
             $this->assertFalse($this->changed($kind, $eid), $who);
+            $this->assertTrue($this->confirmed($eid), $who);
+        }
+    }
+
+    // 他社の EG の経歴の削除と、AI の下書きの取り込みも 403
+    public function test_a_05_other_company_cannot_delete_project_or_import_draft(): void
+    {
+        $this->staff();
+        $eid = $this->target($this->engId(self::EG2));
+        $pid = $this->makeProject($eid, ['title' => self::MARK, 'tech' => 'Laravel']);
+        $draft = ['projects' => [['title' => 'AI の下書きの案件', 'period_from' => '2021-04', 'period_to' => '2022-03', 'tech' => 'Laravel', 'phases' => ['実装']]]];
+        $jid = DB::table('ai_jobs')->insertGetId(['kind' => 'resume', 'ref_type' => 'engineer_file', 'ref_id' => 1, 'input' => json_encode(['engineer_id' => $eid]),
+            'status' => 'done', 'output' => json_encode($draft, JSON_UNESCAPED_UNICODE), 'created_at' => now_str()]);
+        foreach ([self::SES1, self::STAFF] as $who) {
+            $this->as($who);
+            $this->post("/engineers/$eid/projects/$pid/delete")->assertForbidden();
+            $this->assertTrue(DB::table('engineer_projects')->where('id', $pid)->exists(), $who);
+            $this->post("/ai-jobs/$jid/project/0")->assertForbidden();
+            $this->assertSame(1, DB::table('engineer_projects')->where('engineer_id', $eid)->count(), $who);
             $this->assertTrue($this->confirmed($eid), $who);
         }
     }
@@ -249,6 +278,11 @@ class V030PermsTest extends TestCase
             $this->get('/admin/skills')->assertForbidden();
             $this->post("/admin/skills/$from/merge", ['to' => $to])->assertForbidden();
             $this->assertNotNull(DB::table('skill_terms')->find($from), $who);
+            // 言葉を足す・直す送信も 403 で、マスタは変わらない
+            $this->post('/admin/skills', ['name' => 'ZzPermNew', 'category' => 'tool'])->assertForbidden();
+            $this->post("/admin/skills/$from", ['name' => 'ZzPermRenamed', 'category' => 'tool'])->assertForbidden();
+            $this->assertFalse(DB::table('skill_terms')->where('name', 'ZzPermNew')->exists(), $who);
+            $this->assertSame('Docker', DB::table('skill_terms')->where('id', $from)->value('name'), $who);
         }
         $this->as(self::ADMIN)->get('/admin/skills')->assertOk();
     }
