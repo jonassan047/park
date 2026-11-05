@@ -243,9 +243,26 @@ class EngineerController extends Controller
     public function skills(Request $r, int $id)
     {
         $e = $this->loadForEdit($r, $id);
+        // 案件に合わせてチェックする欄は、EG 本人だけ。選べるのは、案内が届いた案件・応募した案件（下書きを除く）
+        $pickable = $pick = null;
+        if ($r->user()->role === 'eg') {
+            $pickable = $this->pickableCases($id);
+            $want = $r->query('case');
+            if (is_string($want) && ctype_digit($want)) $pick = $pickable->firstWhere('id', (int) $want);
+        }
         // 候補（datalist）は、管理者が確かめた言葉だけ
-        return view('engineers.skills', ['e' => $e, 'skills' => SkillTable::forDisplay($id),
+        return view('engineers.skills', ['e' => $e, 'skills' => SkillTable::forDisplay($id), 'pickable' => $pickable, 'pick' => $pick,
             'terms' => DB::table('skill_terms')->where('reviewed', true)->orderBy('category')->orderBy('name')->get(['name', 'category'])]);
+    }
+
+    // このエンジニアに案内が届いた案件・応募した案件（下書きを除く）。取る列は画面に使うものだけ
+    private function pickableCases(int $eid)
+    {
+        $ids = DB::table('case_offers')->where('engineer_id', $eid)->pluck('case_id')
+            ->merge(DB::table('applications')->where('engineer_id', $eid)->pluck('case_id'))->unique()->all();
+        return DB::table('cases')->whereIn('id', $ids)->where('status', '<>', 'draft')
+            ->orderByRaw("case when status = 'open' then 0 else 1 end")->orderByDesc('id')
+            ->get(['id', 'title', 'status', 'required_skills', 'preferred_skills']);
     }
 
     public function saveSkills(Request $r, int $id)

@@ -52,10 +52,38 @@ class Matcher
     {
         $k = norm_skill($name);
         if (isset($idx[$k])) return $idx[$k];
-        if (mb_strlen($k) >= 3) {
-            foreach ($idx as $key => $s) if (mb_strlen($key) >= 3 && loose_match($key, $k)) return $s;
-        }
+        foreach ($idx as $key => $s) if (self::sameSkill((string) $key, $k)) return $s;
         return null;
+    }
+
+    // 2つのスキル名（norm_skill 済み）が同じ技術か。同じ、または両方3文字以上でゆるく合うとき
+    public static function sameSkill(string $a, string $b): bool
+    {
+        return $a === $b || (mb_strlen($a) >= 3 && mb_strlen($b) >= 3 && loose_match($a, $b));
+    }
+
+    // スキル表の各行（名前の並び）が、案件の必須・尚可に合うかの印を出す。画面でチェックを入れる目印に使う（保存はしない）
+    // marks＝[行の番号 => 'required'|'preferred']、missing＝どの行にも合わない必須、empty＝必須・尚可がどちらも空
+    public static function rowMarks(array $names, object $c): array
+    {
+        $keys = [];
+        foreach ($names as $i => $n) {
+            $k = norm_skill($n);
+            if ($k !== '') $keys[$i] = $k;
+        }
+        $req = parse_list($c->required_skills);
+        $pref = parse_list($c->preferred_skills);
+        $marks = []; $missing = [];
+        foreach ($req as $r) {
+            $w = norm_skill($r); $hit = false;
+            foreach ($keys as $i => $k) if (self::sameSkill($k, $w)) { $marks[$i] = 'required'; $hit = true; }
+            if (!$hit) $missing[] = $r;
+        }
+        foreach ($pref as $p) {
+            $w = norm_skill($p);
+            foreach ($keys as $i => $k) if (!isset($marks[$i]) && self::sameSkill($k, $w)) $marks[$i] = 'preferred';
+        }
+        return ['marks' => $marks, 'missing' => $missing, 'empty' => !$req && !$pref];
     }
 
     // $idx は、まとめて読んだスキルの索引（skillIndexMany）。渡さなければここで読む
