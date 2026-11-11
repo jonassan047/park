@@ -134,6 +134,8 @@ a.stat.link:hover { border-color: var(--blue-dark); }
 .sf-group { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
 .sf-ghead { border-bottom: 1px dashed var(--line); margin-bottom: 4px; padding-bottom: 2px; }
 .sf-gitems { display: flex; flex-direction: column; gap: 2px; }
+/* 子のかたまり（親の下の項目、見出しの下の項目、今の表に無い項目）は、左を約 5mm 空けて、親と同格に見えないようにする。「その他」の入力欄も、この中に入る */
+.sf-children { margin-left: 5mm; }
 .sf-row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; }
 .sf-item { cursor: pointer; }
 .sf-item.hit { font-weight: 700; color: var(--blue-dark); }

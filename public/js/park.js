@@ -34,6 +34,27 @@ function addRow(tableId, templateId) {
     syncAdd(other);
   }
 
+  // 子の項目（.sf-gitems の中）にチェックが入ったら、同じグループの親（.sf-ghead）にもチェックを入れ、親の年数を有効にする
+  function checkParent(box) {
+    if (!box.closest('.sf-gitems')) return;
+    const group = box.closest('.sf-group');
+    const head = group && group.querySelector('.sf-ghead input[type=checkbox][data-sf]');
+    if (head && !head.checked) { head.checked = true; syncYear(head); }
+  }
+
+  // 親のチェックを外したら、その親の子のチェックも外す。「その他」は、チェックを外して入力欄を閉じるだけ（書いた名前は消さない）
+  function uncheckChildren(head) {
+    const group = head.closest('.sf-group');
+    if (!group) return;
+    group.querySelectorAll('.sf-gitems input[type=checkbox][data-sf]').forEach(function (b) {
+      if (!b.checked) return;
+      b.checked = false;
+      const other = b.closest('.sf-otherrow');
+      if (other) other.querySelector('.sf-other').hidden = true;
+      else syncYear(b);
+    });
+  }
+
   function init() {
     const form = document.querySelector('.sf-sec');
     if (!form) return;
@@ -56,12 +77,15 @@ function addRow(tableId, templateId) {
         } else {
           syncYear(t);
         }
+        // 子（Laravel など）を選んだら、親（PHP など）にもチェックを入れる。親を外したら、子も全部外す
+        if (t.checked) checkParent(t);
+        else if (t.closest('.sf-ghead')) uncheckChildren(t);
         return;
       }
       // 年数を選んだら、その項目のチェックを入れる（その他の欄の年数は対象外）
       if (t.matches('select.sf-yr') && t.parentElement.classList.contains('sf-row') && t.value !== '') {
         const box = t.parentElement.querySelector('input[type=checkbox][data-sf]');
-        if (box && !box.checked) { box.checked = true; syncYear(box); }
+        if (box && !box.checked) { box.checked = true; syncYear(box); checkParent(box); }
       }
     });
 

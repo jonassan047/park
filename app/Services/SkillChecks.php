@@ -104,6 +104,13 @@ class SkillChecks
             $rows[self::key($n['section'], $n['parent'], $n['item'], '')] = ['section' => $n['section'], 'parent' => $n['parent'], 'item' => $n['item'], 'other_text' => '',
                 'years_min' => $label === '' ? null : SkillForm::value($label), 'node' => $n];
         }
+        // 子の行があるのに親の行が無ければ、親の行（年数なし）を補う。親の行がすでにあれば、その年数のまま
+        foreach ($rows as $r) {
+            $p = self::parentNode($r['section'], $r['parent']);
+            if ($p === null) continue;
+            $pk = self::key($p['section'], '', $p['item'], '');
+            if (!isset($rows[$pk])) $rows[$pk] = ['section' => $p['section'], 'parent' => '', 'item' => $p['item'], 'other_text' => '', 'years_min' => null, 'node' => $p];
+        }
         $rows = array_values($rows);
 
         // 3. transaction の中で、今の JSON にある項目の行を入れ替える。JSON に無い項目の行は、keep にあれば残す
@@ -137,6 +144,45 @@ class SkillChecks
             'names' => array_map(fn ($r) => $r['other_text'] !== '' ? $r['other_text'] : $r['item'], $rows)];
     }
 
+    // 子の行の親（言語・データベース・OS のグループの親。チェックできるもの）。親の無い行・見出しだけのグループの下の行は null
+    private static function parentNode(string $section, string $parent): ?array
+    {
+        if ($parent === '') return null;
+        $p = SkillForm::byPath($section, '', $parent);
+        return $p !== null && $p['checkable'] && $p['group'] ? $p : null;
+    }
+
+    // 子にチェックがあるのに親にチェックが無い状態を直す（子を選んだら、親にも自動でチェックが入る）。入力と同じ形の状態を受けて返す
+    private static function withParents(array $s): array
+    {
+        foreach (array_merge(array_keys(self::arr($s['chk'] ?? [])), array_keys(self::arr($s['yr'] ?? []))) as $id) {
+            $n = SkillForm::node((string) $id);
+            if (!$n || !self::isOn($s, $n['id'])) continue;
+            $p = self::parentNode($n['section'], $n['parent']);
+            if ($p !== null && !self::isOn($s, $p['id'])) $s['chk'][$p['id']] = '1';
+        }
+        return $s;
+    }
+
+    // 子の行だけあって親の行が無い人に、親の行（年数なし）を補う。冪等で、消さない（マイグレーション 000003 が使う）。
+    // 補った行は source='autoparent'。戻り値は補った行数
+    public static function fillParents(): int
+    {
+        $have = [];
+        foreach (DB::table(self::TABLE)->where('parent', '')->get(['engineer_id', 'section', 'item']) as $x) $have[$x->engineer_id."\0".$x->section."\0".$x->item] = true;
+        $add = [];
+        foreach (DB::table(self::TABLE)->where('parent', '<>', '')->distinct()->get(['engineer_id', 'section', 'parent']) as $x) {
+            $p = self::parentNode($x->section, $x->parent);
+            $k = $x->engineer_id."\0".$x->section."\0".$x->parent;
+            if ($p === null || isset($have[$k])) continue;
+            $have[$k] = true;
+            $add[] = ['engineer_id' => $x->engineer_id, 'section' => $x->section, 'parent' => '', 'item' => $x->parent, 'other_text' => '', 'years_min' => null,
+                'source' => 'autoparent', 'created_at' => now_str(), 'updated_at' => now_str()];
+        }
+        foreach (array_chunk($add, 50) as $c) DB::table(self::TABLE)->insert($c);
+        return count($add);
+    }
+
     // 行の道筋が、今の JSON でチェックできる項目か（無い・見出しだけに変わったものは false）
     private static function isLive(object $x): bool
     {
@@ -155,6 +201,14 @@ class SkillChecks
             if (isset($merged[$k])) { $merged[$k]['years_min'] = self::maxYears($merged[$k]['years_min'], $y); continue; }
             $merged[$k] = ['engineer_id' => $engineerId, 'section' => $r['section'], 'parent' => $r['parent'], 'item' => $r['item'],
                 'other_text' => $r['other_text'] ?? '', 'years_min' => $y, 'source' => $source, 'created_at' => now_str(), 'updated_at' => now_str()];
+        }
+        // 子の行があるのに親の行が無ければ、親の行（年数なし）を補う（移行・ダミー・見本も通る）
+        foreach ($merged as $row) {
+            $p = self::parentNode($row['section'], $row['parent']);
+            if ($p === null) continue;
+            $pk = self::key($p['section'], '', $p['item'], '');
+            if (!isset($merged[$pk])) $merged[$pk] = ['engineer_id' => $engineerId, 'section' => $p['section'], 'parent' => '', 'item' => $p['item'],
+                'other_text' => '', 'years_min' => null, 'source' => $source, 'created_at' => now_str(), 'updated_at' => now_str()];
         }
         $existing = [];
         foreach (DB::table(self::TABLE)->where('engineer_id', $engineerId)->get(['id', 'section', 'parent', 'item', 'other_text', 'years_min']) as $x) {
@@ -214,7 +268,7 @@ class SkillChecks
             if ($n['other']) { $s['oth'][$n['id']][] = $r->other_text; $s['othyr'][$n['id']][] = $label; }
             else $s['yr'][$n['id']] = $label;
         }
-        return $s;
+        return self::withParents($s); // 子だけで親が無い古いデータも、親にチェックが付いた形で出す
     }
 
     // 入力の誤りで戻ったときの状態（送った値のとおり）。形の違う値は捨てる
@@ -229,7 +283,7 @@ class SkillChecks
                 $s[$f][(string) $id] = array_map(fn ($x) => is_string($x) ? $x : '', array_values(self::arr($list)));
             }
         }
-        return $s;
+        return self::withParents($s); // 保存と同じく、子にチェックがあれば親にもチェックを付ける
     }
 
     // 状態のうち、その項目にチェックがあるか（年数だけ選んでいるときも、チェックありとみなす）

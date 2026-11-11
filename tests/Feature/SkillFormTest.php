@@ -153,21 +153,22 @@ class SkillFormTest extends TestCase
     {
         $this->save($this->checkForm([], ['lang/PHP/その他' => [['Haxe', '1年以上'], [' haxe ', '3年以上'], ['', '']]]))->assertRedirect();
         $rows = $this->checkRows($this->eid);
-        $this->assertCount(1, $rows);
-        $this->assertSame('その他', $rows[0]->item);
-        $this->assertSame('Haxe', $rows[0]->other_text);
-        $this->assertSame(3, (int) $rows[0]->years_min);
+        $this->assertCount(2, $rows); // その他の行と、自動で補われた親（PHP）の行
+        $o = $rows->firstWhere('item', 'その他');
+        $this->assertSame('Haxe', $o->other_text);
+        $this->assertSame(3, (int) $o->years_min);
+        $this->assertNotNull($rows->firstWhere('item', 'PHP'));
 
         // 41文字・11個は、何も変えずに断る
         $this->assertBad($this->save($this->checkForm(['lang/PHP' => ''], ['lang/PHP/その他' => [[str_repeat('Z', 41), '']]])));
-        $this->assertCount(1, $this->checkRows($this->eid));
+        $this->assertCount(2, $this->checkRows($this->eid));
         $many = array_map(fn ($i) => ["Zname$i", ''], range(1, 11));
         $this->assertBad($this->save($this->checkForm(['lang/PHP' => ''], ['lang/PHP/その他' => $many])), '1つの「その他」に入れられるのは10個までです。');
-        $this->assertCount(1, $this->checkRows($this->eid));
+        $this->assertCount(2, $this->checkRows($this->eid));
         // 40文字・10個までは通る
         $ten = array_map(fn ($i) => ["Zname$i", ''], range(1, 10));
         $this->save($this->checkForm([], ['lang/PHP/その他' => array_merge([[str_repeat('Z', 40), '']], array_slice($ten, 0, 9)), 'roles/その他' => [['SE', '5年以上']]]))->assertRedirect();
-        $this->assertCount(11, $this->checkRows($this->eid));
+        $this->assertCount(12, $this->checkRows($this->eid)); // PHP のその他10＋役割のその他1＋補われた親（PHP）1
     }
 
     public function test_ac07_checked_other_with_empty_name_is_not_saved_and_noted(): void
@@ -177,18 +178,94 @@ class SkillFormTest extends TestCase
         $this->assertCount(0, $this->checkRows($this->eid));
     }
 
-    public function test_ac08_child_alone_does_not_check_parent(): void
+    // 子だけ送ると、親の行（年数なし）も保存される。親の行が先にあれば、その年数のまま
+    public function test_child_alone_also_saves_parent_with_no_years(): void
     {
-        $this->save($this->checkForm(['lang/PHP/Laravel' => '']))->assertRedirect();
+        $this->save($this->checkForm(['lang/PHP/Laravel' => '3年以上']))->assertRedirect();
         $rows = $this->checkRows($this->eid);
-        $this->assertCount(1, $rows);
-        $this->assertSame('Laravel', $rows[0]->item);
+        $this->assertCount(2, $rows);
+        $this->assertNull($rows->firstWhere('item', 'PHP')->years_min);
+        $this->assertSame(3, (int) $rows->firstWhere('item', 'Laravel')->years_min);
+        // 見出しだけのグループ（開発・運用ツールなど）の項目には、親の行は付かない
+        $this->save($this->checkForm(['dev/バージョン管理/Git' => '']))->assertRedirect();
+        $this->assertSame(['Git'], $this->checkRows($this->eid)->pluck('item')->all());
+    }
+
+    public function test_existing_parent_years_are_not_changed(): void
+    {
+        $this->save($this->checkForm(['lang/PHP' => '5年以上', 'lang/PHP/Laravel' => '']))->assertRedirect();
+        $this->assertSame(5, (int) $this->checkRows($this->eid)->firstWhere('item', 'PHP')->years_min);
+        // 年数だけ選んだ子（チェックなし）でも、親が補われる。画面で選んだ親の年数はそのまま
+        $f = $this->checkForm(['lang/PHP' => '1年以上']);
+        $f['yr'][$this->skillNode('lang/PHP/CakePHP')['id']] = '3年以上';
+        $this->save($f)->assertRedirect();
+        $rows = $this->checkRows($this->eid);
+        $this->assertCount(2, $rows);
+        $this->assertSame(1, (int) $rows->firstWhere('item', 'PHP')->years_min);
+    }
+
+    // 検証エラーで戻っても、子のチェックに合わせて親にチェックが付いて出る
+    public function test_parent_check_stays_after_validation_error(): void
+    {
+        $url = "/engineers/{$this->eid}/skills";
+        $f = $this->checkForm(['lang/Java/Spring Boot' => '']);
+        $f['yr'][$this->skillNode('lang/Go')['id']] = '9年以上'; // 誤り
+        $this->as(self::EG)->from($url)->post($url, $f)->assertRedirect($url);
+        $html = $this->get($url)->assertOk()->getContent();
+        $javaId = $this->skillNode('lang/Java')['id'];
+        $this->assertMatchesRegularExpression('#name="chk\['.preg_quote($javaId, '#').'\]" value="1" data-sf="'.preg_quote($javaId, '#').'" checked#', $html);
+        $this->assertCount(0, $this->checkRows($this->eid));
+    }
+
+    // 子だけで親が無い古いデータは、保存済みの画面でも親にチェックが付いて出る
+    public function test_state_adds_parent_for_old_data_and_migration_000003_is_idempotent(): void
+    {
+        $now = now();
+        DB::table('engineer_skill_checks')->insert(['engineer_id' => $this->eid, 'section' => 'lang', 'parent' => 'PHP', 'item' => 'Laravel', 'other_text' => '',
+            'years_min' => 3, 'source' => 'form', 'created_at' => $now, 'updated_at' => $now]);
+        DB::table('engineer_skill_checks')->insert(['engineer_id' => $this->eid, 'section' => 'dev', 'parent' => 'バージョン管理', 'item' => 'Git', 'other_text' => '',
+            'years_min' => null, 'source' => 'form', 'created_at' => $now, 'updated_at' => $now]);
+        $phpId = $this->skillNode('lang/PHP')['id'];
+        $this->assertSame('1', SkillChecks::state($this->eid)['chk'][$phpId]);
+
+        $mig = require database_path('migrations/2026_11_11_000003_fill_parent_checks.php');
+        $mig->up();
+        $rows = $this->checkRows($this->eid);
+        $this->assertCount(3, $rows);   // PHP が補われた。見出しだけの「バージョン管理」には補わない
+        $php = $rows->firstWhere('item', 'PHP');
+        $this->assertSame('autoparent', $php->source);
+        $this->assertNull($php->years_min);
+        $mig->up();
+        $this->assertCount(3, $this->checkRows($this->eid)); // 何度流しても同じ
+
+        $mig->down(); // 補った行だけ消える
+        $this->assertSame(['Git', 'Laravel'], $this->checkRows($this->eid)->pluck('item')->sort()->values()->all());
+    }
+
+    // 移行・ダミー・見本（saveRows）も、子の行に親を補う
+    public function test_save_rows_adds_parent(): void
+    {
+        SkillChecks::saveRows($this->eid, [['section' => 'db', 'parent' => 'RDB', 'item' => 'MySQL', 'other_text' => '', 'years_min' => 3]], 'migrated');
+        $rows = $this->checkRows($this->eid);
+        $this->assertSame(['MySQL', 'RDB'], $rows->pluck('item')->sort()->values()->all());
+        $this->assertSame('migrated', $rows->firstWhere('item', 'RDB')->source);
+    }
+
+    // 子の字下げ用のかたまり（.sf-children）と、親を外したときに子を外す JS が入っている
+    public function test_children_are_wrapped_for_indent(): void
+    {
+        $html = $this->page()->assertOk()->getContent();
+        $this->assertStringContainsString('class="sf-gitems sf-children"', $html);
+        $this->assertStringContainsString('margin-left: 5mm', file_get_contents(public_path('css/park.css')));
+        $js = file_get_contents(public_path('js/park.js'));
+        $this->assertStringContainsString('function checkParent', $js);
+        $this->assertStringContainsString('function uncheckChildren', $js);
     }
 
     public function test_ac09_same_name_under_two_parents_is_one_technology_for_matching(): void
     {
         $this->save($this->checkForm(['lang/JavaScript/React' => '1年以上', 'lang/TypeScript/React' => '3年以上']))->assertRedirect();
-        $this->assertCount(2, $this->checkRows($this->eid));
+        $this->assertCount(4, $this->checkRows($this->eid)); // React の2行と、補われた親（JavaScript・TypeScript）
         $idx = SkillChecks::indexMany([$this->eid])[$this->eid];
         $this->assertSame('3年以上', $idx[norm_skill('React')]['years']);
         $summary = SkillChecks::summaryMany([$this->eid])[$this->eid];
@@ -328,7 +405,7 @@ class SkillFormTest extends TestCase
 
     public function test_ac19_sheet_check_counts_checks_and_years(): void
     {
-        $five = ['lang/PHP' => '5年以上', 'lang/Java' => '3年以上', 'db/RDB/MySQL' => '1年以上', 'roles/メンバー' => '5年以上', 'phases/要件定義' => ''];
+        $five = ['lang/PHP' => '5年以上', 'lang/Java' => '3年以上', 'db/RDB/MySQL' => '1年以上', 'db/RDB' => '3年以上', 'roles/メンバー' => '5年以上', 'phases/要件定義' => '']; // 子を選ぶと親も入るので、親（RDB）の年数も選んでおく
         $this->save($this->checkForm($five))->assertRedirect();
         $tips = implode("\n", Qa::sheetCheck($this->eid)['tips']);
         $this->assertStringNotContainsString('5つ以上チェック', $tips);

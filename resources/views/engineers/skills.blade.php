@@ -77,7 +77,7 @@
 @else
 <div class="sf-groups">@foreach($sec['groups'] as $g)
 <div class="sf-group"><div class="sf-ghead">@if($g['node']['checkable']){!! $row($g['node'], true) !!}@else<b>{{ $g['node']['item'] }}</b>@endif</div>
-<div class="sf-gitems">@foreach($g['items'] as $n){!! $row($n) !!}@endforeach</div></div>
+<div class="sf-gitems sf-children">@foreach($g['items'] as $n){!! $row($n) !!}@endforeach</div></div>
 @endforeach</div>
 @endif
 </details>
@@ -85,7 +85,7 @@
 @if(count($gone))
 <div class="sf-gone"><b>今の表に無い項目</b>
 <p class="muted">前に保存した項目のうち、今の表に無くなったものです。残すものにチェックを入れたまま保存してください。外して保存すると消えます。</p>
-@foreach($gone as $g)<label class="sf-item"><input type="checkbox" name="keep[]" value="{{ $g->id }}"{{ in_array($g->id, $keep, true) ? ' checked' : '' }}> {{ $g->path ? $g->path.'／' : '' }}{{ $g->name }}{{ $g->years ? '（'.$g->years.'）' : '' }}</label>@endforeach
+<div class="sf-children">@foreach($gone as $g)<label class="sf-item"><input type="checkbox" name="keep[]" value="{{ $g->id }}"{{ in_array($g->id, $keep, true) ? ' checked' : '' }}> {{ $g->path ? $g->path.'／' : '' }}{{ $g->name }}{{ $g->years ? '（'.$g->years.'）' : '' }}</label>@endforeach</div>
 </div>
 @endif
 <template id="sf-tpl-y"><div class="sf-orow"><input maxlength="{{ \App\Support\SkillForm::OTHER_MAX }}" placeholder="名前">{!! $yearSelect('', null) !!} <button type="button" class="link sf-del">×</button></div></template>
