@@ -63,7 +63,7 @@ class SkillFormJsonTest extends TestCase
             'ABAP（SAP）' => ['ABAP', 'SAP'],
             '（メインフレーム系ミドルウェア：CICS・IMS）' => ['CICS', 'IMS'],
             'IBM i（AS/400）' => ['IBM i', 'AS/400'],
-            'プロジェクトマネージャー（PM)' => ['プロジェクトマネージャー', 'PM'],
+            'プロジェクトマネージャー（PM）' => ['プロジェクトマネージャー', 'PM'],
         ];
         foreach ($cases as $name => $expected) {
             $words = SkillForm::words($name);
@@ -100,7 +100,7 @@ class SkillFormJsonTest extends TestCase
         $p = SkillForm::place('Node.js', 'fw', null);
         $this->assertSame(['lang', '', 'Node.js（実行環境）'], [$p['section'], $p['parent'], $p['item']]);
         $p = SkillForm::place('PM', 'role', null);
-        $this->assertSame(['roles', '', 'プロジェクトマネージャー（PM)'], [$p['section'], $p['parent'], $p['item']]);
+        $this->assertSame(['roles', '', 'プロジェクトマネージャー（PM）'], [$p['section'], $p['parent'], $p['item']]);
         foreach (['HTML', 'CSS'] as $w) {
             $p = SkillForm::place($w, 'lang', null);
             $this->assertSame(SkillForm::headingGroupName(), $p['parent'], $w);
