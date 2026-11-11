@@ -16,6 +16,11 @@
      "other": false
     },
     {
+     "name": "PMO",
+     "years": true,
+     "other": false
+    },
+    {
      "name": "プロジェクトリーダー（PL)",
      "years": true,
      "other": false
@@ -27,6 +32,11 @@
     },
     {
      "name": "サブリーダー",
+     "years": true,
+     "other": false
+    },
+    {
+     "name": "品質保証（QA）",
      "years": true,
      "other": false
     },
