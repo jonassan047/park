@@ -204,7 +204,7 @@ class SkillCaseCheckTest extends TestCase
         $this->cleanEg($this->eid);
         $html = $this->open('?case='.$this->caseA)->assertOk()->assertSee('あなたのスキルに無い必須：java、spring boot')->getContent();
         $this->assertStringContainsString('sf-mark', $html);
-        $this->assertStringNotContainsString(' checked', $html);
+        $this->assertDoesNotMatchRegularExpression('/<input[^>]*name="chk\[[^>]*checked/', $html);
     }
 
     public function test_boundary_empty_required_and_preferred(): void

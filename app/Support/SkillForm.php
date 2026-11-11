@@ -19,6 +19,7 @@ class SkillForm
     const SHORT = [
         'roles' => '役割', 'phases' => '工程', 'lang' => '言語・フレームワーク', 'db' => 'データベース', 'os' => 'OS',
         'pm' => 'プロジェクト管理ツール', 'dev' => '開発・運用ツール',
+        'industry' => '業界', 'pmpl' => 'PM/PL の経験',
     ];
 
     // 今のスキルを新しい表に置くときの「その他」の置き場所（分類 => [節, 親]）。OS と、下に無い分類は place() で決める
@@ -35,14 +36,27 @@ class SkillForm
         if (self::$data !== null) return self::$data;
         $file = resource_path('data/skill_form.json');
         $json = is_file($file) ? json_decode((string) file_get_contents($file), true) : null;
-        if (!is_array($json) || !is_array($json['sections'] ?? null) || !is_array($json['yearOptions'] ?? null)) {
+        if (!is_array($json)) throw new \RuntimeException('skill_form.json を読めませんでした。');
+        self::validate($json);
+        return self::$data = self::build($json);
+    }
+
+    // JSON の検査。誤りは \RuntimeException（テストが別の JSON を渡して確かめられるよう、load から分けてある）
+    public static function validate(array $json): void
+    {
+        if (!is_array($json['sections'] ?? null) || !is_array($json['yearOptions'] ?? null)) {
             throw new \RuntimeException('skill_form.json を読めませんでした。');
         }
         if (array_values($json['yearOptions']) !== array_keys(self::YEARS)) {
             throw new \RuntimeException('skill_form.json の yearOptions が、SkillForm::YEARS と違います。');
         }
+        self::build($json); // 項目の重なり・none の置き場所・showIf などは、組み立てながら検査する（結果は捨てる）
+    }
 
-        $nodes = []; $byId = []; $byPath = []; $tree = []; $heading = null;
+    // 検査ずみの JSON から、項目の一覧・木・索引を組み立てる（誤りは \RuntimeException）
+    private static function build(array $json): array
+    {
+        $nodes = []; $byId = []; $byPath = []; $tree = []; $heading = null; $showIf = [];
         $add = function (array $n) use (&$nodes, &$byId, &$byPath) {
             $n['pos'] = count($nodes);
             $path = $n['section']."\0".$n['parent']."\0".$n['item'];
@@ -56,34 +70,83 @@ class SkillForm
         };
         foreach ($json['sections'] as $s) {
             $key = (string) ($s['key'] ?? '');
-            $sec = ['key' => $key, 'title' => (string) ($s['title'] ?? ''), 'short' => self::SHORT[$key] ?? (string) ($s['title'] ?? ''), 'items' => [], 'groups' => []];
+            // match（既定 true）：false の節は、案件とのマッチングに使わない。single：グループごとに1つ選ぶ。showIf：出す条件（検査のあと、項目の id にする）
+            $match = ($s['match'] ?? true) !== false;
+            $single = !empty($s['single']);
+            $sec = ['key' => $key, 'title' => (string) ($s['title'] ?? ''), 'short' => self::SHORT[$key] ?? (string) ($s['title'] ?? ''), 'items' => [], 'groups' => [],
+                'match' => $match, 'single' => $single, 'showIf' => []];
+            if ($single && !empty($s['items'])) throw new \RuntimeException("skill_form.json の「{$key}」は、1つ選ぶ節なので、グループだけにしてください。");
             foreach ($s['items'] ?? [] as $i => $it) {
-                $sec['items'][] = $add(self::make($key, "$key-$i", '', $it, true, false));
+                if (!empty($it['none'])) throw new \RuntimeException("skill_form.json の none は、1つ選ぶ節のグループの中だけで使えます：$key");
+                $sec['items'][] = $add(self::make($key, "$key-$i", '', $it, true, false, $match));
             }
             foreach ($s['groups'] ?? [] as $g => $grp) {
                 $gname = (string) $grp['name'];
+                if ($single && !empty($grp['years'])) throw new \RuntimeException("skill_form.json の1つ選ぶ節のグループに、年数は付けられません：{$key}／{$gname}");
                 $isHeading = !($grp['years'] ?? false) || str_starts_with($gname, self::HEADING_PREFIX);
-                $parent = $add(self::make($key, "$key-$g", '', ['name' => $gname, 'years' => $grp['years'] ?? false, 'other' => false], !$isHeading, true));
+                $parent = $add(self::make($key, "$key-$g", '', ['name' => $gname, 'years' => $grp['years'] ?? false, 'other' => false], !$isHeading, true, $match));
+                $parent['short'] = (string) ($grp['short'] ?? $gname);
                 if ($key === 'lang' && $isHeading && str_starts_with($gname, self::HEADING_PREFIX)) $heading = $gname;
                 $children = [];
                 foreach ($grp['items'] ?? [] as $i => $it) {
-                    $children[] = $add(self::make($key, "$key-$g-$i", $gname, $it, true, false));
+                    if (!empty($it['none']) && !$single) throw new \RuntimeException("skill_form.json の none は、1つ選ぶ節のグループの中だけで使えます：{$key}／{$gname}");
+                    if ($single && !empty($it['other'])) throw new \RuntimeException("skill_form.json の1つ選ぶ節に、「その他」は置けません：{$key}／{$gname}");
+                    $children[] = $add(self::make($key, "$key-$g-$i", $gname, $it, true, false, $match));
                 }
                 $sec['groups'][] = ['node' => $parent, 'items' => $children];
             }
             $tree[] = $sec;
+            if (!empty($s['showIf'])) $showIf[$key] = $s['showIf'];
         }
-        return self::$data = ['nodes' => $nodes, 'byId' => $byId, 'byPath' => $byPath, 'tree' => $tree, 'heading' => $heading];
+        // 出す条件の項目は、チェックできる項目として見つかること
+        foreach ($showIf as $key => $cond) {
+            $ids = [];
+            foreach ((array) ($cond['items'] ?? []) as $name) {
+                $n = isset($byPath[((string) ($cond['section'] ?? ''))."\0\0".$name]) ? $nodes[$byPath[((string) $cond['section'])."\0\0".$name]] : null;
+                if ($n === null || !$n['checkable']) throw new \RuntimeException("skill_form.json の showIf の項目が見つかりません：{$key}／{$name}");
+                $ids[] = $n['id'];
+            }
+            if (!$ids) throw new \RuntimeException("skill_form.json の showIf に項目がありません：$key");
+            foreach ($tree as $i => $sec) if ($sec['key'] === $key) $tree[$i]['showIf'] = $ids;
+        }
+        return ['nodes' => $nodes, 'byId' => $byId, 'byPath' => $byPath, 'tree' => $tree, 'heading' => $heading];
     }
 
     // 項目1つ。checkable は、チェックを付けられるか（見出しだけのグループは false）
-    private static function make(string $section, string $id, string $parent, array $it, bool $checkable, bool $isGroup): array
+    // match が false の節の項目は、照合に使う言葉（words）を空にする（業界などをマッチングに混ぜない）。none は「選んでも行を作らない」印
+    private static function make(string $section, string $id, string $parent, array $it, bool $checkable, bool $isGroup, bool $match = true): array
     {
         $name = (string) $it['name'];
         $other = !$isGroup && !empty($it['other']);
         return ['id' => $id, 'section' => $section, 'parent' => $parent, 'item' => $name, 'group' => $isGroup,
             'years' => $checkable && !empty($it['years']), 'other' => $other, 'checkable' => $checkable,
-            'words' => $other ? [] : self::words($name)];
+            'none' => !$isGroup && !empty($it['none']),
+            'words' => $other || !$match ? [] : self::words($name)];
+    }
+
+    // その節の行を、案件とのマッチング・技術の「使っている人」・一覧のスキル列に使ってよいか（JSON に無い節は true）
+    public static function matchable(string $section): bool
+    {
+        foreach (self::tree() as $sec) if ($sec['key'] === $section) return $sec['match'];
+        return true;
+    }
+
+    // 節の「出す条件」の項目の id（条件が無ければ空）
+    public static function showIfIds(string $sectionKey): array
+    {
+        foreach (self::tree() as $sec) if ($sec['key'] === $sectionKey) return $sec['showIf'];
+        return [];
+    }
+
+    // 1つ選ぶ節のグループ：[グループの id => [選択肢の id…]]
+    public static function singleGroups(): array
+    {
+        $out = [];
+        foreach (self::tree() as $sec) {
+            if (!$sec['single']) continue;
+            foreach ($sec['groups'] as $g) $out[$g['node']['id']] = array_column($g['items'], 'id');
+        }
+        return $out;
     }
 
     // 項目の平らな一覧（JSON の並び。親はその子より前）
@@ -193,7 +256,7 @@ class SkillForm
             elseif (isset(self::PLACES[$category])) [$section, $parent] = self::PLACES[$category];
             else [$section, $parent] = ['lang', self::headingGroupName()];
             $n = self::byPath($section, $parent, self::OTHER);
-            if ($n === null) throw new \RuntimeException("skill_form.json に置き場所がありません：$section／$parent");
+            if ($n === null) throw new \RuntimeException("skill_form.json に置き場所がありません：{$section}／{$parent}");
             $text = mb_substr((string) (clean_name($name) ?? trim($name)), 0, self::OTHER_MAX);
         }
         return ['section' => $n['section'], 'parent' => $n['parent'], 'item' => $n['item'], 'other_text' => $isOther ? $text : '',

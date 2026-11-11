@@ -63,6 +63,7 @@ class SkillChecks
         $oth = self::arr($in['oth'] ?? []); $othyr = self::arr($in['othyr'] ?? []);
         $keep = array_map('intval', array_filter(self::arr($in['keep'] ?? []), 'is_scalar'));
         $badYear = '年数は選択肢から選んでください。';
+        $badOne = '選択肢から選んでください。';
 
         // 1. 年数の検査（知らない項目の分も見る。空は「年数なし」）
         // 空の文字は、Laravel が null にして届ける（ConvertEmptyStringsToNull）。null も「年数なし」として通す
@@ -75,10 +76,22 @@ class SkillChecks
             }
         }
 
+        // 1b. 1つ選ぶ設問（one[グループの id]=選択肢の id）の検査。知らない設問は無視。空は「未回答」
+        $oneRaw = $in['one'] ?? [];
+        if ($oneRaw !== null && $oneRaw !== '' && !is_array($oneRaw)) return ['bad' => $badOne];
+        $oneRaw = is_array($oneRaw) ? $oneRaw : [];
+        $one = [];
+        foreach (SkillForm::singleGroups() as $gid => $cids) {
+            $v = $oneRaw[$gid] ?? null;
+            if ($v === null || $v === '') continue;
+            if (!is_string($v) || !in_array($v, $cids, true)) return ['bad' => $badOne];
+            $one[$gid] = $v;
+        }
+
         // 2. 行を作る（チェックできる項目だけ。知らない id は無視する）
         $rows = []; $skipped = 0;
         foreach (SkillForm::nodes() as $n) {
-            if (!$n['checkable']) continue;
+            if (!$n['checkable'] || self::isSingleSection($n['section'])) continue; // 1つ選ぶ節は、下で one から作る
             $id = $n['id'];
             if ($n['other']) {
                 if (empty($chk[$id])) continue;
@@ -111,6 +124,15 @@ class SkillChecks
             $pk = self::key($p['section'], '', $p['item'], '');
             if (!isset($rows[$pk])) $rows[$pk] = ['section' => $p['section'], 'parent' => '', 'item' => $p['item'], 'other_text' => '', 'years_min' => null, 'node' => $p];
         }
+        // 1つ選ぶ設問の行。出す条件（PM・PL にチェック）を満たさないときは、黙って捨てる（前の回答の行も、入れ替えで消える）
+        foreach ($one as $cid) {
+            $n = SkillForm::node($cid);
+            if ($n['none']) continue; // 「選択しない」は未回答と同じ
+            $cond = SkillForm::showIfIds($n['section']);
+            if ($cond && !array_filter($cond, fn ($c) => !empty($chk[$c]) || (is_string($yr[$c] ?? null) && $yr[$c] !== ''))) continue;
+            $rows[self::key($n['section'], $n['parent'], $n['item'], '')] = ['section' => $n['section'], 'parent' => $n['parent'], 'item' => $n['item'], 'other_text' => '',
+                'years_min' => null, 'node' => $n];
+        }
         $rows = array_values($rows);
 
         // 3. transaction の中で、今の JSON にある項目の行を入れ替える。JSON に無い項目の行は、keep にあれば残す
@@ -142,6 +164,13 @@ class SkillChecks
         }
         return ['ok' => true, 'count' => count($rows), 'skipped' => $skipped,
             'names' => array_map(fn ($r) => $r['other_text'] !== '' ? $r['other_text'] : $r['item'], $rows)];
+    }
+
+    // 1つ選ぶ節（PM/PL の設問など）か
+    private static function isSingleSection(string $section): bool
+    {
+        foreach (SkillForm::tree() as $sec) if ($sec['key'] === $section) return $sec['single'];
+        return false;
     }
 
     // 子の行の親（言語・データベース・OS のグループの親。チェックできるもの）。親の無い行・見出しだけのグループの下の行は null
@@ -259,10 +288,18 @@ class SkillChecks
     // 保存済みの状態。入力と同じ形：chk[id]=1・yr[id]=年数の文・oth[id][]=名前・othyr[id][]=年数の文
     public static function state(int $engineerId): array
     {
-        $s = ['chk' => [], 'yr' => [], 'oth' => [], 'othyr' => []];
+        $s = ['chk' => [], 'yr' => [], 'oth' => [], 'othyr' => [], 'one' => []];
         foreach (DB::table(self::TABLE)->where('engineer_id', $engineerId)->orderBy('id')->get() as $r) {
             $n = SkillForm::byPath($r->section, $r->parent, $r->item);
             if (!$n || !$n['checkable']) continue;
+            if (self::isSingleSection($n['section'])) {
+                // 1つ選ぶ設問：同じ設問に行が2つあれば、id の小さいほう
+                $g = SkillForm::byPath($n['section'], '', $n['parent']);
+                if ($g === null || isset($s['one'][$g['id']])) continue;
+                $s['one'][$g['id']] = $n['id'];
+                $s['chk'][$n['id']] = '1';
+                continue;
+            }
             $label = SkillForm::label(self::years($r)) ?? '';
             $s['chk'][$n['id']] = '1';
             if ($n['other']) { $s['oth'][$n['id']][] = $r->other_text; $s['othyr'][$n['id']][] = $label; }
@@ -274,8 +311,16 @@ class SkillChecks
     // 入力の誤りで戻ったときの状態（送った値のとおり）。形の違う値は捨てる
     public static function stateFromInput(array $in): array
     {
-        $s = ['chk' => [], 'yr' => [], 'oth' => [], 'othyr' => []];
+        $s = ['chk' => [], 'yr' => [], 'oth' => [], 'othyr' => [], 'one' => []];
         foreach (self::arr($in['chk'] ?? []) as $id => $v) if (!empty($v)) $s['chk'][(string) $id] = '1';
+        // 1つ選ぶ設問は、その設問の選択肢のものだけ受ける
+        foreach (SkillForm::singleGroups() as $gid => $cids) {
+            $v = self::arr($in['one'] ?? [])[$gid] ?? null;
+            if (is_string($v) && in_array($v, $cids, true)) {
+                $s['one'][$gid] = $v;
+                if (!SkillForm::node($v)['none']) $s['chk'][$v] = '1'; // 「選択しない」は one にだけ入れる（件数が1つ増えないように）
+            }
+        }
         // 年数は、4つの選択肢のものだけ受ける（誤りの値が「チェックあり」の印にならないように）
         foreach (self::arr($in['yr'] ?? []) as $id => $v) if (is_string($v) && SkillForm::value($v) !== null) $s['yr'][(string) $id] = $v;
         foreach (['oth', 'othyr'] as $f) {
@@ -334,7 +379,7 @@ class SkillChecks
                 $children = [];
                 foreach ($g['items'] as $n) foreach ($entriesOf($n) as $e) $children[] = $e;
                 if ($pr === null && !$children) continue;
-                $entries[] = ['name' => $p['item'], 'years' => SkillForm::label(self::years($pr)), 'checked' => $pr !== null, 'words' => $p['words'], 'children' => $children, 'other' => false];
+                $entries[] = ['name' => $p['short'] ?? $p['item'], 'years' => SkillForm::label(self::years($pr)), 'checked' => $pr !== null, 'words' => $p['words'], 'children' => $children, 'other' => false];
             }
             $sections[] = ['key' => $sec['key'], 'title' => $sec['short'], 'entries' => $entries];
         }
@@ -374,6 +419,7 @@ class SkillChecks
         foreach (array_unique(array_map('intval', $engineerIds)) as $id) $out[$id] = '';
         foreach (array_chunk(array_keys($out), 500) as $chunk) {
             foreach (DB::table(self::TABLE)->whereIn('engineer_id', $chunk)->get(['engineer_id', 'section', 'parent', 'item', 'other_text']) as $r) {
+                if (!SkillForm::matchable($r->section)) continue; // 業界・PM/PL は一覧の列に出さない
                 $n = SkillForm::byPath($r->section, $r->parent, $r->item);
                 $order = ($n ? $n['pos'] : 99999) + (in_array($r->section, ['roles', 'phases'], true) ? 100000 : 0);
                 $list[$r->engineer_id][] = [$order, self::rowName($r, $n)];
@@ -398,6 +444,7 @@ class SkillChecks
         foreach (array_unique(array_map('intval', $engineerIds)) as $id) $out[$id] = [];
         foreach (array_chunk(array_keys($out), 500) as $chunk) {
             foreach (DB::table(self::TABLE)->whereIn('engineer_id', $chunk)->get() as $r) {
+                if (!SkillForm::matchable($r->section)) continue; // 業界・PM/PL はマッチングに使わない
                 $n = SkillForm::byPath($r->section, $r->parent, $r->item);
                 $y = self::years($r);
                 $rank = SkillForm::rank($y);
@@ -420,6 +467,7 @@ class SkillChecks
         $people = [];
         $termsOf = [];
         foreach (DB::table(self::TABLE)->distinct()->get(['engineer_id', 'section', 'parent', 'item', 'other_text']) as $r) {
+            if (!SkillForm::matchable($r->section)) continue;
             $n = SkillForm::byPath($r->section, $r->parent, $r->item);
             $pathKey = self::key($r->section, $r->parent, $r->item, $r->other_text);
             if (!isset($termsOf[$pathKey])) {

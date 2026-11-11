@@ -28,13 +28,13 @@ class SkillFormJsonTest extends TestCase
         $this->assertSame(['1年未満' => 0, '1年以上' => 1, '3年以上' => 3, '5年以上' => 5], SkillForm::YEARS);
     }
 
-    public function test_paths_and_ids_are_unique_and_sections_are_the_seven(): void
+    public function test_paths_and_ids_are_unique_and_sections_are_the_nine(): void
     {
         $nodes = SkillForm::nodes(); // 重なりがあれば、ここで例外
         $paths = array_map(fn ($n) => $n['section']."\0".$n['parent']."\0".$n['item'], $nodes);
         $this->assertSame(count($paths), count(array_unique($paths)));
         $this->assertSame(count($nodes), count(array_unique(array_column($nodes, 'id'))));
-        $this->assertSame(['roles', 'phases', 'lang', 'db', 'os', 'pm', 'dev'], array_column(SkillForm::tree(), 'key'));
+        $this->assertSame(['roles', 'phases', 'lang', 'db', 'os', 'pm', 'dev', 'industry', 'pmpl'], array_column(SkillForm::tree(), 'key'));
         foreach ($nodes as $n) $this->assertSame($n, SkillForm::byPath($n['section'], $n['parent'], $n['item']));
     }
 

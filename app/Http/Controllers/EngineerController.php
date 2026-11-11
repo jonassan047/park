@@ -254,7 +254,7 @@ class EngineerController extends Controller
         // 状態（チェック・年数・その他）は、入力の誤りで戻ったときは送った値、そうでなければ保存済みのもの
         $failed = old('_sf') !== null;
         $state = $failed
-            ? SkillChecks::stateFromInput(['chk' => old('chk'), 'yr' => old('yr'), 'oth' => old('oth'), 'othyr' => old('othyr')])
+            ? SkillChecks::stateFromInput(['chk' => old('chk'), 'yr' => old('yr'), 'oth' => old('oth'), 'othyr' => old('othyr'), 'one' => old('one')])
             : SkillChecks::state($id);
         $gone = SkillChecks::gone($id);
         $keep = $failed ? array_map('intval', array_filter((array) old('keep'), 'is_scalar')) : array_map(fn ($g) => $g->id, $gone);

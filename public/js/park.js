@@ -55,9 +55,24 @@ function addRow(tableId, templateId) {
     });
   }
 
+  // 出す条件のある節（PM/PL の設問）を、条件の項目（PM・PL）のチェックに合わせて出したり隠したりする。
+  // 隠れている間は、中のラジオを無効にして送らない（選んだ印は画面に残すので、付け直せば戻る）
+  function syncShowIf() {
+    document.querySelectorAll('[data-sf-showif]').forEach(function (sec) {
+      const on = sec.getAttribute('data-sf-showif').split(',').some(function (id) {
+        const box = document.querySelector('input[type=checkbox][data-sf="' + id + '"]');
+        if (!box) return false;
+        return box.checked; // 年数を選ぶと自動でチェックが入り、チェックの無い項目の年数は送られない
+      });
+      sec.hidden = !on;
+      sec.querySelectorAll('input[type=radio]').forEach(function (r) { r.disabled = !on; });
+    });
+  }
+
   function init() {
     const form = document.querySelector('.sf-sec');
     if (!form) return;
+    syncShowIf();
     // ページを開いたとき、チェックの無い項目の年数を無効にする
     document.querySelectorAll('.sf-row input[type=checkbox][data-sf]').forEach(function (box) {
       if (!box.closest('.sf-otherrow')) syncYear(box);
@@ -67,6 +82,8 @@ function addRow(tableId, templateId) {
     document.addEventListener('change', function (ev) {
       const t = ev.target;
       if (!t.closest || !t.closest('.sf-sec')) return;
+      // 変えたあとで、PM/PL の節の出し入れを合わせる（年数を選んで自動でチェックが入る分は、下の処理のあとに合わせる）
+      setTimeout(syncShowIf, 0);
       // チェックを変えたとき
       if (t.matches('input[type=checkbox][data-sf]')) {
         const other = t.closest('.sf-otherrow');

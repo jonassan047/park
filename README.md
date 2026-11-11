@@ -152,6 +152,8 @@ FOCUS では、Windows の起動で自動で動く（2026-10-16〜）。Ollama �
 
 ## スキルのチェック式（v0.4.0。2026-11-11）
 
+- **v0.4.1（2026-11-11）：業界と PM/PL の経験を足した**。JSON の最後に2つの節（`industry`＝システム開発経験のある業界・26件、`pmpl`＝PM/PLご経験者の方へ・3問）。保存先は同じ表で、業界は `section=industry`、PM/PL は `section=pmpl`・`parent=設問の文`・`item=選んだ選択肢`（マイグレーションなし）。節に足した鍵：`match`（false＝マッチングに使わない。項目の `words` を空にし、`SkillForm::matchable` が false の節の行は `indexMany`・`usedPeople`・一覧のスキル列（`summaryMany`）・完成度（`Qa::sheetCheck`）から節名で外す）、`single`（true＝グループごとに1つ選ぶ。入力は `one[グループの id]=選択肢の id` で、`chk`・`yr` は無視。選択肢に無い値は「選択肢から選んでください。」で戻す）、`showIf`（出す条件。PM・PL のどちらかにチェックがあるときだけ出す。条件を満たさない回答は、保存で黙って捨てる＝PM・PL を外して保存すると回答が消える）。グループの `short`（表示の短い名前）、項目の `none`（「選択しない」。選んでも行を作らず、未回答と同じ）も足した。画面は、PM・PL の付け外しで `public/js/park.js` が節を出し入れし、隠れている間はラジオを送らない。詳細・スキルシート・Excel には節として出るが、案件の点数・案内・印には使わない。
+
 - 項目の正本は `resources/data/skill_form.json`（元は Excel の Skills.xlsx）。7つの節（役割・工程・言語とフレームワーク・データベース・OS・プロジェクト管理ツール・開発と運用ツール）。`app/Support/SkillForm.php` が読み、項目の一覧（`nodes`）・木（`tree`）・「節／親／名前」の道筋（`byPath`）を出す。道筋が重なると例外。「そのほか（…）」のグループは見出しだけ（チェックなし）。
 - 保存先は新しい表 `engineer_skill_checks`（`section`・`parent`・`item`・`other_text`・`years_min`・`source`）。一意の鍵は `(engineer_id, section, parent, item, other_text)`。項目は名前で持つので、JSON の並びが変わってもデータは崩れない。JSON に無くなった項目の行は DB に残り、画面の下に「今の表に無い項目」として出る（チェックを外して保存すると消える）。
 - 年数は `SkillForm::YEARS`（1年未満＝0・1年以上＝1・3年以上＝3・5年以上＝5・空＝経験あり）。JSON の `yearOptions` と同じ並びでなければ例外。選ばなければ「経験あり」。

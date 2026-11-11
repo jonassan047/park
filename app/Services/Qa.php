@@ -88,7 +88,8 @@ class Qa
     public static function sheetCheck(int $engineerId): array
     {
         $e = DB::table('engineers')->find($engineerId);
-        $skills = DB::table('engineer_skill_checks')->where('engineer_id', $engineerId)->get();
+        // 業界・PM/PL の行は、技術の数にも年数の数にも入れない
+        $skills = DB::table('engineer_skill_checks')->where('engineer_id', $engineerId)->get()->filter(fn ($s) => SkillForm::matchable($s->section))->values();
         $projects = DB::table('engineer_projects')->where('engineer_id', $engineerId)->get();
         $tips = []; $pts = 0;
         if (mb_strlen((string) $e->summary) >= 60) $pts += 15; else $tips[] = '自己PR（60字以上）を書きましょう。得意分野と、どんな現場で力を出せるかを短く。';

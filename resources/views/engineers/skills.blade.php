@@ -67,12 +67,28 @@
 @endif
 <x-card><form method="post" action="{{ url('/engineers/'.$e->id.'/skills') }}">@csrf
 <input type="hidden" name="_sf" value="1">
-<p class="muted">経験のある項目にチェックを入れ、年数を選んでください。年数がわからないときは選ばなくてかまいません（「経験あり」と出ます）。一覧に無いものは「その他」にチェックして名前を書きます。盛らずに、本当に経験のあるものだけを選んでください。</p>
+<p class="muted">経験のある項目にチェックを入れ、年数を選んでください。年数がわからないときは選ばなくてかまいません（「経験あり」と出ます）。業界は当てはまるものすべて、PM/PL の設問は1つずつ選んでください。一覧に無いものは「その他」にチェックして名前を書きます。盛らずに、本当に経験のあるものだけを選んでください。</p>
 <p class="sf-bar"><button type="button" class="btn ghost small" id="sf-open">すべて開く</button> <button type="button" class="btn ghost small" id="sf-close">すべて閉じる</button></p>
 @foreach($form as $sec)
-<details class="sf-sec" data-sf-sec="{{ $sec['key'] }}"{{ $isOpen($sec['key']) ? ' open' : '' }}>
-<summary>{{ $sec['title'] }} <small class="muted">（{{ $count[$sec['key']] ?? 0 }} 件チェック）</small></summary>
-@if($sec['items'])
+@php
+    // 出す条件のある節（PM/PL の設問）：条件の項目（PM・PL）のどれかにチェックがあるときだけ出す。隠れている間、中のラジオは送らない
+    $showOk = !$sec['showIf'] || count(array_filter($sec['showIf'], $isOn)) > 0;
+    $secOpen = $sec['showIf'] ? true : $isOpen($sec['key']);
+@endphp
+<details class="sf-sec" data-sf-sec="{{ $sec['key'] }}"{!! $sec['showIf'] ? ' data-sf-showif="'.e(implode(',', $sec['showIf'])).'"' : '' !!}{{ $secOpen ? ' open' : '' }}{{ $showOk ? '' : ' hidden' }}>
+<summary>{{ $sec['title'] }} <small class="muted">（{{ $count[$sec['key']] ?? 0 }} 件{{ $sec['single'] ? '回答' : 'チェック' }}）</small></summary>
+@if($sec['showIf'])
+<p class="muted">PM・PL のチェックを外して保存すると、ここの回答は消えます。</p>
+@endif
+@if($sec['single'])
+<div class="sf-groups">@foreach($sec['groups'] as $g)
+@php $gid = $g['node']['id']; $picked = $state['one'][$gid] ?? null; @endphp
+<div class="sf-group"><div class="sf-ghead"><b>{{ $g['node']['item'] }}</b></div>
+<div class="sf-gitems sf-children">@foreach($g['items'] as $n)
+<div class="sf-row"><label class="sf-item"><input type="radio" name="one[{{ $gid }}]" value="{{ $n['id'] }}"{{ ($picked === $n['id'] || ($picked === null && $n['none'])) ? ' checked' : '' }}{{ $showOk ? '' : ' disabled' }}> {{ $n['item'] }}</label></div>
+@endforeach</div></div>
+@endforeach</div>
+@elseif($sec['items'])
 <div class="sf-items">@foreach($sec['items'] as $n){!! $row($n) !!}@endforeach</div>
 @else
 <div class="sf-groups">@foreach($sec['groups'] as $g)

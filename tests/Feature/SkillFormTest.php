@@ -67,7 +67,10 @@ class SkillFormTest extends TestCase
             $this->assertGreaterThan($last, $p, '節の順');
             $last = $p;
         }
-        $checkable = array_filter(SkillForm::nodes(), fn ($n) => $n['checkable']);
+        // 1つ選ぶ節（PM/PL の設問）はラジオ（name="one[…]"）なので、チェックの数に入れない
+        $single = array_filter(SkillForm::tree(), fn ($s) => $s['single']);
+        $singleKeys = array_column($single, 'key');
+        $checkable = array_filter(SkillForm::nodes(), fn ($n) => $n['checkable'] && !in_array($n['section'], $singleKeys, true));
         $this->assertSame(count($checkable), substr_count($html, 'name="chk['));
         // 見出しだけのグループ（課題・タスク管理や「そのほか（…）」）にはチェックが無い
         foreach (array_filter(SkillForm::nodes(), fn ($n) => $n['group'] && !$n['checkable']) as $n) {

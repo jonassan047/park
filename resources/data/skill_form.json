@@ -2220,6 +2220,83 @@
      ]
     }
    ]
+  },
+  {
+   "key": "industry",
+   "title": "システム開発経験のある業界は？",
+   "match": false,
+   "items": [
+    {"name": "IT・インターネットサービス", "years": false, "other": false},
+    {"name": "業界横断", "years": false, "other": false},
+    {"name": "化学/素材", "years": false, "other": false},
+    {"name": "原料/金属/石油", "years": false, "other": false},
+    {"name": "日用品", "years": false, "other": false},
+    {"name": "インテリア", "years": false, "other": false},
+    {"name": "アパレル", "years": false, "other": false},
+    {"name": "繊維/電気", "years": false, "other": false},
+    {"name": "自動車/輸送機器", "years": false, "other": false},
+    {"name": "食品/飲料/資料", "years": false, "other": false},
+    {"name": "医薬品/福祉", "years": false, "other": false},
+    {"name": "人材", "years": false, "other": false},
+    {"name": "教育", "years": false, "other": false},
+    {"name": "金融/保険", "years": false, "other": false},
+    {"name": "建設", "years": false, "other": false},
+    {"name": "不動産", "years": false, "other": false},
+    {"name": "インフラ（電力・ガス・水道など）", "years": false, "other": false},
+    {"name": "コンサルティング", "years": false, "other": false},
+    {"name": "音楽", "years": false, "other": false},
+    {"name": "サービス", "years": false, "other": false},
+    {"name": "小売", "years": false, "other": false},
+    {"name": "趣味", "years": false, "other": false},
+    {"name": "機械/物流", "years": false, "other": false},
+    {"name": "マスコミ/メディア", "years": false, "other": false},
+    {"name": "エンターテインメント", "years": false, "other": false},
+    {"name": "公共/官公庁", "years": false, "other": false}
+   ]
+  },
+  {
+   "key": "pmpl",
+   "title": "PM/PLご経験者の方へ",
+   "match": false,
+   "single": true,
+   "showIf": {"section": "roles", "items": ["プロジェクトマネージャー（PM）", "プロジェクトリーダー（PL）"]},
+   "groups": [
+    {
+     "name": "PM/PLを担当したシステム開発プロジェクトで一番長期のものは？",
+     "short": "期間",
+     "years": false,
+     "items": [
+      {"name": "〜半年", "years": false, "other": false},
+      {"name": "半年〜1年", "years": false, "other": false},
+      {"name": "1年〜3年", "years": false, "other": false},
+      {"name": "3年以上", "years": false, "other": false}
+     ]
+    },
+    {
+     "name": "PM/PLを担当したシステム開発プロジェクトでの一日最大利用者数は？",
+     "short": "一日最大利用者数",
+     "years": false,
+     "items": [
+      {"name": "選択しない", "none": true, "years": false, "other": false},
+      {"name": "〜1万人", "years": false, "other": false},
+      {"name": "1万人〜10万人", "years": false, "other": false},
+      {"name": "10万人〜50万人", "years": false, "other": false},
+      {"name": "50万人〜100万人", "years": false, "other": false},
+      {"name": "100万人以上", "years": false, "other": false}
+     ]
+    },
+    {
+     "name": "PM/PLを担当したシステム開発プロジェクトでの人数規模は？",
+     "short": "人数規模",
+     "years": false,
+     "items": [
+      {"name": "5人未満", "years": false, "other": false},
+      {"name": "5人〜29人", "years": false, "other": false},
+      {"name": "30人〜99人", "years": false, "other": false},
+      {"name": "100人以上", "years": false, "other": false}
+     ]
+    }
+   ]
   }
  ]
 }
