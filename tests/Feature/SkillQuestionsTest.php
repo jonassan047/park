@@ -66,6 +66,13 @@ class SkillQuestionsTest extends TestCase
     }
     private function gid(int $g): string { return $this->pmplGroup($g)['node']['id']; }
     // 設問 $g の選択肢 $i の id
+    // 設問 $g の <select> の中で、選択肢 $cid に selected が付いているか
+    private function isSel(string $html, int $g, string $cid): bool
+    {
+        if (!preg_match('#<select name="one\['.preg_quote($this->gid($g), '#').'\]".*?</select>#s', $html, $m)) return false;
+        return str_contains($m[0], '<option value="'.$cid.'" selected');
+    }
+
     private function cid(int $g, int $i): string { return $this->pmplGroup($g)['items'][$i]['id']; }
 
     // 業界（名前の配列）・役割（'pm'・'pl'）・one を付けた送信の形
@@ -203,9 +210,9 @@ class SkillQuestionsTest extends TestCase
         $tag = $this->pmplTag($html);
         $this->assertStringContainsString(' hidden', $tag);
         $this->assertStringContainsString('data-sf-showif="'.$this->pmId().','.$this->plId().'"', $tag);
-        $this->assertSame(1, preg_match_all('#name="one\[[^"]*" value="[^"]*" checked#', $html), '未回答のとき印が付くのは「選択しない」だけ');
-        $this->assertSame(14, substr_count($html, 'type="radio" name="one['));
-        $this->assertSame(14, substr_count($html, ' disabled>'), '隠れている間のラジオは送らない');
+        $this->assertSame(1, preg_match_all('#<option value="[^"]*" selected#', $html), '未回答のとき印が付くのは「選択しない」だけ');
+        $this->assertSame(3, substr_count($html, '<select name="one['));
+        $this->assertSame(3, preg_match_all('#<select name="one\[[^"]*" disabled>#', $html), '隠れている間のプルダウンは送らない');
 
         // PM（年数だけ。チェックなし）を保存すると、出る
         $f = $this->form();
@@ -248,7 +255,7 @@ class SkillQuestionsTest extends TestCase
         // 開き直すと、選んだラジオに印が付く
         $html = $this->page()->getContent();
         foreach ([[0, 2], [1, 2], [2, 1]] as [$g, $i]) {
-            $this->assertStringContainsString('name="one['.$this->gid($g).']" value="'.$this->cid($g, $i).'" checked', $html);
+            $this->assertTrue($this->isSel($html, $g, $this->cid($g, $i)));
         }
         $this->assertStringContainsString('3 件回答', $html);
         // 1問だけ答える（0件・1件）
@@ -333,10 +340,10 @@ class SkillQuestionsTest extends TestCase
         $this->save($this->form([], ['pm'], [$this->gid(1) => $none]))->assertRedirect();
         $this->assertCount(0, $this->rows('pmpl'));
         $html = $this->page()->getContent();
-        $this->assertStringContainsString('name="one['.$this->gid(1).']" value="'.$none.'" checked', $html);
+        $this->assertTrue($this->isSel($html, 1, $none));
         // 未回答のほかの設問は、何も選ばれていない（選択しないが無い）
-        $this->assertStringNotContainsString('name="one['.$this->gid(0).']" value="'.$this->cid(0, 0).'" checked', $html);
-        $this->assertSame(1, preg_match_all('#type="radio" name="one\[[^"]*" value="[^"]*" checked#', $html));
+        $this->assertFalse($this->isSel($html, 0, $this->cid(0, 0)));
+        $this->assertSame(1, preg_match_all('#<option value="[^"]*" selected#', $html));
         // 選択しない → 選ぶ → 選択しない に戻すと行が消える
         $this->save($this->form([], ['pm'], [$this->gid(1) => $this->cid(1, 3)]))->assertRedirect();
         $this->assertCount(1, $this->rows('pmpl'));
@@ -351,7 +358,7 @@ class SkillQuestionsTest extends TestCase
         $url = $this->skUrl();
         $this->as(self::EG)->from($url)->post($url, $f)->assertRedirect($url);
         $html = $this->get($url)->assertOk()->getContent();
-        $this->assertStringContainsString('name="one['.$this->gid(0).']" value="'.$this->cid(0, 2).'" checked', $html);
+        $this->assertTrue($this->isSel($html, 0, $this->cid(0, 2)));
         $this->assertStringContainsString('name="chk['.$this->indId('教育').']"', $html);
         $this->assertCount(0, $this->rows('pmpl'));
     }

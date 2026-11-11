@@ -65,7 +65,7 @@ function addRow(tableId, templateId) {
         return box.checked; // 年数を選ぶと自動でチェックが入り、チェックの無い項目の年数は送られない
       });
       sec.hidden = !on;
-      sec.querySelectorAll('input[type=radio]').forEach(function (r) { r.disabled = !on; });
+      sec.querySelectorAll('select[name^="one["]').forEach(function (r) { r.disabled = !on; });
     });
   }
 

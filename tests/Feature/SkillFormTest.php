@@ -67,7 +67,7 @@ class SkillFormTest extends TestCase
             $this->assertGreaterThan($last, $p, '節の順');
             $last = $p;
         }
-        // 1つ選ぶ節（PM/PL の設問）はラジオ（name="one[…]"）なので、チェックの数に入れない
+        // 1つ選ぶ節（PM/PL の設問）はプルダウン（name="one[…]"）なので、チェックの数に入れない
         $single = array_filter(SkillForm::tree(), fn ($s) => $s['single']);
         $singleKeys = array_column($single, 'key');
         $checkable = array_filter(SkillForm::nodes(), fn ($n) => $n['checkable'] && !in_array($n['section'], $singleKeys, true));

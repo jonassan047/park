@@ -84,9 +84,11 @@
 <div class="sf-groups">@foreach($sec['groups'] as $g)
 @php $gid = $g['node']['id']; $picked = $state['one'][$gid] ?? null; @endphp
 <div class="sf-group"><div class="sf-ghead"><b>{{ $g['node']['item'] }}</b></div>
-<div class="sf-gitems sf-children">@foreach($g['items'] as $n)
-<div class="sf-row"><label class="sf-item"><input type="radio" name="one[{{ $gid }}]" value="{{ $n['id'] }}"{{ ($picked === $n['id'] || ($picked === null && $n['none'])) ? ' checked' : '' }}{{ $showOk ? '' : ' disabled' }}> {{ $n['item'] }}</label></div>
-@endforeach</div></div>
+@php $hasNone = collect($g['items'])->contains(fn($n) => $n['none']); @endphp
+<div class="sf-gitems sf-children"><div class="sf-row"><select name="one[{{ $gid }}]"{{ $showOk ? '' : ' disabled' }}>
+@if(!$hasNone)<option value="">選択してください</option>@endif
+@foreach($g['items'] as $n)<option value="{{ $n['id'] }}"{{ ($picked === $n['id'] || ($picked === null && $n['none'])) ? ' selected' : '' }}>{{ $n['item'] }}</option>
+@endforeach</select></div></div></div>
 @endforeach</div>
 @elseif($sec['items'])
 <div class="sf-items">@foreach($sec['items'] as $n){!! $row($n) !!}@endforeach</div>
