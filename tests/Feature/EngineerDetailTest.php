@@ -37,8 +37,9 @@ class EngineerDetailTest extends TestCase
         // 別名で書かれた案件でも、エンジニアのスキルに当たる
         $c = (object) ['required_skills' => 'Postgres', 'preferred_skills' => '', 'min_years' => null, 'price' => null, 'start_date' => null, 'work_style' => 'any'];
         $e = DB::table('engineers')->where('name', '山田 太郎')->first();
-        DB::table('engineer_skills')->insert(['engineer_id' => $e->id, 'name' => 'PostgreSQL', 'category' => 'db', 'years' => 3, 'level' => 3]);
-        $this->assertContains('必須 Postgres（3年）', Matcher::score($c, $e)['reasons']);
+        DB::table('engineer_skill_checks')->insert(['engineer_id' => $e->id, 'section' => 'db', 'parent' => 'RDB', 'item' => 'PostgreSQL', 'other_text' => '', 'years_min' => 3, 'source' => 'form',
+            'created_at' => now(), 'updated_at' => now()]);
+        $this->assertContains('必須 Postgres（3年以上）', Matcher::score($c, $e)['reasons']);
     }
 
     public function test_case_mail_detects_and_auto_adds_terms(): void

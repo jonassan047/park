@@ -68,7 +68,7 @@ class V030PermsTest extends TestCase
     private function edit(string $kind, int $eid)
     {
         return $kind === 'skills'
-            ? $this->post("/engineers/$eid/skills", $this->skillForm([['name' => 'Laravel', 'cat' => 'fw', 'years' => '2']]))
+            ? $this->post("/engineers/$eid/skills", $this->checkForm(['lang/PHP/Laravel' => '1年以上']))
             : $this->post("/engineers/$eid/projects", ['title' => self::MARK, 'tech' => 'Laravel']);
     }
 
@@ -76,7 +76,7 @@ class V030PermsTest extends TestCase
     private function changed(string $kind, int $eid): bool
     {
         return $kind === 'skills'
-            ? DB::table('engineer_skills')->where('engineer_id', $eid)->exists()
+            ? DB::table('engineer_skill_checks')->where('engineer_id', $eid)->exists()
             : DB::table('engineer_projects')->where('engineer_id', $eid)->where('title', self::MARK)->exists();
     }
 

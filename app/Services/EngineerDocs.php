@@ -67,16 +67,10 @@ class EngineerDocs
         return [$book, $ws];
     }
 
-    // 業務経歴書の「保有スキル」の行。同じ技術は1つにまとめ、得意の印の付いた技術を「【得意】…」で先頭に出す（ひとことは出さない）
+    // 業務経歴書の「保有スキル」の行。節ごとに「【言語・フレームワーク】PHP（5年以上）：Laravel（3年以上）、CakePHP ／ Java：Spring Boot」の形
     public static function skillLines(int $engineerId): array
     {
-        $skills = SkillTable::forDisplay($engineerId);
-        $text = fn ($s) => $s->name.($s->years ? '（'.num_disp($s->years).'年）' : '');
-        $lines = [];
-        $primary = $skills->filter(fn ($s) => !empty($s->is_primary));
-        if ($primary->isNotEmpty()) $lines[] = '【得意】'.implode('、', $primary->map($text)->all());
-        foreach ($skills->groupBy('category') as $cat => $list) $lines[] = '【'.lbl('skillCat', $cat).'】'.implode('、', $list->map($text)->all());
-        return $lines;
+        return array_map(fn ($l) => '【'.$l['title'].'】'.$l['text'], SkillChecks::lines($engineerId));
     }
 
     // ---------- 業務経歴書（スキルシート） ----------

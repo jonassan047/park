@@ -7,7 +7,8 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
-// v0.3.0 受け入れ検証で足した境界ケース（設計書 K-04・K-08・K-10・A-09・R-07 の穴埋め）
+// v0.3.0 受け入れ検証で足した境界ケース（設計書 K-04・A-09・R-07 の穴埋め）。
+// 得意・ひとこと（K-08・K-10）は v0.4.0 で無くなったので消した。K-04 は、その他の名前の長さに合わせた
 class V030AcceptanceExtraTest extends TestCase
 {
     use RefreshDatabase;
@@ -27,14 +28,14 @@ class V030AcceptanceExtraTest extends TestCase
         $this->cleanEg($this->eid);
     }
 
-    private function save(array $rows)
+    private function save(array $form)
     {
-        return $this->as(self::EG)->post("/engineers/{$this->eid}/skills", $this->skillForm($rows));
+        return $this->as(self::EG)->post("/engineers/{$this->eid}/skills", $form);
     }
 
     private function rowCount(): int
     {
-        return DB::table('engineer_skills')->where('engineer_id', $this->eid)->count();
+        return DB::table('engineer_skill_checks')->where('engineer_id', $this->eid)->count();
     }
 
     private function bad($r): void
@@ -42,41 +43,22 @@ class V030AcceptanceExtraTest extends TestCase
         $r->assertSessionHas('flash', fn ($f) => $f['type'] === 'bad');
     }
 
-    // K-04：日本語（全角）でも 40 文字は通り、41 文字は断られる
+    // K-04：日本語（全角）でも「その他」の名前は 40 文字は通り、41 文字は断られる
     public function test_k_04_multibyte_name_boundary(): void
     {
-        $this->bad($this->save([['name' => str_repeat('あ', 41)]]));
+        $this->bad($this->save($this->checkForm([], ['roles/その他' => [[str_repeat('あ', 41), '']]])));
         $this->assertSame(0, $this->rowCount());
-        $this->save([['name' => str_repeat('あ', 40)]])->assertRedirect();
+        $this->save($this->checkForm([], ['roles/その他' => [[str_repeat('あ', 40), '']]]))->assertRedirect();
         $this->assertSame(1, $this->rowCount());
     }
 
-    // K-08：得意ちょうど 5 つは通る（境界）
-    public function test_k_08_exactly_five_primaries_pass(): void
+    // 断られたら今の行も変わらない
+    public function test_refusal_keeps_existing_rows(): void
     {
-        $rows = [];
-        foreach (['Java', 'PHP', 'Laravel', 'Docker', 'MySQL'] as $n) $rows[] = ['name' => $n, 'primary' => 1];
-        $this->save($rows)->assertRedirect();
-        $this->assertSame(5, DB::table('engineer_skills')->where('engineer_id', $this->eid)->where('is_primary', 1)->count());
-    }
-
-    // K-10：全角 200 文字は通り、201 文字は断られ、保存済みの行は変わらない
-    public function test_k_10_note_boundary_keeps_saved_row(): void
-    {
-        $this->save([['name' => 'Java', 'note' => str_repeat('あ', 200)]])->assertRedirect();
-        $this->bad($this->save([['name' => 'Java', 'note' => str_repeat('あ', 201)]]));
-        $this->assertSame(200, mb_strlen(DB::table('engineer_skills')->where('engineer_id', $this->eid)->value('note')));
-    }
-
-    // K-08：断られたら今の行も変わらない
-    public function test_k_08_refusal_keeps_existing_rows(): void
-    {
-        $this->save([['name' => 'Java', 'primary' => 1]])->assertRedirect();
-        $ids = DB::table('engineer_skills')->where('engineer_id', $this->eid)->pluck('id')->all();
-        $rows = [];
-        foreach (['Java', 'PHP', 'Laravel', 'Docker', 'MySQL', 'Redis'] as $n) $rows[] = ['name' => $n, 'primary' => 1];
-        $this->bad($this->save($rows));
-        $this->assertSame($ids, DB::table('engineer_skills')->where('engineer_id', $this->eid)->pluck('id')->all());
+        $this->save($this->checkForm(['lang/Java' => '3年以上']))->assertRedirect();
+        $ids = DB::table('engineer_skill_checks')->where('engineer_id', $this->eid)->pluck('id')->all();
+        $this->bad($this->save($this->checkForm(['lang/PHP' => ''], ['roles/その他' => [[str_repeat('あ', 41), '']]])));
+        $this->assertSame($ids, DB::table('engineer_skill_checks')->where('engineer_id', $this->eid)->pluck('id')->all());
     }
 
     // A-09：未ログインはログインへ。管理者は技術マスタの言葉を足せる

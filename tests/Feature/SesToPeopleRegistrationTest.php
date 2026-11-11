@@ -367,13 +367,14 @@ class SesToPeopleRegistrationTest extends TestCase
             $this->get("/engineers/$eid/edit")->assertRedirect($go);
             $this->post("/engineers/$eid", ['name_sei' => '書換', 'name_mei' => '不可'])->assertRedirect($go);
             $this->post("/engineers/$eid/profile", ['phone' => '090-0000-0000', 'postal_code' => '100-0001', 'address' => 'どこか'])->assertRedirect($go);
-            $this->post("/engineers/$eid/skills", ['skill_name' => ['Java'], 'skill_cat' => ['lang'], 'skill_years' => ['3'], 'skill_level' => ['3']])->assertRedirect($go);
+            $java = \App\Support\SkillForm::byPath('lang', '', 'Java')['id'];
+            $this->post("/engineers/$eid/skills", ['_sf' => '1', 'chk' => [$java => '1'], 'yr' => [$java => '3年以上']])->assertRedirect($go);
             $this->post("/engineers/$eid/projects", ['title' => '不可の案件'])->assertRedirect($go);
         }
         $e = DB::table('engineers')->find($eid);
         $this->assertSame('新人', $e->name_sei);
         $this->assertNull($e->phone);
-        $this->assertSame(0, DB::table('engineer_skills')->where('engineer_id', $eid)->count());
+        $this->assertSame(0, DB::table('engineer_skill_checks')->where('engineer_id', $eid)->count());
         $this->assertSame(0, DB::table('engineer_projects')->where('engineer_id', $eid)->count());
 
         // 本登録のあと：上位が直すと本人の確認が外れ、本人が直しても外れない

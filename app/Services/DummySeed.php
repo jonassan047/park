@@ -292,7 +292,8 @@ class DummySeed
 
                 // マスタにある言葉だけを渡す（技術マスタを増やさない）
                 $rows = array_values(array_filter($e['skills'], fn ($s) => SkillCatalog::find($s[0])));
-                W::saveSkills($id, ['skill_name' => array_column($rows, 0), 'skill_cat' => array_fill(0, count($rows), 'other'), 'skill_years' => array_column($rows, 1), 'skill_level' => array_column($rows, 2)]);
+                // 新しいスキルの表（チェック式）へ。名前は項目の置き場所に変わる。分類は技術マスタのもの
+                SkillChecks::saveFromNames($id, array_map(fn ($s) => [$s[0], SkillCatalog::find($s[0])[2], $s[1]], $rows), 'seed');
 
                 $now = now_str();
                 $consent = in_array($e['state'], ['A', 'B', 'E']);

@@ -134,47 +134,19 @@ class V030ProjectMonthsTest extends TestCase
         $this->assertSame(1, $count());
     }
 
-    // ---------- 注意の文と並べて出す表示 ----------
+    // ---------- 注意の文と月数（v0.4.0 で、スキル画面・詳細から外した） ----------
 
-    private function laravelSkill(float $years): void
+    public function test_p_10_13_career_months_and_warning_are_not_shown_on_skill_screens(): void
     {
-        DB::table('engineer_skills')->insert(['engineer_id' => $this->eid, 'name' => 'Laravel', 'category' => 'fw', 'term_id' => $this->termId('Laravel'), 'years' => $years, 'level' => 3]);
-    }
-
-    public function test_p_10_warns_when_declared_years_exceed_career(): void
-    {
-        $this->laravelSkill(5);
+        // 年数が4段階になり、行ごとの欄も無くなったので、申告と経歴のずれの注意・経歴から数えた月数は出さない（索引は残る）
+        DB::table('engineer_skill_checks')->insert(['engineer_id' => $this->eid, 'section' => 'lang', 'parent' => 'PHP', 'item' => 'Laravel', 'other_text' => '',
+            'years_min' => 5, 'source' => 'form', 'created_at' => now(), 'updated_at' => now()]);
         $this->makeProject($this->eid, ['tech' => 'Laravel', 'period_from' => '2022-11', 'period_to' => '2024-10']); // 24 か月
-        $this->as(self::EG)->get("/engineers/{$this->eid}/skills")->assertOk()->assertSee('経歴に書かれていない期間があります');
-    }
-
-    public function test_p_11_no_warning_when_gap_is_under_a_year(): void
-    {
-        $this->laravelSkill(3);
-        $this->makeProject($this->eid, ['tech' => 'Laravel', 'period_from' => '2022-10', 'period_to' => '2024-10']); // 25 か月（36−25=11）
-        $this->as(self::EG)->get("/engineers/{$this->eid}/skills")->assertOk()->assertDontSee('経歴に書かれていない期間があります');
-    }
-
-    public function test_p_12_no_warning_without_project_for_the_skill(): void
-    {
-        $this->laravelSkill(10);
-        $this->as(self::EG)->get("/engineers/{$this->eid}/skills")->assertOk()->assertDontSee('経歴に書かれていない期間があります');
-    }
-
-    public function test_p_13_declared_years_and_career_side_by_side(): void
-    {
-        $this->laravelSkill(5);
-        $this->makeProject($this->eid, ['tech' => 'Laravel', 'period_from' => '2022-11', 'period_to' => '2024-10']);
         $this->as(self::EG);
-        $this->get("/engineers/{$this->eid}/skills")->assertOk()->assertSee('5年')->assertSee('経歴 2年');
-        $this->get("/engineers/{$this->eid}")->assertOk()->assertSee('5年')->assertSee('経歴 2年');
-    }
-
-    public function test_p_13_warning_is_only_for_the_engineer_himself(): void
-    {
-        $this->laravelSkill(5);
-        $this->makeProject($this->eid, ['tech' => 'Laravel', 'period_from' => '2022-11', 'period_to' => '2024-10']);
-        $this->as('ses2@park.example')->get("/engineers/{$this->eid}")->assertOk()->assertDontSee('経歴に書かれていない期間があります');
+        foreach (["/engineers/{$this->eid}/skills", "/engineers/{$this->eid}"] as $url) {
+            $this->get($url)->assertOk()->assertDontSee('経歴に書かれていない期間があります')->assertDontSee('経歴 2年');
+        }
+        $this->assertSame(24, ProjectSkills::stats([$this->eid])[$this->eid][$this->termId('Laravel')]['months']);
     }
 
     // ---------- 候補は確認済みの言葉だけ ----------
@@ -188,6 +160,5 @@ class V030ProjectMonthsTest extends TestCase
         ]);
         $this->as(self::EG);
         $this->get("/engineers/{$this->eid}/projects/new")->assertOk()->assertSee('ZzReviewed')->assertDontSee('ZzUnreviewed');
-        $this->get("/engineers/{$this->eid}/skills")->assertOk()->assertSee('ZzReviewed')->assertDontSee('ZzUnreviewed');
     }
 }

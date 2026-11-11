@@ -705,10 +705,10 @@ class Workflow
             ->select('k.*', 'c.title')->orderByDesc('k.start_date')->get();
     }
 
-    // スキル表の保存の入口（中身は SkillTable::save）。戻り値は ['ok' => true, 'names' => [...]] か ['bad' => '理由']
+    // スキルのチェックの保存の入口（中身は SkillChecks::save）。戻り値は ['ok' => true, 'count' => n, 'names' => [...], 'skipped' => n] か ['bad' => '理由']
     public static function saveSkills(int $engineerId, array $d): array
     {
-        return SkillTable::save($engineerId, $d);
+        return SkillChecks::save($engineerId, $d);
     }
 
     const PROJ_FIELDS = ['title', 'industry', 'period_from', 'period_to', 'role', 'team_size', 'tech', 'phases', 'description', 'achievements', 'os_tools', 'langs', 'dbs', 'sort'];

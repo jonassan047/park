@@ -116,8 +116,9 @@ class ParkTest extends TestCase
         $this->post('/engineers/2/projects', ['title' => '社内ツールの開発', 'tech' => 'Vue、PHP', 'phases' => ['実装', '単体テスト'],
             'description' => '社内の申請ツールを開発した。画面とAPIの両方を担当し、運用まで行った。', 'achievements' => '申請の処理時間を半分に短縮'])->assertRedirect();
         $this->assertDatabaseHas('engineer_projects', ['title' => '社内ツールの開発', 'phases' => '実装、単体テスト']);
-        $this->post('/engineers/2/skills', ['skill_name' => ['Go', ''], 'skill_cat' => ['lang', 'other'], 'skill_years' => ['1', ''], 'skill_level' => ['2', '3']])->assertRedirect();
-        $this->assertSame(1, DB::table('engineer_skills')->where('engineer_id', 2)->count());
+        $go = \App\Support\SkillForm::byPath('lang', '', 'Go')['id'];
+        $this->post('/engineers/2/skills', ['_sf' => '1', 'chk' => [$go => '1'], 'yr' => [$go => '1年以上'], '_sf_end' => '1'])->assertRedirect();
+        $this->assertSame(1, DB::table('engineer_skill_checks')->where('engineer_id', 2)->count());
         $this->post('/engineers/2/messages', ['body' => '見てください', 'review' => '1'])->assertRedirect();
         $this->assertDatabaseHas('messages', ['engineer_id' => 2, 'read_by_admin' => 0]);
     }

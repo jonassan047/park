@@ -51,7 +51,7 @@ class SeedDummyTest extends TestCase
     private function counts(): array
     {
         $o = [];
-        foreach (['users', 'ses_companies', 'engineers', 'engineer_skills', 'app_notifications', 'audit_log', 'mail_outbox', 'skill_terms'] as $t) $o[$t] = DB::table($t)->count();
+        foreach (['users', 'ses_companies', 'engineers', 'engineer_skill_checks', 'app_notifications', 'audit_log', 'mail_outbox', 'skill_terms'] as $t) $o[$t] = DB::table($t)->count();
         $o['direct'] = DB::table('ses_companies')->where('kind', 'direct')->count();
         return $o;
     }
@@ -98,7 +98,8 @@ class SeedDummyTest extends TestCase
         $this->assertSame(8, DB::table('engineers')->where('email', 'like', 'eg-d%@park.example')->where('ses_id', $direct)->count());
         foreach (DB::table('engineers')->where('email', 'like', 'eg-d%@park.example')->get() as $e) {
             $this->assertSame(1, DB::table('users')->where('role', 'eg')->where('email', $e->email)->where('engineer_id', $e->id)->count());
-            $this->assertGreaterThanOrEqual(3, DB::table('engineer_skills')->where('engineer_id', $e->id)->count(), "skills {$e->id}");
+            // 3つ選んだ中に HTML と CSS があると、1つの項目（HTML/CSS）にまとまるので、2つ以上
+            $this->assertGreaterThanOrEqual(2, DB::table('engineer_skill_checks')->where('engineer_id', $e->id)->count(), "skills {$e->id}");
         }
     }
 
@@ -185,7 +186,7 @@ class SeedDummyTest extends TestCase
         $this->go();
         $this->artisan('park:purge-samples', ['--yes' => true])->assertExitCode(0);
         foreach (['users', 'ses_companies', 'engineers'] as $t) $this->assertSame(0, DB::table($t)->where('email', 'like', '%@park.example')->count(), $t);
-        $this->assertSame(0, DB::table('engineer_skills')->whereNotIn('engineer_id', DB::table('engineers')->select('id'))->count());
+        $this->assertSame(0, DB::table('engineer_skill_checks')->whereNotIn('engineer_id', DB::table('engineers')->select('id'))->count());
         $this->assertSame(0, DB::table('users')->where('email', 'like', '%-d%@park.example')->count());
         $this->assertSame(1, DB::table('users')->where('email', 'real-admin@example.com')->count());
         $this->assertSame($realUsers, DB::table('users')->count());
@@ -296,7 +297,7 @@ class SeedDummyTest extends TestCase
     public function test_failure_leaks_nothing_and_changes_nothing(): void
     {
         // 途中（エンジニアのスキル保存）で DB が失敗する状況を作る
-        DB::unprepared("CREATE TRIGGER boom BEFORE INSERT ON engineer_skills BEGIN SELECT RAISE(ABORT, 'boom'); END");
+        DB::unprepared("CREATE TRIGGER boom BEFORE INSERT ON engineer_skill_checks BEGIN SELECT RAISE(ABORT, 'boom'); END");
         $before = $this->counts();
         [$c, $out] = $this->go();
         $this->assertSame(1, $c, $out);

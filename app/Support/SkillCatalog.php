@@ -115,7 +115,7 @@ class SkillCatalog
     {
         $word = trim($word);
         if ($word === '' || mb_strlen($word) > 40 || self::find($word)) return null;
-        DB::table('skill_terms')->insert(['name' => $word, 'category' => $category, 'source' => 'auto', 'reviewed' => false, 'created_at' => now(), 'updated_at' => now()]);
+        DB::table('skill_terms')->insertOrIgnore(['name' => $word, 'category' => $category, 'source' => 'auto', 'reviewed' => false, 'created_at' => now(), 'updated_at' => now()]);
         self::forget();
         return $word;
     }

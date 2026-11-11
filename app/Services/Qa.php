@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\SkillForm;
 use Illuminate\Support\Facades\DB;
 
 // 面談対策の Q&A と、スキルシートの完成度。
@@ -59,7 +60,7 @@ class Qa
             $ps = self::projectsUsing($projects, $r);
             if ($s) {
                 $add("必須：$r", "$r の経験について、年数と担当した範囲を教えてください。",
-                    ($s['years'] ? num_disp($s['years']).'年。' : '').($ps ? '使った案件：'.implode('、', array_map([self::class, 'projLine'], array_slice($ps, 0, 2))).'。' : '')
+                    ($s['years'] ? $s['years'].'。' : '').($ps ? '使った案件：'.implode('、', array_map([self::class, 'projLine'], array_slice($ps, 0, 2))).'。' : '')
                     .'「何を作ったか」「どこまで1人でできるか」「困ったことと解決」を1つずつ。');
             } else {
                 $add("必須：{$r}（要準備）", "$r のご経験はありますか。",
@@ -87,13 +88,18 @@ class Qa
     public static function sheetCheck(int $engineerId): array
     {
         $e = DB::table('engineers')->find($engineerId);
-        $skills = DB::table('engineer_skills')->where('engineer_id', $engineerId)->get();
+        $skills = DB::table('engineer_skill_checks')->where('engineer_id', $engineerId)->get();
         $projects = DB::table('engineer_projects')->where('engineer_id', $engineerId)->get();
         $tips = []; $pts = 0;
         if (mb_strlen((string) $e->summary) >= 60) $pts += 15; else $tips[] = '自己PR（60字以上）を書きましょう。得意分野と、どんな現場で力を出せるかを短く。';
         if ($e->strengths) $pts += 5; else $tips[] = '強み（ひとこと）を書きましょう。';
-        if ($skills->count() >= 5) $pts += 15; else $tips[] = 'スキルは5つ以上、年数とレベルを入れましょう。';
-        if ($skills->every(fn ($s) => $s->years)) $pts += 5; else $tips[] = 'スキルの年数が空のものがあります。';
+        if ($skills->count() >= 5) $pts += 15; else $tips[] = 'スキルは、経験のある項目に5つ以上チェックを入れましょう。';
+        // 年数を選べる項目（JSON で years が true のもの・親・その他）が、全部年数ありなら加点。年数を選べない項目は数えない
+        $noYears = $skills->filter(function ($s) {
+            $n = SkillForm::byPath($s->section, $s->parent, $s->item);
+            return $n && $n['years'] && $s->years_min === null;
+        })->count();
+        if (!$noYears) $pts += 5; else $tips[] = '年数を選んでいない項目があります（「経験あり」と出ます）。わかる範囲で選びましょう。';
         if ($projects->count() >= 2) $pts += 20; else $tips[] = '経験したプロジェクトを2件以上入れましょう。';
         $noAch = $projects->filter(fn ($p) => !$p->achievements || !preg_match('/\d/', $p->achievements))->count();
         if ($projects->count() && !$noAch) $pts += 15; elseif ($noAch) $tips[] = "成果が数字で書かれていない案件が {$noAch} 件あります（例：処理時間を30%短縮、月200件の問い合わせを削減）。";

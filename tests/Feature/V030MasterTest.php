@@ -47,6 +47,13 @@ class V030MasterTest extends TestCase
         return (int) DB::table('engineer_skills')->insertGetId($v + ['engineer_id' => $eid, 'term_id' => $termId, 'name' => $name, 'category' => 'tool', 'years' => 1, 'level' => 3]);
     }
 
+    // 新しいスキルの表（チェック式）に、「その他」に書いた名前を1行入れる
+    private function checkRow(int $eid, string $name): void
+    {
+        DB::table('engineer_skill_checks')->insert(['engineer_id' => $eid, 'section' => 'dev', 'parent' => 'IDE・エディタ', 'item' => 'その他', 'other_text' => $name,
+            'years_min' => null, 'source' => 'form', 'created_at' => now(), 'updated_at' => now()]);
+    }
+
     private function projectRows(int $termId): int
     {
         return DB::table('engineer_project_skills')->where('term_id', $termId)->count();
@@ -127,9 +134,9 @@ class V030MasterTest extends TestCase
         $e3 = $this->engId('eg3@park.example');
         $this->cleanEg($e1);
         $this->cleanEg($e3);
-        $this->skillRow($e1, $this->new, 'ZzNew');                                            // スキル表だけ
+        $this->checkRow($e1, 'ZzNew');                                                        // スキルのチェックだけ（新しい表。「その他」に書いた名前）
         $this->makeProject($this->eid, ['tech' => 'ZzNew']);                                  // 経歴だけ
-        $this->skillRow($e3, $this->new, 'ZzNew');                                            // 両方（2件の経歴があっても1人）
+        $this->checkRow($e3, 'ZzNew');                                                        // 両方（2件の経歴があっても1人）
         $this->makeProject($e3, ['tech' => 'ZzNew']);
         $this->makeProject($e3, ['tech' => 'ZzNew、Docker']);
 

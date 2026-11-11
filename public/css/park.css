@@ -124,9 +124,27 @@ a.stat.link:hover { border-color: var(--blue-dark); }
 .dl dt { color: var(--sub); font-size: 12px; padding-top: 2px; }
 .dl dd { margin: 0; }
 
-.skillgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px; }
-.sk { display: grid; grid-template-columns: 1fr auto; font-size: 12px; border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; }
-.sk b { font-size: 13px; } .sk .lv { color: var(--warn); }
+/* スキルのチェック画面（engineers/skills.blade.php）：節ごとに開閉し、項目は画面の幅で列の数が変わる */
+.sf-bar { margin: 6px 0 10px; }
+.sf-sec { border: 1px solid var(--line); border-radius: 10px; margin-bottom: 10px; background: #fff; }
+.sf-sec > summary { cursor: pointer; padding: 8px 14px; font-weight: 700; background: var(--blue2); border-radius: 10px; }
+.sf-sec[open] > summary { border-bottom: 1px solid var(--line); border-radius: 10px 10px 0 0; }
+.sf-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px 12px; padding: 10px 14px; }
+.sf-groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; padding: 10px 14px; align-items: start; }
+.sf-group { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
+.sf-ghead { border-bottom: 1px dashed var(--line); margin-bottom: 4px; padding-bottom: 2px; }
+.sf-gitems { display: flex; flex-direction: column; gap: 2px; }
+.sf-row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; }
+.sf-item { cursor: pointer; }
+.sf-item.hit { font-weight: 700; color: var(--blue-dark); }
+.sf-mark { background: var(--warn); color: #fff; border-radius: 6px; padding: 0 6px; font-size: 11px; font-weight: 400; }
+.sf-yr { font-size: 12px; padding: 1px 2px; }
+.sf-other { flex-basis: 100%; padding-left: 22px; }
+.sf-other[hidden] { display: none; }
+.sf-orow { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+.sf-orow input { width: 150px; }
+.sf-gone { border: 1px dashed var(--warn); border-radius: 8px; padding: 8px 12px; margin: 10px 0; }
+.sf-gone .sf-item { display: block; }
 .proj { border-bottom: 1px dashed var(--line); padding: 8px 0 10px; }
 .projhead { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
 .projhead a { margin-left: auto; }
@@ -163,7 +181,7 @@ a.stat.link:hover { border-color: var(--blue-dark); }
 .sheet table.grid, .sheet table.sheetinfo { border: 1px solid var(--line); }
 .sheet td, .sheet th { border: 1px solid var(--line); }
 .sheet .lead { font-weight: 600; color: var(--blue); }
-.sk2 { display: inline-block; margin-right: 10px; } .sk2.hit { font-weight: 700; color: var(--blue); }
+.sk2 { display: inline-block; margin-right: 10px; } .sk2.hit, .sk2 .hit { font-weight: 700; color: var(--blue); }
 .sp { border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; margin-bottom: 8px; break-inside: avoid; }
 .sph { display: flex; justify-content: space-between; } .spm { font-size: 12px; color: var(--sub); }
 .invoice .total { font-size: 20px; font-weight: 700; border-bottom: 2px solid var(--ink); display: inline-block; padding-right: 30px; }

@@ -70,7 +70,8 @@ class SampleSeeder extends Seeder
             $id = W::createEngineer($sesId, $data + ['phone' => '090-0000-0001', 'postal_code' => '100-0001', 'address' => '東京都千代田区（見本）'], $admin, false);
             // 本登録が済んだ形（必須項目・同意・本人の確認が済み、候補に出る）
             DB::table('engineers')->where('id', $id)->update(['consent_at' => now_str(), 'self_confirmed_at' => now_str(), 'registered_at' => now_str()]);
-            W::saveSkills($id, ['skill_name' => array_column($skills, 0), 'skill_cat' => array_column($skills, 1), 'skill_years' => array_column($skills, 2), 'skill_level' => array_column($skills, 3)]);
+            // 新しいスキルの表（チェック式）へ。[名前, 分類, 年数, レベル] のうち、レベルは使わない
+            \App\Services\SkillChecks::saveFromNames($id, array_map(fn ($s) => [$s[0], $s[1], $s[2]], $skills), 'seed');
             foreach ($projects as $p) W::saveProject($id, $p);
             if (!empty($data['email'])) W::createUser($data['email'], $data['name'], 'eg', $pw, ['ses_id' => $sesId, 'engineer_id' => $id]);
             $engIds[] = $id;

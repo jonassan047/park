@@ -24,7 +24,7 @@ class EmptyStateTest extends TestCase
     {
         parent::setUp();
         foreach (['application_events', 'interviews', 'follow_ups', 'contracts', 'invoices', 'applications', 'case_offers', 'case_mails', 'messages', 'ai_jobs',
-            'engineer_skills', 'engineer_project_skills', 'engineer_projects', 'engineer_histories', 'engineer_certs', 'engineer_files', 'engineers', 'cases',
+            'engineer_skills', 'engineer_skill_checks', 'engineer_project_skills', 'engineer_projects', 'engineer_histories', 'engineer_certs', 'engineer_files', 'engineers', 'cases',
             'mail_outbox', 'app_notifications', 'audit_log', 'sessions', 'users', 'ses_companies'] as $t) {
             DB::table($t)->delete();
         }

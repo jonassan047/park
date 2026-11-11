@@ -1,0 +1,2215 @@
+{
+ "yearOptions": [
+  "1年未満",
+  "1年以上",
+  "3年以上",
+  "5年以上"
+ ],
+ "sections": [
+  {
+   "key": "roles",
+   "title": "システム開発プロジェクトで担当経験のある役割は",
+   "items": [
+    {
+     "name": "プロジェクトマネージャー（PM)",
+     "years": true,
+     "other": false
+    },
+    {
+     "name": "プロジェクトリーダー（PL)",
+     "years": true,
+     "other": false
+    },
+    {
+     "name": "チームリーダー",
+     "years": true,
+     "other": false
+    },
+    {
+     "name": "サブリーダー",
+     "years": true,
+     "other": false
+    },
+    {
+     "name": "メンバー",
+     "years": true,
+     "other": false
+    },
+    {
+     "name": "その他",
+     "years": true,
+     "other": true
+    }
+   ]
+  },
+  {
+   "key": "phases",
+   "title": "システム開発プロジェクトで担当経験のある工程は",
+   "items": [
+    {
+     "name": "要件定義",
+     "years": false,
+     "other": false
+    },
+    {
+     "name": "基本設計",
+     "years": false,
+     "other": false
+    },
+    {
+     "name": "詳細設計",
+     "years": false,
+     "other": false
+    },
+    {
+     "name": "製造開発",
+     "years": false,
+     "other": false
+    },
+    {
+     "name": "テスト仕様設計",
+     "years": false,
+     "other": false
+    },
+    {
+     "name": "単体テスト",
+     "years": false,
+     "other": false
+    },
+    {
+     "name": "結合テスト",
+     "years": false,
+     "other": false
+    },
+    {
+     "name": "総合テスト",
+     "years": false,
+     "other": false
+    },
+    {
+     "name": "受け入れテスト",
+     "years": false,
+     "other": false
+    },
+    {
+     "name": "パフォーマンスチューニング",
+     "years": false,
+     "other": false
+    },
+    {
+     "name": "運用",
+     "years": false,
+     "other": false
+    },
+    {
+     "name": "保守",
+     "years": false,
+     "other": false
+    },
+    {
+     "name": "その他",
+     "years": false,
+     "other": true
+    }
+   ]
+  },
+  {
+   "key": "lang",
+   "title": "開発言語とフレームワーク",
+   "groups": [
+    {
+     "name": "PHP",
+     "years": true,
+     "items": [
+      {
+       "name": "Laravel",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "CodeIgniter",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "CakePHP",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Symfony",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Yii",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Slim",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "FuelPHP",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Phalcon",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "WordPress",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "EC-CUBE",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": true,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "Java",
+     "years": true,
+     "items": [
+      {
+       "name": "Spring Boot",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Spring Framework",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Struts",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Seasar2",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Play Framework",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Jakarta EE (Java EE)",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Quarkus",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Micronaut",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "JSF",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "MyBatis",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Hibernate",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": true,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "Kotlin",
+     "years": true,
+     "items": [
+      {
+       "name": "Ktor",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Spring Boot",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Jetpack Compose",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Compose Multiplatform",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": true,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "Scala",
+     "years": true,
+     "items": [
+      {
+       "name": "Play Framework",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Akka",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Apache Spark",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": true,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "JavaScript",
+     "years": true,
+     "items": [
+      {
+       "name": "React",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Vue.js",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Angular",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Svelte",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "jQuery",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Next.js",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Nuxt.js",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Remix",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Astro",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Express",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Electron",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "React Native",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": true,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "TypeScript",
+     "years": true,
+     "items": [
+      {
+       "name": "React",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Next.js",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Vue.js",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Angular",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "NestJS",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Nuxt.js",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Express",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Remix",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Deno Fresh",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": true,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "Node.js（実行環境）",
+     "years": true,
+     "items": [
+      {
+       "name": "Express",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "NestJS",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Fastify",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Koa",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Hono",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": true,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "Python",
+     "years": true,
+     "items": [
+      {
+       "name": "Django",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Flask",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "FastAPI",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Pyramid",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Tornado",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Streamlit",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Pandas / NumPy",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "PyTorch",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "TensorFlow",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "scikit-learn",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": true,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "Ruby",
+     "years": true,
+     "items": [
+      {
+       "name": "Ruby on Rails",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Sinatra",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Hanami",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": true,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "Go",
+     "years": true,
+     "items": [
+      {
+       "name": "Gin",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Echo",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Fiber",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Beego",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Buffalo",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": true,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "C#",
+     "years": true,
+     "items": [
+      {
+       "name": "ASP.NET Core",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "ASP.NET MVC",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": ".NET Framework",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Blazor",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Unity",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Xamarin / .NET MAUI",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "WPF",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "WinForms",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Entity Framework",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": true,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "VB.NET",
+     "years": true,
+     "items": [
+      {
+       "name": "WinForms",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "ASP.NET Web Forms",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "WPF",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": true,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "C",
+     "years": true,
+     "items": [
+      {
+       "name": "組込み（RTOS・ミドルウェア）",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "GTK",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": true,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "C++",
+     "years": true,
+     "items": [
+      {
+       "name": "Qt",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Boost",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "MFC",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Unreal Engine",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "openFrameworks",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": true,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "Rust",
+     "years": true,
+     "items": [
+      {
+       "name": "Actix Web",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Axum",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Rocket",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Tauri",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": true,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "Swift",
+     "years": true,
+     "items": [
+      {
+       "name": "SwiftUI",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "UIKit",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Vapor",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": true,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "Objective-C",
+     "years": true,
+     "items": [
+      {
+       "name": "Cocoa Touch",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": true,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "Dart",
+     "years": true,
+     "items": [
+      {
+       "name": "Flutter",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": true,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "Perl",
+     "years": true,
+     "items": [
+      {
+       "name": "Catalyst",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Mojolicious",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": true,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "COBOL",
+     "years": true,
+     "items": [
+      {
+       "name": "（メインフレーム系ミドルウェア：CICS・IMS）",
+       "years": true,
+       "other": false
+      }
+     ]
+    },
+    {
+     "name": "VB / VBA",
+     "years": true,
+     "items": [
+      {
+       "name": "Excel VBA",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Access VBA",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": true,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "Elixir",
+     "years": true,
+     "items": [
+      {
+       "name": "Phoenix",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": true,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "R",
+     "years": true,
+     "items": [
+      {
+       "name": "Shiny",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "tidyverse",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": true,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "シェル系",
+     "years": true,
+     "items": [
+      {
+       "name": "Bash",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "PowerShell",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": true,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "ABAP（SAP）",
+     "years": true,
+     "items": [
+      {
+       "name": "SAP Fiori",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "SAP BTP",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": true,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "Apex（Salesforce）",
+     "years": true,
+     "items": [
+      {
+       "name": "Lightning Web Components",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Visualforce",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": true,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "そのほか（言語＋フレームワークではなく括りで管理）",
+     "years": true,
+     "items": [
+      {
+       "name": "HTML/CSS（Sass・Bootstrap・Tailwind CSS・Material UI）",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "SQL（PL/SQL・T-SQL）",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "アセンブラ",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Lua",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Haskell",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Julia",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Groovy（Grails・Gradle）",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": true,
+       "other": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "key": "db",
+   "title": "データベース",
+   "groups": [
+    {
+     "name": "RDB",
+     "years": true,
+     "items": [
+      {
+       "name": "MySQL",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "MariaDB",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "PostgreSQL",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Oracle Database",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "SQL Server",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "SQLite",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "IBM Db2",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Aurora",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Amazon RDS",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Cloud SQL",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Azure SQL Database",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Snowflake",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "BigQuery",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Redshift",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": true,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "NoSQL",
+     "years": true,
+     "items": [
+      {
+       "name": "MongoDB",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Redis",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "DynamoDB",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Cassandra",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Firestore",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Elasticsearch",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Neo4j",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "CouchDB",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "HBase",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Memcached",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Cosmos DB",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": true,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "ORM・クエリ",
+     "years": true,
+     "items": [
+      {
+       "name": "Prisma",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Eloquent",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "ActiveRecord",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "SQLAlchemy",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "TypeORM",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Doctrine",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": true,
+       "other": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "key": "os",
+   "title": "オペレーティング・システム",
+   "groups": [
+    {
+     "name": "Linux",
+     "years": true,
+     "items": [
+      {
+       "name": "Red Hat Enterprise Linux (RHEL)",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "CentOS",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "AlmaLinux / Rocky Linux",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Ubuntu Server",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Debian",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Amazon Linux",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "SUSE Linux Enterprise",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": true,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "Windows Server",
+     "years": true,
+     "items": [
+      {
+       "name": "2012 / 2016 / 2019 / 2022",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": true,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "UNIX",
+     "years": true,
+     "items": [
+      {
+       "name": "Solaris",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "AIX",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "HP-UX",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "FreeBSD",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": true,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "メインフレーム",
+     "years": true,
+     "items": [
+      {
+       "name": "z/OS",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "IBM i（AS/400）",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": true,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "モバイル OS",
+     "years": true,
+     "items": [
+      {
+       "name": "iOS / iPadOS",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "Android",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "HarmonyOS",
+       "years": true,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": true,
+       "other": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "key": "pm",
+   "title": "プロジェクト管理ツール",
+   "groups": [
+    {
+     "name": "課題・タスク管理",
+     "years": false,
+     "items": [
+      {
+       "name": "Jira",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Backlog",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Redmine",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Trello",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Asana",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "GitHub Projects",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "GitLab Issues",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Notion",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "ClickUp",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Wrike",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Monday.com",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Linear",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "YouTrack",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Azure Boards",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": false,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "ドキュメント・情報共有",
+     "years": false,
+     "items": [
+      {
+       "name": "Confluence",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Notion",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Google Workspace",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Microsoft 365（Teams・SharePoint）",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Qiita Team",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "esa",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Wiki",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": false,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "コミュニケーション",
+     "years": false,
+     "items": [
+      {
+       "name": "Slack",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Microsoft Teams",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Chatwork",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Zoom",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Discord",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Google Meet",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": false,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "デザイン・設計共有",
+     "years": false,
+     "items": [
+      {
+       "name": "Figma",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Adobe XD",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Sketch",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Miro",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "draw.io",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Backlog Wiki",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": false,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "スケジュール・工数",
+     "years": false,
+     "items": [
+      {
+       "name": "MS Project",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Excel",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Gantt Chart 系ツール",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": false,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "開発手法",
+     "years": false,
+     "items": [
+      {
+       "name": "Scrum",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Kanban",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "ウォーターフォール",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "アジャイル",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": false,
+       "other": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "key": "dev",
+   "title": "開発・運用ツール",
+   "groups": [
+    {
+     "name": "バージョン管理",
+     "years": false,
+     "items": [
+      {
+       "name": "Git",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "GitHub",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "GitLab",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Bitbucket",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Subversion",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Backlog Git",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": false,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "CI/CD",
+     "years": false,
+     "items": [
+      {
+       "name": "GitHub Actions",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "GitLab CI/CD",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Jenkins",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "CircleCI",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Bitbucket Pipelines",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "AWS CodePipeline",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Azure DevOps",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "ArgoCD",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": false,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "クラウド",
+     "years": false,
+     "items": [
+      {
+       "name": "AWS",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Azure",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "GCP",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Heroku",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Vercel",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Netlify",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "さくらのクラウド",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Firebase",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Cloudflare",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": false,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "コンテナ・オーケストレーション",
+     "years": false,
+     "items": [
+      {
+       "name": "Docker",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Kubernetes",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "ECS / EKS",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Docker Compose",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": false,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "IaC・構成管理",
+     "years": false,
+     "items": [
+      {
+       "name": "Terraform",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Ansible",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "CloudFormation",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Chef",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Puppet",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Vagrant",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Pulumi",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": false,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "Webサーバー・AP",
+     "years": false,
+     "items": [
+      {
+       "name": "Apache",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Nginx",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Tomcat",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "IIS",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": false,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "監視・ログ",
+     "years": false,
+     "items": [
+      {
+       "name": "Datadog",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "New Relic",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Zabbix",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Prometheus",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Grafana",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "CloudWatch",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Sentry",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Splunk",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Elastic Stack",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Nagios",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": false,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "テスト",
+     "years": false,
+     "items": [
+      {
+       "name": "JUnit",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Selenium",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Jest",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Cypress",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Playwright",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "PHPUnit",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Postman",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Pytest",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Appium",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "JMeter",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Storybook",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": false,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "ビルド・パッケージ管理",
+     "years": false,
+     "items": [
+      {
+       "name": "npm / yarn / pnpm",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Maven",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Gradle",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Composer",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "pip",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Webpack",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Vite",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Make",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "NuGet",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": false,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "IDE・エディタ",
+     "years": false,
+     "items": [
+      {
+       "name": "Visual Studio",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "VS Code",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "IntelliJ IDEA",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Eclipse",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "PhpStorm",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Android Studio",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Xcode",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "PyCharm",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Vim",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": false,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "API・連携",
+     "years": false,
+     "items": [
+      {
+       "name": "REST",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "GraphQL",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "gRPC",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Swagger / OpenAPI",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Postman",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Firebase Auth",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "OAuth",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": false,
+       "other": true
+      }
+     ]
+    },
+    {
+     "name": "AI 開発支援",
+     "years": false,
+     "items": [
+      {
+       "name": "GitHub Copilot",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Claude Code",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Cursor",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "ChatGPT",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "Gemini",
+       "years": false,
+       "other": false
+      },
+      {
+       "name": "その他",
+       "years": false,
+       "other": true
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

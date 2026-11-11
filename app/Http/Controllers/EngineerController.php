@@ -7,11 +7,12 @@ use App\Services\Matcher;
 use App\Services\Notifier as N;
 use App\Services\ProjectSkills;
 use App\Services\Qa;
-use App\Services\SkillTable;
+use App\Services\SkillChecks;
 use App\Services\Registration;
 use App\Services\Workflow as W;
 use App\Support\Perms;
 use App\Support\Requirements;
+use App\Support\SkillForm;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -117,7 +118,7 @@ class EngineerController extends Controller
         $e = $this->load($r, $id);
         return view('engineers.show', [
             'e' => $e,
-            'skills' => SkillTable::forDisplay($id),
+            'skills' => SkillChecks::lines($id),
             'projects' => DB::table('engineer_projects')->where('engineer_id', $id)->orderByDesc('period_from')->get(),
             'check' => Qa::sheetCheck($id),
             'apps' => DB::table('applications as a')->join('cases as c', 'c.id', '=', 'a.case_id')->where('a.engineer_id', $id)->select('a.*', 'c.title')->orderByDesc('a.id')->get(),
@@ -250,9 +251,15 @@ class EngineerController extends Controller
             $want = $r->query('case');
             if (is_string($want) && ctype_digit($want)) $pick = $pickable->firstWhere('id', (int) $want);
         }
-        // 候補（datalist）は、管理者が確かめた言葉だけ
-        return view('engineers.skills', ['e' => $e, 'skills' => SkillTable::forDisplay($id), 'pickable' => $pickable, 'pick' => $pick,
-            'terms' => DB::table('skill_terms')->where('reviewed', true)->orderBy('category')->orderBy('name')->get(['name', 'category'])]);
+        // 状態（チェック・年数・その他）は、入力の誤りで戻ったときは送った値、そうでなければ保存済みのもの
+        $failed = old('_sf') !== null;
+        $state = $failed
+            ? SkillChecks::stateFromInput(['chk' => old('chk'), 'yr' => old('yr'), 'oth' => old('oth'), 'othyr' => old('othyr')])
+            : SkillChecks::state($id);
+        $gone = SkillChecks::gone($id);
+        $keep = $failed ? array_map('intval', array_filter((array) old('keep'), 'is_scalar')) : array_map(fn ($g) => $g->id, $gone);
+        return view('engineers.skills', ['e' => $e, 'form' => SkillForm::tree(), 'state' => $state, 'failed' => $failed, 'gone' => $gone, 'keep' => $keep,
+            'pickable' => $pickable, 'pick' => $pick, 'caseInfo' => $pick ? SkillChecks::caseMarks($state, $pick) : null]);
     }
 
     // このエンジニアに案内が届いた案件・応募した案件（下書きを除く）。取る列は画面に使うものだけ
@@ -268,13 +275,17 @@ class EngineerController extends Controller
     public function saveSkills(Request $r, int $id)
     {
         $this->loadForEdit($r, $id);
+        // 画面の入力が多すぎて PHP の max_input_vars で後ろが切れると、最後の隠し欄が届かない。切れた入力で保存しない
+        if ($r->has('_sf') && !$r->has('_sf_end')) {
+            return back()->withInput()->with('flash', ['msg' => '入力が多すぎて送れませんでした。「その他」を減らして、もう一度保存してください。', 'type' => 'bad']);
+        }
         $res = W::saveSkills($id, $r->all());
         if (isset($res['bad'])) return back()->withInput()->with('flash', ['msg' => $res['bad'], 'type' => 'bad']);
         W::editedBy($id, $r->user());
-        // 記録には技術の名前だけを書く（ひとことなど、中身の文は書かない）
+        // 記録にはチェックした項目の数と、先頭の名前だけを書く
         $actor = $r->user();
-        N::audit($actor->id, 'skill-save', W::selfMark($actor, $id).'エンジニア #'.$id.'：'.implode('、', $res['names']));
-        return $this->go("/engineers/$id", 'スキルを保存しました。');
+        N::audit($actor->id, 'skill-save', W::selfMark($actor, $id).'エンジニア #'.$id.'：チェック '.$res['count'].' 件（'.implode('、', array_slice($res['names'], 0, 20)).($res['count'] > 20 ? '…' : '').'）');
+        return $this->go("/engineers/$id", 'スキルを保存しました。'.($res['skipped'] ? '名前が空のその他は保存しませんでした。' : ''));
     }
 
     public function projectForm(Request $r, int $id, ?int $pid = null)
@@ -331,7 +342,9 @@ class EngineerController extends Controller
     {
         $e = $this->load($r, $id);
         $c = $r->query('case') ? DB::table('cases')->find((int) $r->query('case')) : null;
-        $skills = SkillTable::forDisplay($id); // 詳細・Excel と同じ決まりで、同じ技術を1つにする（K-12）
+        // 見る権限の無い案件は、選ばなかったものとして扱う（404 にはしない）
+        if ($c && !Perms::caseView($r->user(), $c)) $c = null;
+        $display = SkillChecks::forDisplay($id); // 詳細・Excel と同じ表から、節ごとに出す
         $projects = DB::table('engineer_projects')->where('engineer_id', $id)->orderByDesc('period_from')->get()->all();
         $want = $c ? array_map('norm_skill', array_merge(parse_list($c->required_skills), parse_list($c->preferred_skills))) : [];
         $isHit = function ($t) use ($want) {
@@ -347,8 +360,10 @@ class EngineerController extends Controller
             });
         }
         $idx = Matcher::skillIndex($id);
-        $reqRows = $c ? array_map(fn ($r) => [$r, ($s = Matcher::hasSkill($idx, $r)) ? '○ '.($s['years'] ? num_disp($s['years']).'年' : '経験あり') : '—'], parse_list($c->required_skills)) : [];
-        return view('engineers.sheet', ['e' => $e, 'c' => $c, 'anon' => $r->query('anon') === '1', 'byCat' => $skills->groupBy('category'),
+        $reqRows = $c ? array_map(fn ($r) => [$r, ($s = Matcher::hasSkill($idx, $r)) ? '○ '.($s['years'] ?: '経験あり') : '—'], parse_list($c->required_skills)) : [];
+        // 節ごとの行（左に短い名前、右に「PHP（5年以上）：Laravel」の形の文）。当たる名前の印は、項目の言葉で決める
+        $sections = array_values(array_filter($display['sections'], fn ($s) => $s['entries']));
+        return view('engineers.sheet', ['e' => $e, 'c' => $c, 'anon' => $r->query('anon') === '1', 'sections' => $sections,
             'projects' => $projects, 'isHit' => $isHit, 'reqRows' => $reqRows]);
     }
 

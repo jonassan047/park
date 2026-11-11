@@ -9,25 +9,21 @@ class Matcher
 {
     const WEIGHTS = ['required' => 55, 'preferred' => 15, 'years' => 8, 'price' => 10, 'start' => 6, 'style' => 6];
 
-    // エンジニアのスキル（スキル表＋経験票で使った技術）
+    // エンジニアのスキル（スキルのチェック＋経験票で使った技術）
     public static function skillIndex(int $engineerId): array
     {
         return self::skillIndexMany([$engineerId])[$engineerId] ?? [];
     }
 
-    // 何人分でも、問い合わせ3回（スキル表・経歴・経歴の索引）で作る。[engineer_id => スキルの索引]
+    // 何人分でも、問い合わせ3回（スキルのチェック・経歴・経歴の索引）で作る。[engineer_id => スキルの索引]
+    // 索引の1つは ['name' => 表示名, 'years' => 年数の文か null, 'rank' => 年数の大きさ, 'fromProject' => 経歴だけにあるか]
     // 経歴の月数（months）は次のバージョンの準備で、点数の計算には使わない
     public static function skillIndexMany(array $engineerIds): array
     {
         $out = [];
         foreach (array_unique(array_map('intval', $engineerIds)) as $id) $out[$id] = [];
         foreach (array_chunk(array_keys($out), 500) as $chunk) {
-            $termKeys = []; // [engineer_id][term_id] => 索引の鍵（月数を付ける先）
-            foreach (DB::table('engineer_skills')->whereIn('engineer_id', $chunk)->get() as $s) {
-                $k = norm_skill($s->name);
-                $out[$s->engineer_id][$k] = ['name' => $s->name, 'years' => $s->years !== null ? (float) $s->years : null, 'fromProject' => false];
-                if ($s->term_id) $termKeys[$s->engineer_id][(int) $s->term_id] = $k;
-            }
+            foreach (SkillChecks::indexMany($chunk) as $eid => $list) $out[$eid] = $list;
             foreach (DB::table('engineer_projects')->whereIn('engineer_id', $chunk)->get(['engineer_id', 'tech', 'os_tools', 'langs', 'dbs']) as $p) {
                 foreach (project_techs($p) as $t) {
                     $k = norm_skill($t);
@@ -40,7 +36,7 @@ class Matcher
             foreach ($rows as $r) $names[$r->engineer_id][(int) $r->term_id] = $r->name;
             foreach (ProjectSkills::statsFromRows($rows) as $eid => $terms) {
                 foreach ($terms as $termId => $st) {
-                    $k = $termKeys[$eid][$termId] ?? norm_skill($names[$eid][$termId]);
+                    $k = norm_skill($names[$eid][$termId]);
                     if (isset($out[$eid][$k])) $out[$eid][$k]['months'] = $st['months'];
                 }
             }
@@ -62,30 +58,6 @@ class Matcher
         return $a === $b || (mb_strlen($a) >= 3 && mb_strlen($b) >= 3 && loose_match($a, $b));
     }
 
-    // スキル表の各行（名前の並び）が、案件の必須・尚可に合うかの印を出す。画面でチェックを入れる目印に使う（保存はしない）
-    // marks＝[行の番号 => 'required'|'preferred']、missing＝どの行にも合わない必須、empty＝必須・尚可がどちらも空
-    public static function rowMarks(array $names, object $c): array
-    {
-        $keys = [];
-        foreach ($names as $i => $n) {
-            $k = norm_skill($n);
-            if ($k !== '') $keys[$i] = $k;
-        }
-        $req = parse_list($c->required_skills);
-        $pref = parse_list($c->preferred_skills);
-        $marks = []; $missing = [];
-        foreach ($req as $r) {
-            $w = norm_skill($r); $hit = false;
-            foreach ($keys as $i => $k) if (self::sameSkill($k, $w)) { $marks[$i] = 'required'; $hit = true; }
-            if (!$hit) $missing[] = $r;
-        }
-        foreach ($pref as $p) {
-            $w = norm_skill($p);
-            foreach ($keys as $i => $k) if (!isset($marks[$i]) && self::sameSkill($k, $w)) $marks[$i] = 'preferred';
-        }
-        return ['marks' => $marks, 'missing' => $missing, 'empty' => !$req && !$pref];
-    }
-
     // $idx は、まとめて読んだスキルの索引（skillIndexMany）。渡さなければここで読む
     public static function score(object $c, object $e, ?array $idx = null): array
     {
@@ -97,7 +69,7 @@ class Matcher
         if ($req) {
             $hit = 0;
             foreach ($req as $r) {
-                if ($s = self::hasSkill($idx, $r)) { $hit += $s['fromProject'] ? 0.8 : 1; $reasons[] = "必須 $r".($s['years'] ? '（'.num_disp($s['years']).'年）' : ''); }
+                if ($s = self::hasSkill($idx, $r)) { $hit += $s['fromProject'] ? 0.8 : 1; $reasons[] = "必須 $r".($s['years'] ? '（'.$s['years'].'）' : ''); }
                 else $missing[] = "必須 $r";
             }
             $score += $W['required'] * $hit / count($req);

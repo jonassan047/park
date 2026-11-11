@@ -6,7 +6,7 @@ use App\Services\Billing;
 use App\Services\Matcher;
 use App\Services\Notifier as N;
 use App\Services\Registration;
-use App\Services\SkillTable;
+use App\Services\SkillChecks;
 use App\Services\Workflow as W;
 use App\Support\Requirements;
 use Illuminate\Http\Request;
@@ -44,11 +44,11 @@ class SesController extends Controller
     {
         $list = DB::table('engineers as e')->where('e.ses_id', $r->user()->ses_id)->select('e.*')
             ->selectSub(DB::table('engineer_projects')->whereColumn('engineer_id', 'e.id')->selectRaw('count(*)'), 'projs')->orderBy('e.name')->get();
-        $skills = DB::table('engineer_skills')->whereIn('engineer_id', $list->pluck('id'))->get()->groupBy('engineer_id');
+        $skills = SkillChecks::summaryMany($list->pluck('id')->all());
         // ログインの状態：兼任の人も engineer_id で探す（管理者との兼任かどうかは、ここには出さない）
         $users = DB::table('users')->whereIn('engineer_id', $list->pluck('id'))->orderByRaw("case when role = 'eg' then 1 else 0 end")->get()->keyBy('engineer_id');
         foreach ($list as $e) {
-            $e->skills = implode('、', array_unique(SkillTable::dedupe($skills[$e->id] ?? collect())->pluck('name')->all())); // 同じ技術は1回だけ
+            $e->skills = $skills[$e->id] ?? ''; // 同じ技術は1回だけ
             $e->account = engineer_state($e, $users[$e->id] ?? null);
             $e->mail = account_mail($users[$e->id] ?? null);
             $e->login_id = self::provisionalLoginId($users[$e->id] ?? null);

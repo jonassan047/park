@@ -358,9 +358,9 @@ class AdminController extends Controller
         $q = trim((string) $r->query('q')); $st = (string) $r->query('status');
         $list = DB::table('engineers as e')->join('ses_companies as s', 's.id', '=', 'e.ses_id')->select('e.*', 's.name as ses_name', 's.kind as ses_kind')
             ->selectSub(DB::table('engineer_projects')->whereColumn('engineer_id', 'e.id')->selectRaw('count(*)'), 'projs')->orderByDesc('e.updated_at')->get();
-        $skills = DB::table('engineer_skills')->get()->groupBy('engineer_id');
+        $skills = \App\Services\SkillChecks::summaryMany($list->pluck('id')->all()); // 同じ技術は1回だけ
         $egUsers = DB::table('users')->whereIn('engineer_id', $list->pluck('id'))->orderByRaw("case when role = 'eg' then 1 else 0 end")->get()->keyBy('engineer_id');
-        foreach ($list as $e) { $e->skills = implode('、', array_unique(\App\Services\SkillTable::dedupe($skills[$e->id] ?? collect())->pluck('name')->all())); $e->account = engineer_state($e, $egUsers[$e->id] ?? null); $e->mail = account_mail($egUsers[$e->id] ?? null); $e->login_id = SesController::provisionalLoginId($egUsers[$e->id] ?? null); }
+        foreach ($list as $e) { $e->skills = $skills[$e->id] ?? ''; $e->account = engineer_state($e, $egUsers[$e->id] ?? null); $e->mail = account_mail($egUsers[$e->id] ?? null); $e->login_id = SesController::provisionalLoginId($egUsers[$e->id] ?? null); }
         if ($st) $list = $list->where('status', $st);
         $direct = $r->query('ses') === 'direct';
         if ($direct) $list = $list->where('ses_kind', 'direct');

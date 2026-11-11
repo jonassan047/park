@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Services\Matcher;
 use App\Services\Registration;
-use App\Services\SkillTable;
 use App\Services\Workflow as W;
 use App\Support\SkillCatalog;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -60,7 +59,7 @@ class V030RegressionTest extends TestCase
         $eid = $this->engId(self::EG2);
         $this->cleanEg($eid);
         $this->available($eid);
-        W::saveSkills($eid, ['skill_name' => ['PHP'], 'skill_cat' => ['lang'], 'skill_years' => [3], 'skill_level' => [3]]);
+        W::saveSkills($eid, $this->checkForm(['lang/PHP' => '3年以上']));
         $this->makeProject($eid, ['tech' => 'Laravel']); // 経歴の文字列にだけある技術（0.8 と数える）
         $cid = W::saveCase(['title' => 'R-01 の案件', 'required_skills' => 'Laravel、PHP', 'work_style' => 'any', 'status' => 'open'], $this->admin());
 
@@ -175,22 +174,23 @@ class V030RegressionTest extends TestCase
 
     public function test_r_06_version(): void
     {
-        $this->assertSame('v0.3.0', config('park.version'));
-        $this->get('/login')->assertOk()->assertSee('v0.3.0');
+        $this->assertSame('v0.4.0', config('park.version'));
+        $this->get('/login')->assertOk()->assertSee('v0.4.0');
     }
 
     public function test_r_07_manuals_describe_the_new_skill_table(): void
     {
+        // v0.4.0：チェック式。年数は4段階で、レベル・得意・ひとこと・最後に使った年月の説明は無い
         $page = $this->get('/manual/engineer')->assertOk();
-        foreach (SkillTable::LEVELS as $text) $page->assertSee($text);
-        $page->assertSee('得意')->assertSee('ひとこと')->assertSee('経歴から');
+        foreach (['1年未満', '1年以上', '3年以上', '5年以上', '経験あり', '「その他」', '印は保存されません', 'あなたのスキルに無い必須'] as $text) $page->assertSee($text, false);
+        foreach (['最後に使った年月', 'レベルの目安', '得意な技術'] as $text) $page->assertDontSee($text);
 
-        $this->get('/manual/engineer-steps')->assertOk()->assertSee('得意')->assertSee('ひとこと');
+        $this->get('/manual/engineer-steps')->assertOk()->assertSee('すべて開く')->assertSee('その他')->assertDontSee('最後に使った年月');
         $this->get('/manual/ses')->assertOk()->assertSee('確認しました')->assertSee('仮登録中');
         $this->get('/manual/ses-steps')->assertOk()->assertSee('確認しました');
 
         $this->as(self::ADMIN);
-        $this->get('/manual/admin')->assertOk()->assertSee('使っている人（スキル表・経歴）')->assertSee('経験票から数えた月数');
+        $this->get('/manual/admin')->assertOk()->assertSee('使っている人（スキル表・経歴）')->assertSee('チェック式');
         $this->get('/manual/admin-steps')->assertOk()->assertSee('経歴の索引');
     }
 }

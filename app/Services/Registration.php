@@ -654,7 +654,7 @@ class Registration
                 }
                 // 技術データ（スキル・経験票など）が入っている行は、v0.2.0 より前からいる人の可能性があるので、技術登録は残してアカウントだけ消す
                 $hasTech = false;
-                foreach (['engineer_skills', 'engineer_projects', 'engineer_histories', 'engineer_certs'] as $t) if (DB::table($t)->where('engineer_id', $eid)->exists()) $hasTech = true;
+                foreach (['engineer_skills', 'engineer_skill_checks', 'engineer_projects', 'engineer_histories', 'engineer_certs'] as $t) if (DB::table($t)->where('engineer_id', $eid)->exists()) $hasTech = true;
                 if (!$hasTech) DB::table('engineers')->where('id', $eid)->delete();
             }
             DB::table('app_notifications')->where('user_id', $id)->delete();
