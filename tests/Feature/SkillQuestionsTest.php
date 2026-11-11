@@ -80,13 +80,21 @@ class SkillQuestionsTest extends TestCase
     {
         $f = ['_sf' => '1', 'chk' => [], 'yr' => [], 'oth' => [], 'othyr' => [], '_sf_end' => '1'];
         foreach ($industries as $n) $f['chk'][$this->indId($n)] = '1';
-        foreach ($roles as $r) $f['chk'][$r === 'pm' ? $this->pmId() : $this->plId()] = '1';
+        foreach ($roles as $r) { $rid = $r === 'pm' ? $this->pmId() : $this->plId(); $f['chk'][$rid] = '1'; $f['yr'][$rid] = '1年以上'; }
         if ($one) $f['one'] = $one;
         return $extra + $f;
     }
 
+    // 年数のある項目にチェックして年数が無いものに「1年以上」を入れる（年数は必須）
+    private function withYears(array $f): array
+    {
+        foreach (array_keys($f['chk']) as $id) if ((SkillForm::node((string) $id)['years'] ?? false) && empty($f['yr'][$id])) $f['yr'][$id] = '1年以上';
+        return $f;
+    }
+
     private function save(array $form, ?string $email = null, ?int $eid = null)
     {
+        $form = $this->withYears($form);
         return $this->as($email ?? self::EG)->post($this->skUrl($eid), $form);
     }
 
@@ -343,7 +351,7 @@ class SkillQuestionsTest extends TestCase
         $this->assertTrue($this->isSel($html, 1, $none));
         // 未回答のほかの設問は、何も選ばれていない（選択しないが無い）
         $this->assertFalse($this->isSel($html, 0, $this->cid(0, 0)));
-        $this->assertSame(1, preg_match_all('#<option value="[^"]*" selected#', $html));
+        $this->assertSame(2, preg_match_all('#<option value="[^"]*" selected#', $html)); // 設問の選択と、PM の年数
         // 選択しない → 選ぶ → 選択しない に戻すと行が消える
         $this->save($this->form([], ['pm'], [$this->gid(1) => $this->cid(1, 3)]))->assertRedirect();
         $this->assertCount(1, $this->rows('pmpl'));

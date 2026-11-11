@@ -41,7 +41,7 @@
 <dt>アピール</dt><dd>{!! nl2br(e($e->appeal)) ?: '—' !!}</dd><dt>本人希望</dt><dd>{!! nl2br(e($e->wishes)) ?: '—' !!}</dd>
 </dl></x-card>
 
-<x-card title="スキル"><x-slot:actions><a class="btn small" href="{{ url('/engineers/'.$e->id.'/skills') }}">スキルを編集</a></x-slot:actions>
+<x-card title="スキル"><x-slot:actions><a class="btn small" href="{{ url('/engineers/'.$e->id.'/skills') }}">スキルを登録・編集</a></x-slot:actions>
 @if($skills)<dl class="dl">@foreach($skills as $line)<dt>{{ $line['title'] }}</dt><dd>{{ $line['text'] }}</dd>@endforeach</dl>
 @else<p class="empty">まだ登録がありません。</p>@endif</x-card>
 

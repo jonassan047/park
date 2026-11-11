@@ -146,7 +146,7 @@ class SkillFormTest extends TestCase
         $lara = $rows->firstWhere('item', 'Laravel');
         $this->assertSame(5, (int) $php->years_min);
         $this->assertSame('', $php->parent);
-        $this->assertNull($lara->years_min);   // 年数を選ばなければ「経験あり」
+        $this->assertSame(1, (int) $lara->years_min); // 年数のある項目は年数が必須（checkForm が空の年数を「1年以上」にして送る）
         $this->assertSame('PHP', $lara->parent);
         $this->assertSame('form', $php->source);
         $this->assertSame($old, DB::table('engineer_skills')->count()); // 古い表は変わらない
@@ -364,6 +364,19 @@ class SkillFormTest extends TestCase
         $this->as($this->sesEmailOf($this->eid))->get('/ses/engineers')->assertOk()->assertSee('Laravel');
     }
 
+    // 年数のある項目は、チェックしたら年数が必須（2026-11-11）
+    public function test_years_are_required_for_checked_items_with_years(): void
+    {
+        $php = $this->skillNode('lang/PHP')['id'];
+        $this->assertBad($this->save(['_sf' => '1', 'chk' => [$php => '1'], 'yr' => [], '_sf_end' => '1']));
+        $this->assertSame(0, $this->checkRows($this->eid)->count());
+        $other = $this->skillNode('lang/PHP/その他')['id'];
+        $this->assertBad($this->save(['_sf' => '1', 'chk' => [$other => '1'], 'oth' => [$other => ['Haxe']], 'othyr' => [$other => ['']], '_sf_end' => '1']));
+        $this->assertSame(0, $this->checkRows($this->eid)->count());
+        $this->save(['_sf' => '1', 'chk' => [$php => '1'], 'yr' => [$php => '3年以上'], '_sf_end' => '1'])->assertRedirect();
+        $this->assertSame(1, $this->checkRows($this->eid)->count());
+    }
+
     // ---------- マッチング ----------
 
     public function test_ac14_matching_reasons_and_sheet_table(): void
@@ -376,12 +389,12 @@ class SkillFormTest extends TestCase
         $reasons = Matcher::score(DB::table('cases')->find($c1), $e)['reasons'];
         $this->assertContains('必須 java（3年以上）', $reasons);
         $this->assertContains('尚可 MySQL', $reasons);
-        $this->assertContains('必須 MySQL', Matcher::score(DB::table('cases')->find($c2), $e)['reasons']);
+        $this->assertContains('必須 MySQL（1年以上）', Matcher::score(DB::table('cases')->find($c2), $e)['reasons']);
 
         // スキルシートの ?case= は、見る権限のある案件だけ（EG は、案内が届いた案件・応募した案件）
         foreach ([$c1, $c2] as $cid) DB::table('case_offers')->insert(['case_id' => $cid, 'engineer_id' => $this->eid, 'sent_at' => now(), 'status' => 'sent']);
         $this->as(self::EG)->get("/engineers/{$this->eid}/sheet?case=$c1")->assertOk()->assertSee('○ 3年以上');
-        $this->get("/engineers/{$this->eid}/sheet?case=$c2")->assertOk()->assertSee('○ 経験あり');
+        $this->get("/engineers/{$this->eid}/sheet?case=$c2")->assertOk()->assertSee('○ 1年以上');
     }
 
     // ---------- 権限 ----------
@@ -414,8 +427,8 @@ class SkillFormTest extends TestCase
         $this->assertStringNotContainsString('5つ以上チェック', $tips);
         $this->assertStringNotContainsString('年数を選んでいない', $tips); // 年数の無い工程は数えない
 
-        $five['lang/PHP'] = '';
-        $this->save($this->checkForm($five))->assertRedirect();
+        // 年数の無い行（古いデータ・取り込み）は、画面からは作れないので表に直接入れる
+        DB::table('engineer_skill_checks')->where('engineer_id', $this->eid)->where('item', 'PHP')->update(['years_min' => null]);
         $tips = implode("\n", Qa::sheetCheck($this->eid)['tips']);
         $this->assertStringContainsString('年数を選んでいない項目があります（「経験あり」と出ます）。わかる範囲で選びましょう。', $tips);
 

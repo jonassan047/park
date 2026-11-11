@@ -100,7 +100,7 @@ class SkillMigrateTest extends TestCase
         $this->seedOld();
         SkillChecks::migrateFromOld();
         $this->as('eg2@park.example')->post("/engineers/{$this->eid}/skills", $this->checkForm(['lang/Go' => '']))->assertRedirect(); // 画面で保存（古い行は入れ替わる）
-        $this->assertSame([['lang', '', 'Go', '', null, 'form']], $this->rows($this->eid));
+        $this->assertSame([['lang', '', 'Go', '', 1, 'form']], $this->rows($this->eid));
 
         $eg3 = $this->engId('eg3@park.example');
         $this->cleanEg($eg3);

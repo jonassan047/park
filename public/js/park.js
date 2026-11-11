@@ -12,7 +12,7 @@ function addRow(tableId, templateId) {
   function syncYear(box) {
     const row = box.closest('.sf-row');
     const sel = row && row.querySelector(':scope > select.sf-yr');
-    if (sel) sel.disabled = !box.checked;
+    if (sel) { sel.disabled = !box.checked; sel.required = box.checked; }
   }
 
   // 「その他」の入れ物：欄が10個に達したら「＋」を押せなくする

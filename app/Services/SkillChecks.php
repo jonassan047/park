@@ -104,6 +104,7 @@ class SkillChecks
                     if (mb_strlen($name) > SkillForm::OTHER_MAX) return ['bad' => 'その他の名前は'.SkillForm::OTHER_MAX.'文字までにしてください（'.mb_substr($name, 0, 10).'…）。'];
                     if (++$found > SkillForm::OTHER_COUNT_MAX) return ['bad' => '1つの「その他」に入れられるのは'.SkillForm::OTHER_COUNT_MAX.'個までです。'];
                     $y = $n['years'] && is_string($yrs[$i] ?? null) ? SkillForm::value($yrs[$i]) : null;
+                    if ($n['years'] && $y === null) return ['bad' => '年数を選んでください（その他：'.$name.'）。'];
                     $k = self::key($n['section'], $n['parent'], $n['item'], self::nameKey($name));
                     if (isset($rows[$k])) { $rows[$k]['years_min'] = self::maxYears($rows[$k]['years_min'], $y); continue; }
                     $rows[$k] = ['section' => $n['section'], 'parent' => $n['parent'], 'item' => $n['item'], 'other_text' => $name, 'years_min' => $y, 'node' => $n];
@@ -114,6 +115,7 @@ class SkillChecks
             $label = $n['years'] ? (string) ($yr[$id] ?? '') : '';
             // 年数だけ選んでチェックが無いときも、チェックありとして保存する（JavaScript が動かないときの守り）
             if (empty($chk[$id]) && $label === '') continue;
+            if ($n['years'] && $label === '') return ['bad' => '年数を選んでください（'.($n['parent'] !== '' ? $n['parent'].'／' : '').$n['item'].'）。'];
             $rows[self::key($n['section'], $n['parent'], $n['item'], '')] = ['section' => $n['section'], 'parent' => $n['parent'], 'item' => $n['item'], 'other_text' => '',
                 'years_min' => $label === '' ? null : SkillForm::value($label), 'node' => $n];
         }

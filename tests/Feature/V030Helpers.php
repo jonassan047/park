@@ -71,6 +71,8 @@ trait V030Helpers
         foreach ($checks as $path => $years) {
             $n = $this->skillNode($path);
             $f['chk'][$n['id']] = '1';
+            // 年数のある項目は年数が必須（2026-11-11）。テストで年数を指定しないものは「1年以上」で送る
+            if (($years === '' || $years === null) && $n['years']) $years = '1年以上';
             if ($years !== '' && $years !== null) $f['yr'][$n['id']] = $years;
         }
         foreach ($others as $path => $list) {
@@ -78,7 +80,7 @@ trait V030Helpers
             $f['chk'][$n['id']] = '1';
             foreach ($list as [$name, $years]) {
                 $f['oth'][$n['id']][] = $name;
-                $f['othyr'][$n['id']][] = $years;
+                $f['othyr'][$n['id']][] = ($years === '' || $years === null) && $n['years'] ? '1年以上' : $years;
             }
         }
         return $f;
