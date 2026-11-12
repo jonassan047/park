@@ -647,8 +647,8 @@ class SkillQuestionsTest extends TestCase
 
     public function test_t20_version_is_shown(): void
     {
-        $this->assertSame('v0.5.0', config('park.version'));
-        $this->get('/login')->assertOk()->assertSee('v0.5.0');
+        $this->assertSame('v0.6.0', config('park.version'));
+        $this->get('/login')->assertOk()->assertSee('v0.6.0');
     }
 
     // ---------- 既存の7節は変わらない ----------

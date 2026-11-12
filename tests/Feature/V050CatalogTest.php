@@ -155,6 +155,6 @@ class V050CatalogTest extends TestCase
     // ---------- T21 ----------
     public function test_t21_version_shown_on_login(): void
     {
-        $this->get('/login')->assertOk()->assertSee('v0.5.0');
+        $this->get('/login')->assertOk()->assertSee('v0.6.0');
     }
 }

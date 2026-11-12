@@ -56,6 +56,7 @@ class SamplePurge
 
         $del = [
             'ai_jobs' => DB::table('ai_jobs')->where(fn ($q) => $q->where(fn ($q) => $q->where('ref_type', 'interview')->whereIn('ref_id', $iv))
+                ->orWhere(fn ($q) => $q->where('ref_type', 'case')->whereIn('ref_id', $c))
                 ->orWhere(fn ($q) => $q->where('ref_type', 'engineer_file')->whereIn('ref_id', $files->pluck('id')->all())))->pluck('id')->all(),
             'follow_ups' => DB::table('follow_ups')->whereIn('contract_id', $k)->pluck('id')->all(),
             'contracts' => $k, 'invoices' => $inv,

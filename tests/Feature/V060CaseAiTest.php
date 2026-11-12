@@ -339,4 +339,114 @@ class V060CaseAiTest extends TestCase
         $this->as(self::EG1)->post("/ai-jobs/$id/drop")->assertForbidden();
         $this->assertSame('done', $this->jobStatus($id));
     }
+
+    // ---------- 段階4：画面 ----------
+
+    public function test_screen_queued_and_button_states(): void // T14 の前の状態・G1
+    {
+        $cid = $this->register(self::SES1);
+        $this->as(self::SES1)->get("/cases/$cid")->assertOk()->assertSee('id="ai"', false)->assertSee('手元の AI が必須・尚可を読み直しています')->assertSee('待たずに案内してもかまいません');
+        $this->jobs($cid)->delete();
+        $this->as(self::SES1)->get("/cases/$cid")->assertOk()->assertSee('AI に読み直してもらう')->assertSee('name="_token"', false);
+        config(['services.park_ai.token' => '']);
+        $this->as(self::SES1)->get("/cases/$cid")->assertOk()->assertSee('AI はまだつながっていません')->assertDontSee('AI に読み直してもらう');
+    }
+
+    public function test_screen_failed_shows_rule_result_and_retry(): void // T14
+    {
+        $cid = $this->register(self::ADMIN);
+        $before = $this->cols($cid);
+        $this->answer(json_encode(['items' => []]));
+        $this->assertSame($before, $this->cols($cid));
+        $this->as(self::ADMIN)->get("/cases/$cid")->assertOk()->assertSee('規則の結果のまま使えます')->assertSee('もう一度頼む');
+    }
+
+    public function test_screen_done_shows_table_and_buttons_to_editors_only(): void // T17・T23
+    {
+        $cid = $this->register(self::SES1);
+        $id = $this->answer(['Java での開発経験が3年以上', 'SQL の基本的な知識', 'AWS の利用経験'], ['AWS の利用経験']);
+        $this->assertSame('done', $this->jobStatus($id));
+        foreach ([self::ADMIN, self::SES1, $this->staff()] as $email) {
+            $this->as($email)->get("/cases/$cid")->assertOk()
+                ->assertSee('AI の読み直しの結果を確かめてください')->assertSee('規則と行数が違います')
+                ->assertSee('AI だけ')->assertSee('AI の結果を使う')->assertSee('今のままにする')
+                ->assertSee("/ai-jobs/$id/apply-case", false)->assertSee('name="_token"', false);
+        }
+
+        // 案内を受けた EG・ほかの SES には、欄も AI の文も出さない
+        DB::table('case_offers')->insert(['case_id' => $cid, 'engineer_id' => $this->engId(self::EG1), 'score' => 50, 'reasons' => '', 'missing' => '', 'sent_by' => DB::table('users')->where('email', self::ADMIN)->value('id'), 'sent_at' => now_str()]);
+        $this->as(self::EG1)->get("/cases/$cid")->assertOk()->assertDontSee('id="ai"', false)->assertDontSee('AI の読み直し')->assertDontSee('AI だけ')->assertDontSee('AI の結果を使う');
+        $other = $this->as(self::SES2)->get("/cases/$cid");
+        if ($other->status() === 200) $other->assertDontSee('id="ai"', false)->assertDontSee('AI の読み直し')->assertDontSee('AI だけ');
+        else $other->assertForbidden();
+        $this->as(self::EG1)->post("/ai-jobs/$id/apply-case")->assertForbidden();
+        $this->as(self::SES2)->post("/ai-jobs/$id/apply-case")->assertForbidden();
+    }
+
+    public function test_screen_edited_case_warns_before_using(): void // T18 の画面
+    {
+        $cid = $this->register(self::ADMIN);
+        $this->as(self::ADMIN)->post("/cases/$cid", $this->form(self::RAW, ['required_skills' => 'Java']))->assertRedirect();
+        $this->answer(...$this->sameCountAnswer());
+        $this->as(self::ADMIN)->get("/cases/$cid")->assertOk()->assertSee('登録の前か後に人が直した案件です')->assertSee('直した必須・尚可・業務も置き換わります');
+    }
+
+    public function test_screen_same_as_rule(): void // T19
+    {
+        $cid = $this->register(self::ADMIN);
+        DB::table('case_offers')->insert(['case_id' => $cid, 'engineer_id' => $this->engId(self::EG1), 'score' => 50, 'reasons' => '', 'missing' => '',
+            'sent_by' => DB::table('users')->where('email', self::ADMIN)->value('id'), 'sent_at' => now_str()]);
+        $this->answer(['Java での開発経験が3年以上', 'SQL の基本的な知識'], ['AWS の利用経験']);
+        $this->as(self::ADMIN)->get("/cases/$cid")->assertOk()->assertSee('AI も同じ読み方でした')->assertSee('もう一度頼む');
+        $this->assertSame(0, $this->aiNotices($cid)->count());
+    }
+
+    public function test_screen_missing_wording_mark(): void // T20
+    {
+        $cid = $this->register(self::ADMIN);
+        $this->answer(['Java での開発経験が3年以上', 'Kubernetes クラスタの運用設計の実績'], ['AWS の利用経験']);
+        $this->as(self::ADMIN)->get("/cases/$cid")->assertOk()->assertSee('本文に無い言い方')->assertSee('Kubernetes クラスタの運用設計の実績');
+    }
+
+    public function test_screen_applied_texts(): void // G1（自動・人が選んだ）
+    {
+        $cid = $this->register(self::ADMIN);
+        $this->answer(...$this->sameCountAnswer());
+        $this->as(self::ADMIN)->get("/cases/$cid")->assertOk()->assertSee('規則と同じ数だったので AI の結果にしました');
+
+        $cid2 = $this->register(self::ADMIN);
+        $id = $this->answer(['Java での開発経験が3年以上'], []);
+        $this->as(self::ADMIN)->post("/ai-jobs/$id/apply-case")->assertRedirect("/cases/$cid2#ai");
+        $this->as(self::ADMIN)->get("/cases/$cid2")->assertOk()->assertSee('AI の結果を使いました')->assertDontSee('規則と同じ数だったので');
+    }
+
+    public function test_import_and_store_messages(): void // G4
+    {
+        $this->as(self::ADMIN)->post('/cases/import', ['raw_text' => self::RAW])->assertOk()->assertSee('登録すると、手元の AI が必須・尚可を読み直します');
+        $this->as(self::ADMIN)->followingRedirects()->post('/cases', $this->form(self::RAW))->assertSee('手元の AI が必須・尚可を読み直しています');
+        config(['services.park_ai.token' => '']);
+        $this->as(self::ADMIN)->post('/cases/import', ['raw_text' => self::RAW])->assertOk()->assertDontSee('登録すると、手元の AI が');
+    }
+
+    public function test_admin_ai_list_links_to_case(): void // T25（一覧）
+    {
+        $cid = $this->register(self::ADMIN);
+        $this->as(self::ADMIN)->get('/admin/ai')->assertOk()->assertSee('案件の必須・尚可の読み直し')->assertSee("/cases/$cid#ai", false);
+    }
+
+    public function test_sample_purge_removes_case_jobs(): void // T25（見本の削除）・G6
+    {
+        $cid = $this->register(self::SES1); // 見本の案件
+        $this->assertSame(1, $this->jobs($cid)->count());
+        $aid = W::createUser('real-admin60@example.com', '実在 管理', 'admin', 'abcd1234');
+        $this->completeProfile($aid, ['company_name' => '実在運営']);
+        \Illuminate\Support\Facades\Artisan::call('park:purge-samples', ['--yes' => true]);
+        $this->assertSame(0, DB::table('ai_jobs')->where('ref_type', 'case')->where('ref_id', $cid)->count());
+        foreach (glob(storage_path('app/backups/purge-samples-*.json')) ?: [] as $f) if (filemtime($f) >= time() - 60) @unlink($f); // このテストで作ったバックアップ
+    }
+
+    public function test_version_shown(): void // T26
+    {
+        $this->get('/login')->assertOk()->assertSee('v0.6.0');
+    }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\AiJobs;
 use App\Services\CaseMail as CM;
 use App\Services\CaseAi;
 use App\Services\CaseParser;
@@ -36,7 +37,8 @@ class CaseController extends Controller
         if (!empty($c->required_exp)) $expText[] = implode('、', CaseExp::split($c->required_exp)).'（必須）';
         if (!empty($c->preferred_exp)) $expText[] = implode('、', CaseExp::split($c->preferred_exp)).'（尚可）';
         session()->now('flash', ['msg' => '取り込みました。内容を確かめて、足りないところを直してから登録してください。'.($found ? '本文から見つかった技術：'.implode('、', $found).'（必須に無いものは尚可に入れました）。' : '')
-            .($expText ? '本文の必須・尚可から見つかった業務：'.implode('、', $expText) : ''), 'type' => 'ok']);
+            .($expText ? '本文の必須・尚可から見つかった業務：'.implode('、', $expText).'。' : '')
+            .(CaseAi::blocked((object) ['raw_text' => $r->input('raw_text')]) === null ? '登録すると、手元の AI が必須・尚可を読み直します（1件 1分ほど）。結果は案件の画面に出ます。' : ''), 'type' => 'ok']);
         return view('cases.form', ['c' => $c, 'action' => '/cases', 'submit' => '登録する', 'sesList' => $this->sesList($r), 'import' => false]);
     }
 
@@ -44,8 +46,9 @@ class CaseController extends Controller
     {
         if (!str_in($r->input('title'))) return $this->go('/cases/new', '案件名を入れてください。', 'bad');
         $id = W::saveCase($r->all(), $r->user());
-        CaseAi::queue($id, $r->user(), true); // 本文があれば、手元の AI に必須・尚可を読み直してもらう（入れられなくても登録は成功）
-        return $this->go("/cases/$id", $r->user()->role === 'admin' ? '登録しました。マッチングで、合うエンジニアに配信してください。' : '登録しました。続けて「エンジニアに案内する」で、合うエンジニアにメールで案内できます。');
+        $queued = CaseAi::queue($id, $r->user(), true); // 本文があれば、手元の AI に必須・尚可を読み直してもらう（入れられなくても登録は成功）
+        return $this->go("/cases/$id", ($r->user()->role === 'admin' ? '登録しました。マッチングで、合うエンジニアに配信してください。' : '登録しました。続けて「エンジニアに案内する」で、合うエンジニアにメールで案内できます。')
+            .($queued ? ' 手元の AI が必須・尚可を読み直しています。' : ''));
     }
 
     private function load(int $id) { $c = DB::table('cases')->find($id); abort_unless($c, 404); return $c; }
@@ -113,7 +116,33 @@ class CaseController extends Controller
             $e = DB::table('engineers')->find($u->engineer_id);
             $data += ['offer' => $offer, 'myApp' => DB::table('applications')->where('case_id', $id)->where('engineer_id', $u->engineer_id)->first(), 'fit' => Matcher::score($c, $e)];
         }
+        if (Perms::caseEdit($u, $c)) $data['ai'] = $this->aiView($c); // AI の読み直しの欄は、直せる人だけ
         return view('cases.show', $data);
+    }
+
+    // 案件の画面の「AI の読み直し」の欄に出すもの
+    private function aiView(object $c): array
+    {
+        $job = AiJobs::latest('case', (int) $c->id, CaseAi::KIND);
+        $v = ['job' => $job, 'block' => CaseAi::blocked($c), 'cmp' => null, 'auto' => false, 'fixed' => 0, 'same' => false, 'now' => null, 'diff' => null, 'exp' => null];
+        if (!$job) return $v;
+        $audit = fn (string $action) => DB::table('audit_log')->where('action', $action)->where('detail', 'like', "#{$job->id} %")->exists();
+        if ($job->status === 'applied') {
+            $cmp = CaseAi::compare($job, $c);
+            $v['auto'] = $audit('ai-case-auto');
+            $v['fixed'] = count(array_filter([...$cmp['req'], ...$cmp['pref']], fn ($x) => $x['mark'] === 'fixed'));
+        } elseif ($job->status === 'done') {
+            $cmp = CaseAi::compare($job, $c);
+            $now = ['req' => parse_list($c->required_skills), 'pref' => parse_list($c->preferred_skills)];
+            $fin = CaseParser::finishSkills(array_column($cmp['req'], 'text'), array_column($cmp['pref'], 'text'), (string) $c->raw_text);
+            $v['cmp'] = $cmp;
+            $v['now'] = $now;
+            $v['diff'] = ['req' => CaseAi::diff($now['req'], array_column($cmp['req'], 'text')), 'pref' => CaseAi::diff($now['pref'], array_column($cmp['pref'], 'text'))];
+            $v['exp'] = ['req' => CaseExp::split($fin['required_exp'] ?? null), 'pref' => CaseExp::split($fin['preferred_exp'] ?? null)];
+        } elseif ($job->status === 'dropped') {
+            $v['same'] = $audit('ai-case-same');
+        }
+        return $v;
     }
 
     public function distribute(Request $r, int $id)

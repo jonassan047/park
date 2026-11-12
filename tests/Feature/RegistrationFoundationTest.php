@@ -49,7 +49,7 @@ class RegistrationFoundationTest extends TestCase
     public function test_s1_01_version_is_in_the_footer(): void
     {
         $v = config('park.version');
-        $this->assertSame('v0.5.0', $v);
+        $this->assertSame('v0.6.0', $v);
         $this->get('/login')->assertOk()->assertSee($v);
         $this->as('admin@park.example')->get('/admin')->assertOk()->assertSee($v);
     }

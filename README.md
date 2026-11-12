@@ -124,7 +124,7 @@ SES が受けた案件メールから、エンジニアへの案内メールを�
 AI は手元の PC（FOCUS）で動かす。公開サーバー（Xserver）では AI を動かせないため。案件や個人の情報は、手元の PC の外に出さない。
 
 - PARK は仕事（指示と材料）を `ai_jobs` に入れるだけ（`app/Services/AiJobs.php`）。手元の PC の `tools/ai-worker/park_ai_worker.py` が `/ai/worker/next` に取りに来て、Ollama（手元の AI）に渡し、`/ai/worker/{id}/result` に返す。合言葉は `.env` の `PARK_AI_TOKEN`（同じものを手元の PC にも設定する）。
-- 仕事は2つ：面談スクリプトの言い回し（`script`）、経歴書（Excel・Word・テキスト）から経験票の下書き（`resume`）。
+- 仕事は3つ：面談スクリプトの言い回し（`script`）、経歴書（Excel・Word・テキスト）から経験票の下書き（`resume`）、案件の必須・尚可の読み直し（`case_skills`。下の節）。
 - 結果は下書き。人が「採用する」「経験票に足す」を押したときだけ使う。JSON で返らなかったものは「失敗」。30分返ってこない仕事は順番待ちに戻す。
 - 手元の PC で動かす：
 
@@ -137,6 +137,20 @@ python tools/ai-worker/park_ai_worker.py
 ```
 
 FOCUS では、Windows の起動で自動で動く（2026-10-16〜）。Ollama は自分のショートカットで、つなぎ役は「スタートアップ」の「PARK AI つなぎ役」（`pythonw.exe -I park_ai_worker.py --log`。窓は出ない）。公開版の URL と合言葉は `~/.park-ai/config.json`（この PC にだけ置く。Git には上げない）。記録は `~/.park-ai/worker.log`。止めるときは、タスクマネージャーで pythonw.exe を終わらせる。
+
+### 案件の必須・尚可の読み直し（v0.6.0。2026-11-12）
+
+見ていない案件メールでは、規則（`CaseParser`）だけだと必須・尚可が 6 割前後しか合わない。手元の AI（Ollama の qwen2.5:7b）は 94〜100% だが、1件 1分ほどかかり、元の文を 1% ほど書き換える。そこで、規則の結果をすぐ出し、AI の結果は本文と突き合わせて、自動か人の選択で入れる（`app/Services/CaseAi.php`）。
+
+- **規則の読み方（v3）**：`CaseParser::sections`（必須・尚可の行を返す）と `finishSkills`（業務の拾い出し・本文の技術の追加。規則と AI の両方が通る）。`<<必須>>`・`⇒必須`・`スキル(必須)：`・`【必須】`・`◆スキル：`・`MUST`/`WANT`・`推奨`・`BETTER`、箇条書きの印と番号、見出しと同じ行の本文、区切り線・次の見出し・小見出し・深い `-`・`※` を読む。読めなければ今までの読み方（R9）。取り込みの画面は、今までどおりすぐ規則の結果を出す（AI を待たない）。
+- **仕事 `case_skills`**（`ref_type=case`）を入れる時：案件を登録したとき（`store`）、本文を変えて保存したとき（前の順番待ち・未選択の仕事は `dropped`）、案件の画面の「AI に読み直してもらう」。合言葉が無い・本文が空・6000字を超える（`CaseAi::MAX_TEXT`）ときは入れない（登録は成功する）。順番待ち・作業中があればボタンでは2つ目を入れない。
+- **input（JSON）**：`actor_role`・`prompt`（古い worker 用）・`system`（指示。`CaseAi::PROMPT`）・`user`（本文）・`options`（`{"temperature": 0}`）・`text_hash`（本文の sha1）・`rule`（規則の必須・尚可）・`base`（入れたときの案件の4列）・`edited`（登録の前に人が直したか）。表の列は足していない。
+- **本文との突き合わせ**（`CaseAi::restore`）：AI の各項目が本文にそのままあれば `ok`、近い行（隣り合う2行をつないだものも含む。2文字ずつの組の Dice 係数が 0.5 以上。`FIX_LIMIT`）があればその行の文に戻して `fixed`、無ければ `missing`（本文に無い言い方）。
+- **自動で差し替える条件**（`CaseAi::compare` の `auto`）：必須・尚可の行数が規則と同じ／`missing` が0／人が直していない（登録の前の `edited`、後の `base` との違い）／案内・案内メール・応募が無い／募集中か下書き／本文が仕事を入れたときと同じ。差し替えるのは `required_skills`・`preferred_skills`・`required_exp`・`preferred_exp` の4つだけ（`CaseAi::apply`）。満たさないときは `done` のまま、登録した人に知らせ（画面だけ）、案件の画面の `#ai` で「AI の結果を使う」（`POST /ai-jobs/{id}/apply-case`）か「今のままにする」（`/drop`）を選ぶ。AI の行が規則とまったく同じなら、仕事を閉じる（「AI も同じ読み方でした」）。本文が変わったあとの結果・選択は使えない。
+- **見分け**：`audit_log` の `ai-case-auto`（自動）・`ai-case-same`（同じで閉じた）・`ai-case-stale`（本文が変わった）・`ai-case-apply`（人が使った）・`ai-case-keep`（今のままにした）。これで「自動／選ぶ」の割合を見て、閾値を見直す。
+- **見える人**：`Perms::caseEdit`（管理者・その案件の SES・担当者）だけ。エンジニア・ほかの会社の SES には欄も AI の文も出ず、`apply-case`・`drop` は 403。見本データの削除（`SamplePurge`）は、見本の案件の `case_skills` の仕事も消す。
+- **worker の `system`・`user`・`options`**：`/ai/worker/next` の答えに、あれば付く。worker は `system` と `user` があれば2通で Ollama に渡し、`options` を既定（`temperature 0.2`・`num_ctx 8192`）の上に重ねる。無い仕事（面談スクリプト・経歴書）と古い worker は、今までどおり `prompt` だけ。
+- **FOCUS の worker を新しくする手順**（コードが変わったので1回だけ）：FOCUS で park を `git pull` し、動いている「PARK AI つなぎ役」（`pythonw.exe` の `park_ai_worker.py`）をタスクマネージャーで終わらせ、スタートアップの「PARK AI つなぎ役」を動かして起こし直す（`~/.park-ai/config.json` は変えない）。worker は FOCUS の1台だけにする（取り合いの守りが無いため）。確かめは、架空の本文の案件を登録して、案件の画面の欄が変わるのを見る。
 
 まだやっていないこと：返信を PARK が受け取って AI に渡すこと（受信用のメールボックスと、手元の AI が要る）。
 

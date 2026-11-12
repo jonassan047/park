@@ -162,6 +162,15 @@ TXT;
         return $f($a) === $f($b);
     }
 
+    // 違いの表の印：今の行・AI の行のうち、相手に無いもの（true）。並びは問わない
+    public static function diff(array $now, array $ai): array
+    {
+        $n = fn ($x) => self::norm((string) $x);
+        $nowN = array_map($n, $now);
+        $aiN = array_map($n, $ai);
+        return ['now' => array_map(fn ($x) => !in_array($n($x), $aiN, true), array_values($now)), 'ai' => array_map(fn ($x) => !in_array($n($x), $nowN, true), array_values($ai))];
+    }
+
     // AI の結果と今の案件を比べる
     public static function compare(object $job, object $case): array
     {
@@ -211,6 +220,6 @@ TXT;
         if ($cmp['stale']) { $set('dropped'); N::audit($by, 'ai-case-stale', "#$jobId {$c->title}"); return; }
         if ($cmp['auto']) { self::apply($c, $cmp); $set('applied'); N::audit($by, 'ai-case-auto', "#$jobId {$c->title}"); return; }
         if ($cmp['sameAsRule']) { $set('dropped'); N::audit($by, 'ai-case-same', "#$jobId {$c->title}"); return; }
-        if ($by) N::notify($by, 'AI の読み直しの結果を確かめてください：'.$c->title, '規則の読み方と違いがあります。案件の画面で、AI の結果を使うか選んでください。', "/cases/{$c->id}#ai", false, 'ai', json_decode($j->input, true)['actor_role'] ?? null);
+        if ($by) N::notify($by, 'AI の読み直しの結果を確かめてください：'.$c->title, '規則で読んだ結果と違うところがあるか、自動では入れられない案件です。案件の画面の「AI の読み直し」で、AI の結果を使うか選んでください。', "/cases/{$c->id}#ai", false, 'ai', json_decode($j->input, true)['actor_role'] ?? null);
     }
 }
