@@ -107,7 +107,8 @@ class CaseMailController extends Controller
         abort_unless($m, 404);
         $this->load($r, $m->case_id);
         abort_unless(in_array($kind, ['resume', 'careersheet', 'careersheet-anon'], true), 404);
-        if ($m->route === 'group') {
+        $foreign = $r->user()->role === 'ses' && (int) DB::table('engineers')->where('id', $m->engineer_id)->value('ses_id') !== (int) $r->user()->ses_id;
+        if ($m->route === 'group' || $foreign) {
             abort_unless($kind === 'careersheet-anon' && $m->reply === 'interested', 403);
         }
         $fid = EngineerDocs::generate($m->engineer_id, $kind === 'resume' ? 'resume' : 'careersheet', $r->user(), $kind === 'careersheet-anon');

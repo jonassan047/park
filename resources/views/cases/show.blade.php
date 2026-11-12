@@ -62,11 +62,11 @@
 @endisset
 @if($canMail)
 <x-card title="案内メール">
-<x-slot:actions>@if($c->status === 'open')<a class="btn small" href="{{ url('/cases/'.$c->id.'/mail') }}">エンジニアに案内する</a>@endif</x-slot:actions>
+<x-slot:actions>@if($c->status === 'open')<a class="btn small" href="{{ url('/cases/'.$c->id.'/search') }}">エンジニアに案内する</a>@endif</x-slot:actions>
 <div id="mails"></div>
 <x-table :head="['エンジニア', '送った日', '返事', '記録する', '案件をくれた先へ返す書類']" :count="$mails->count()" empty="まだ送っていません。「エンジニアに案内する」で、候補を絞ってメールを送れます。">
 @foreach($mails as $m)<tr>
-<td>@if($m->route === 'own'){{ $m->name }}@else{{ $m->initials ?: '—' }} <span class="muted">（{{ $m->ses_name }}・PARK から）</span>@endif<div class="muted">{{ $m->score }}点・{{ $m->mode === 'each' ? '個別' : '同じ内容' }}</div></td>
+<td>@if($m->route === 'own'){{ $m->name }}@else{{ $m->initials ?: '—' }} <span class="muted">（{{ $m->ses_name }}・PARK から）</span>@endif<div class="muted">{{ $m->score }}点・{{ \App\Services\CaseMail::MODES[$m->mode] ?? '同じ内容' }}</div></td>
 <td>{{ fmt_dt($m->sent_at) }}</td>
 <td>{{ \App\Services\CaseMail::REPLIES[$m->reply] ?? $m->reply }}@if($m->reply_note)<div class="muted">{{ $m->reply_note }}</div>@endif @if($m->reply_via === 'app')<div class="muted">（本人が画面で）</div>@endif</td>
 <td>@if($m->route === 'own')<form method="post" action="{{ url('/case-mails/'.$m->id.'/reply') }}" class="inline">@csrf
@@ -91,7 +91,7 @@
   <x-card title="エンジニアに案内する">
   @if($c->status !== 'open')<p class="muted">募集中の案件だけ案内できます。</p>
   @else<p class="muted">グループ全体のエンジニアから、得意分野で候補を出し、メールで案内します（返事のリンク付き）。送った記録と返事は、左の「案内メール」に出ます。</p>
-  <a class="btn" href="{{ url('/cases/'.$c->id.'/mail') }}">エンジニアに案内する</a>@endif
+  <a class="btn" href="{{ url('/cases/'.$c->id.'/search') }}">エンジニアに案内する</a>@endif
   </x-card>
   <x-card title="配信済み"><x-table :head="['エンジニア', '点数', '状態', '配信日']" :count="$offers->count()">
   @foreach($offers as $o)<tr><td>{{ $o->name }}</td><td>{{ $o->score }}</td><td>{{ badge('offerStatus', $o->status) }}@if($o->decline_reason)<div class="muted">{{ $o->decline_reason }}</div>@endif</td><td>{{ fmt_dt($o->sent_at) }}</td></tr>@endforeach
@@ -103,7 +103,7 @@
   @if($c->status !== 'open')<p class="muted">募集を終えた案件です。</p>
   @else
   @if($canMail)<p class="muted">案内は「エンジニアに案内する」から、メールで送ります（返事のリンク付き。送った記録と返事は、左の「案内メール」に出ます）。</p>
-  <p><a class="btn" href="{{ url('/cases/'.$c->id.'/mail') }}">エンジニアに案内する</a></p>
+  <p><a class="btn" href="{{ url('/cases/'.$c->id.'/search') }}">エンジニアに案内する</a></p>
   @else<p class="muted">この案件は{{ $c->ses_name ? 'ほかの SES' : '管理者' }}が持ち込んだものです。合う方がいれば「推薦する」で、持ち込んだ{{ $c->ses_name ? ' SES' : '管理者' }}に知らせます（名前は伏せて伝えます）。</p>@endif
   <x-table :head="['エンジニア', '点数', '足りない点', '']" :count="count($rows)" empty="登録しているエンジニアがいません。">
   @foreach($rows as $row)<tr><td><a href="{{ url('/engineers/'.$row['e']->id) }}">{{ $row['e']->name }}</a><div class="muted">{{ lbl('engStatus', $row['e']->status) }}</div></td>

@@ -11,6 +11,8 @@ use Illuminate\Support\Facades\DB;
 class CaseMail
 {
     const REPLIES = ['none' => '返事なし', 'interested' => '応募したい', 'question' => '質問あり', 'declined' => '見送り'];
+    // 送り方（case_mails.mode）：same 同じ内容／each 個別／search エンジニア検索（v0.7.0）
+    const MODES = ['same' => '同じ内容', 'each' => '個別', 'search' => 'エンジニア検索'];
     const PLACEHOLDERS = ['{呼び名}', '{案件名}', '{単価}', '{開始}', '{場所}', '{働き方}', '{必須}', '{合う点}', '{送り主}'];
 
     // 誰が案内できるか：管理者と、案件を持ち込んだ SES
@@ -118,7 +120,7 @@ class CaseMail
             }
             $n++;
         }
-        N::audit($u->id, 'case-mail', "{$c->title} → {$n}名（".($mode === 'each' ? '個別' : '同じ内容').'）');
+        N::audit($u->id, 'case-mail', "{$c->title} → {$n}名（".(self::MODES[$mode] ?? '同じ内容').'）');
         return $n;
     }
 

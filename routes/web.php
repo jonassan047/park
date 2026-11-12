@@ -5,6 +5,7 @@ use App\Http\Controllers\AdminController as Adm;
 use App\Http\Controllers\AiController as Ai;
 use App\Http\Controllers\CaseController as Cas;
 use App\Http\Controllers\CaseMailController as CMail;
+use App\Http\Controllers\CaseSearchController as CSearch;
 use App\Http\Controllers\EgController as Eg;
 use App\Http\Controllers\EngineerController as Eng;
 use App\Http\Controllers\ManualController as Man;
@@ -18,6 +19,8 @@ use Illuminate\Support\Facades\Route;
 
 Route::pattern('id', '[0-9]+');
 Route::pattern('pid', '[0-9]+');
+Route::pattern('sid', '[0-9]+');
+Route::pattern('eid', '[0-9]+');
 
 // ---------- ログイン前 ----------
 Route::get('/', [Pub::class, 'home']);
@@ -111,6 +114,15 @@ Route::middleware('role:admin,ses')->group(function () {
     Route::get('/cases/{id}/mail', [CMail::class, 'form']);
     Route::post('/cases/{id}/mail/preview', [CMail::class, 'preview']);
     Route::post('/cases/{id}/mail/send', [CMail::class, 'send']);
+    // エンジニア検索（v0.7.0）：検索画面 → 一覧 → 詳細 → 送信
+    Route::get('/cases/{id}/search', [CSearch::class, 'form']);
+    Route::post('/cases/{id}/search', [CSearch::class, 'run']);
+    Route::get('/searches/{sid}', [CSearch::class, 'index']);
+    Route::post('/searches/{sid}', [CSearch::class, 'save']);
+    Route::post('/searches/{sid}/add', [CSearch::class, 'add']);
+    Route::post('/searches/{sid}/send', [CSearch::class, 'send']);
+    Route::get('/searches/{sid}/members/{eid}', [CSearch::class, 'member']);
+    Route::post('/searches/{sid}/members/{eid}', [CSearch::class, 'saveMember']);
     Route::post('/case-mails/{id}/reply', [CMail::class, 'reply']);
     Route::get('/case-mails/{id}/doc/{kind}', [CMail::class, 'doc']);
     Route::post('/cases/{id}/status', [Cas::class, 'status']);

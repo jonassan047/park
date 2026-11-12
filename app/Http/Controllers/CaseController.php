@@ -95,7 +95,12 @@ class CaseController extends Controller
         if ($data['canMail']) {
             $q = DB::table('case_mails as m')->join('engineers as e', 'e.id', '=', 'm.engineer_id')->join('ses_companies as s', 's.id', '=', 'e.ses_id')
                 ->where('m.case_id', $id)->select('m.*', 'e.name', 'e.initials', 's.name as ses_name')->orderByDesc('m.id');
-            $data['mails'] = $q->get();
+            $q->addSelect('e.ses_id as eg_ses_id');
+            $data['mails'] = $q->get()->map(function ($m) use ($u) {
+                // 管理者が送った他社の人は、案件を持ち込んだ SES には名前・書類を出さない（グループの人と同じ扱い）
+                if ($u->role === 'ses' && (int) $m->eg_ses_id !== (int) $u->ses_id) $m->route = 'group';
+                return $m;
+            });
             $data['mailApps'] = DB::table('applications')->where('case_id', $id)->pluck('id', 'engineer_id')->all();
         }
 
