@@ -47,6 +47,10 @@ class CaseParser
             }
             if (!$matched && $current) $buckets[$current][] = self::clean($l);
         }
+        // 必須・尚可の各行から、業務経験・業務領域も拾う（技術の欄は変えない）
+        $exp = \App\Support\CaseExp::fromLines($buckets['required_skills'] ?? [], $buckets['preferred_skills'] ?? []);
+        $out['required_exp'] = \App\Support\CaseExp::join($exp['required']);
+        $out['preferred_exp'] = \App\Support\CaseExp::join($exp['preferred']);
         foreach ($buckets as $k => $v) $out[$k] = implode(str_ends_with($k, 'skills') ? '、' : "\n", array_filter($v));
 
         if (!empty($out['title'])) $out['title'] = mb_substr(str_replace(['【', '】', '[', ']'], '', explode("\n", $out['title'])[0]), 0, 80);

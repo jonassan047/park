@@ -262,9 +262,13 @@ function project_techs($p): array
     return array_values(array_unique($all));
 }
 
+// 短くて、ほかの名前の中に入りやすい名前（Word は WordPress に入る）。これらは、完全に同じときだけ一致にする（norm_skill_raw の形）
+const PARK_EXACT_ONLY = ['word', 'erp', 'sso', 'dbt'];
+
 // 名前が似ていても別の技術（Java と JavaScript など）は一致にしない
 function loose_match(string $a, string $b): bool
 {
+    if (in_array($a, PARK_EXACT_ONLY, true) || in_array($b, PARK_EXACT_ONLY, true)) return $a === $b;
     if (!str_contains($a, $b) && !str_contains($b, $a)) return false;
     foreach ([['java', 'javascript']] as [$x, $y]) {
         if ((str_starts_with($a, $x) && str_starts_with($b, $y) && !str_starts_with($a, $y))

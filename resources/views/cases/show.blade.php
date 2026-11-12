@@ -12,6 +12,9 @@
 @if($u->role !== 'eg')<dt>元請け</dt><dd>{{ $c->client_label ?: '—' }}</dd><dt>持ち込み</dt><dd>{{ $c->ses_name ?: '管理者' }}</dd>@endif
 <dt>必須</dt><dd><x-chips :list="parse_list($c->required_skills)" /></dd>
 <dt>尚可</dt><dd><x-chips :list="parse_list($c->preferred_skills)" /></dd>
+@php $expReq = \App\Support\CaseExp::split($c->required_exp ?? null); $expPref = \App\Support\CaseExp::split($c->preferred_exp ?? null); @endphp
+@if($expReq)<dt>必須の業務</dt><dd><x-chips :list="$expReq" /></dd>@endif
+@if($expPref)<dt>尚可の業務</dt><dd><x-chips :list="$expPref" /></dd>@endif
 <dt>経験年数</dt><dd>{{ $c->min_years ? num_disp($c->min_years).'年以上' : '—' }}</dd>
 <dt>働き方</dt><dd>{{ lbl('workStyle', $c->work_style) }}</dd><dt>場所</dt><dd>{{ $c->location ?: '—' }}</dd>
 <dt>開始</dt><dd>{{ fmt_date($c->start_date) }}</dd><dt>期間</dt><dd>{{ $c->period ?: '—' }}</dd>

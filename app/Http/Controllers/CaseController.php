@@ -7,7 +7,9 @@ use App\Services\CaseParser;
 use App\Services\Matcher;
 use App\Services\Notifier as N;
 use App\Services\Registration;
+use App\Services\SkillChecks;
 use App\Services\Workflow as W;
+use App\Support\CaseExp;
 use App\Support\Perms;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -29,7 +31,11 @@ class CaseController extends Controller
     {
         $c = (object) (CaseParser::parse($r->input('raw_text')) + ['raw_text' => $r->input('raw_text')]);
         $found = $c->detected ?? [];
-        session()->now('flash', ['msg' => '取り込みました。内容を確かめて、足りないところを直してから登録してください。'.($found ? '本文から見つかった技術：'.implode('、', $found).'（必須に無いものは尚可に入れました）' : ''), 'type' => 'ok']);
+        $expText = [];
+        if (!empty($c->required_exp)) $expText[] = implode('、', CaseExp::split($c->required_exp)).'（必須）';
+        if (!empty($c->preferred_exp)) $expText[] = implode('、', CaseExp::split($c->preferred_exp)).'（尚可）';
+        session()->now('flash', ['msg' => '取り込みました。内容を確かめて、足りないところを直してから登録してください。'.($found ? '本文から見つかった技術：'.implode('、', $found).'（必須に無いものは尚可に入れました）。' : '')
+            .($expText ? '本文の必須・尚可から見つかった業務：'.implode('、', $expText) : ''), 'type' => 'ok']);
         return view('cases.form', ['c' => $c, 'action' => '/cases', 'submit' => '登録する', 'sesList' => $this->sesList($r), 'import' => false]);
     }
 
@@ -83,7 +89,8 @@ class CaseController extends Controller
         } elseif ($u->role === 'ses') {
             $engs = Registration::usableEngineers(DB::table('engineers')->where('ses_id', $u->ses_id)->whereNotIn('status', ['unavailable', 'left']))->orderBy('name')->get();
             $idxs = Matcher::skillIndexMany($engs->pluck('id')->all()); // 人数によらず、まとめて読む
-            $rows = $engs->map(fn ($e) => ['e' => $e] + Matcher::score($c, $e, $idxs[$e->id] ?? []))->sortByDesc('score')->values()->all();
+            $exps = SkillChecks::expMany($engs->pluck('id')->all());
+            $rows = $engs->map(fn ($e) => ['e' => $e] + Matcher::score($c, $e, $idxs[$e->id] ?? [], $exps[$e->id] ?? []))->sortByDesc('score')->values()->all();
             $data += ['rows' => $rows, 'applied' => DB::table('applications')->where('case_id', $id)->pluck('engineer_id')->all(),
                 'offered' => DB::table('case_offers')->where('case_id', $id)->pluck('status', 'engineer_id')->all()];
         } else {

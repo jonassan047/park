@@ -69,8 +69,9 @@ class SesController extends Controller
         $mine ? $q->where('source_ses_id', $r->user()->ses_id) : $q->where('status', 'open');
         $engs = Registration::usableEngineers(DB::table('engineers')->where('ses_id', $r->user()->ses_id)->whereIn('status', ['available', 'proposing']))->get();
         $idxs = Matcher::skillIndexMany($engs->pluck('id')->all()); // 案件の数によらず、1回だけまとめて読む
-        $list = $q->get()->map(function ($c) use ($engs, $idxs) {
-            $best = $engs->map(fn ($e) => ['e' => $e, 's' => Matcher::score($c, $e, $idxs[$e->id] ?? [])['score']])->sortByDesc('s')->first();
+        $exps = SkillChecks::expMany($engs->pluck('id')->all());
+        $list = $q->get()->map(function ($c) use ($engs, $idxs, $exps) {
+            $best = $engs->map(fn ($e) => ['e' => $e, 's' => Matcher::score($c, $e, $idxs[$e->id] ?? [], $exps[$e->id] ?? [])['score']])->sortByDesc('s')->first();
             $c->best = $best ? "{$best['e']->name}（{$best['s']}点）" : '—';
             return $c;
         });

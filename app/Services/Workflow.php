@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use App\Services\Notifier as N;
+use App\Support\CaseExp;
 use App\Support\Requirements;
 use App\Support\SkillCatalog;
 
@@ -783,6 +784,22 @@ class Workflow
             $v[$f] = $list ? implode('、', array_unique($list)) : null;
         }
         if ($added) N::toAdmins('案件から新しい技術を技術マスタに追加しました', '「'.$v['title'].'」に、マスタに無い技術がありました：'.implode('、', $added)."\n分類（言語・フレームワーク・DB など）と別名を確かめてください。", '/admin/skills', false);
+        // 必須・尚可の業務（業務経験・業務領域）。技術マスタには通さない。画面（_exp）の保存のときだけ更新する。
+        // 画面を通らない保存（見本など）では、新しい案件に限って、送られた文から入れる。更新では触らない
+        if (array_key_exists('_exp', $d)) {
+            $exp = is_array($d['exp'] ?? null) ? $d['exp'] : [];
+            $req = []; $pref = [];
+            foreach (CaseExp::itemsById() as $itemId => $name) {
+                $pick = $exp[$itemId] ?? null;
+                if ($pick === 'required') $req[] = $name;
+                elseif ($pick === 'preferred') $pref[] = $name;
+            }
+            $v['required_exp'] = CaseExp::join($req);
+            $v['preferred_exp'] = CaseExp::join($pref);
+        } elseif (!$id) {
+            $v['required_exp'] = CaseExp::join(CaseExp::split(is_string($d['required_exp'] ?? null) ? $d['required_exp'] : null));
+            $v['preferred_exp'] = CaseExp::join(CaseExp::split(is_string($d['preferred_exp'] ?? null) ? $d['preferred_exp'] : null));
+        }
         if ($id) {
             DB::table('cases')->where('id', $id)->update($v + ['updated_at' => now_str()]);
             N::audit($user->id, 'case-update', $v['title']);
@@ -801,12 +818,13 @@ class Workflow
         $c = DB::table('cases')->find($caseId);
         $bySes = []; $count = 0;
         $idxs = Matcher::skillIndexMany($engineerIds); // 人数によらず、まとめて読む
+        $exps = SkillChecks::expMany($engineerIds);
         foreach (array_map('intval', $engineerIds) as $eid) {
             // 仮登録・停止中・退会済は飛ばす。所属の会社が参加中（active。直属の入れ物も active）でなければ飛ばす
             $e = Registration::usableEngineers(DB::table('engineers')->where('id', $eid)
                 ->whereExists(fn ($q) => $q->select(DB::raw(1))->from('ses_companies')->whereColumn('ses_companies.id', 'engineers.ses_id')->where('ses_companies.status', 'active')))->first();
             if (!$e || DB::table('case_offers')->where('case_id', $caseId)->where('engineer_id', $eid)->exists()) continue;
-            $s = Matcher::score($c, $e, $idxs[$eid] ?? []);
+            $s = Matcher::score($c, $e, $idxs[$eid] ?? [], $exps[$eid] ?? []);
             DB::table('case_offers')->insert(['case_id' => $caseId, 'engineer_id' => $eid, 'score' => $s['score'], 'reasons' => implode(' / ', $s['reasons']),
                 'missing' => implode(' / ', $s['missing']), 'sent_by' => $actor->id, 'sent_at' => now_str()]);
             N::toEg($eid, "あなたに合う案件が届きました：{$c->title}",

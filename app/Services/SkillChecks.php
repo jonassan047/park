@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\CaseExp;
 use App\Support\SkillCatalog;
 use App\Support\SkillForm;
 use Illuminate\Support\Facades\DB;
@@ -463,6 +464,22 @@ class SkillChecks
         return $out;
     }
 
+    // 案件の業務と突き合わせる項目（業務経験・業務領域）に、チェックがある人。[engineer_id => [項目の名前 => true]]。問い合わせは500人ごとに1回
+    public static function expMany(array $engineerIds): array
+    {
+        $out = [];
+        foreach (array_unique(array_map('intval', $engineerIds)) as $id) $out[$id] = [];
+        $items = SkillForm::caseItems();
+        $sections = array_values(array_unique(array_column($items, 'section')));
+        if (!$items) return $out;
+        foreach (array_chunk(array_keys($out), 500) as $chunk) {
+            foreach (DB::table(self::TABLE)->whereIn('engineer_id', $chunk)->whereIn('section', $sections)->where('parent', '')->get(['engineer_id', 'section', 'item']) as $r) {
+                if (isset($items[$r->item]) && $items[$r->item]['section'] === $r->section) $out[$r->engineer_id][$r->item] = true;
+            }
+        }
+        return $out;
+    }
+
     // 技術マスタの言葉ごとの、使っている人（[term_id => [engineer_id => true]]）。行の言葉を技術マスタで引く
     public static function usedPeople(): array
     {
@@ -513,6 +530,15 @@ class SkillChecks
         }
         $missing = [];
         foreach ($req as $i => $r) if (!$any($mine, [$reqKeys[$i]])) $missing[] = $r;
-        return ['marks' => $marks, 'missing' => $missing, 'empty' => !$req && !$pref];
+        // 業務経験・業務領域：案件の必須・尚可の業務に印を付け、本人がチェックしていない必須の業務は足りないものに入れる
+        $expReq = CaseExp::split($c->required_exp ?? null);
+        $expPref = CaseExp::split($c->preferred_exp ?? null);
+        foreach (SkillForm::caseItems() as $name => $it) {
+            if (in_array($name, $expReq, true)) {
+                $marks[$it['id']] = 'required';
+                if (!self::isOn($state, $it['id'])) $missing[] = $name;
+            } elseif (in_array($name, $expPref, true)) $marks[$it['id']] = 'preferred';
+        }
+        return ['marks' => $marks, 'missing' => $missing, 'empty' => !$req && !$pref && !$expReq && !$expPref];
     }
 }

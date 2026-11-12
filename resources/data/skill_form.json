@@ -2222,6 +2222,29 @@
    ]
   },
   {
+   "key": "work",
+   "title": "システム開発プロジェクトで経験のある業務は？",
+   "match": false,
+   "caseMatch": true,
+   "items": [
+    {"name": "進捗・課題管理", "years": false, "other": false, "caseWords": ["進捗", "課題管理", "WBS", "タスク管理", "リスク", "バックログ"]},
+    {"name": "折衝・調整", "years": false, "other": false, "caseWords": ["折衝", "調整", "合意形成", "ステークホルダー", "ヒアリング"]},
+    {"name": "ベンダー管理", "years": false, "other": false, "caseWords": ["ベンダーコントロール", "ベンダー管理"]},
+    {"name": "資料作成", "years": false, "other": false, "caseWords": ["資料", "ドキュメント", "設計書", "報告書", "議事録", "マニュアル"]},
+    {"name": "移行", "years": false, "other": false, "caseWords": ["移行", "データ移行"]},
+    {"name": "導入・刷新", "years": false, "other": false, "caseWords": ["導入", "刷新", "更改", "バージョンアップ", "リプレース"]},
+    {"name": "業務設計・運用設計", "years": false, "other": false, "caseWords": ["業務フロー", "運用設計", "業務整理", "標準化", "業務改善"]},
+    {"name": "品質管理", "years": false, "other": false, "caseWords": ["品質", "品質指標"]},
+    {"name": "データ分析・BI", "years": false, "other": false, "caseWords": ["分析", "BI", "データアーキテクチャ"]},
+    {"name": "障害・問い合わせ対応（ITIL）", "years": false, "other": false, "caseWords": ["障害", "不具合", "問い合わせ", "インシデント", "ITIL", "変更管理"]},
+    {"name": "英語・海外", "years": false, "other": false, "caseWords": ["英語", "通訳", "海外", "グローバル"]},
+    {"name": "AI 活用", "years": false, "other": false, "caseWords": ["AI", "生成AI", "AX", "LLM", "RAG", "ChatGPT"]},
+    {"name": "難しいプロジェクト（大規模・複数・立て直し）", "years": false, "other": false, "caseWords": ["大規模", "複数案件", "複数プロジェクト", "横断", "炎上", "遅延", "立て直し"]},
+    {"name": "教育・ナレッジ", "years": false, "other": false, "caseWords": ["教育", "指導", "ナレッジ", "属人化解消"]},
+    {"name": "提案・事業化", "years": false, "other": false, "caseWords": ["提案", "プリセールス", "外販", "新規事業"]}
+   ]
+  },
+  {
    "key": "industry",
    "title": "システム開発経験のある業界は？",
    "match": false,
@@ -2252,6 +2275,22 @@
     {"name": "マスコミ/メディア", "years": false, "other": false},
     {"name": "エンターテインメント", "years": false, "other": false},
     {"name": "公共/官公庁", "years": false, "other": false}
+   ]
+  },
+  {
+   "key": "area",
+   "title": "システム開発で関わった業務の領域は？",
+   "match": false,
+   "caseMatch": true,
+   "items": [
+    {"name": "営業・見積", "years": false, "other": false, "caseWords": ["営業", "見積", "SFA", "販売管理"]},
+    {"name": "人事・給与", "years": false, "other": false, "caseWords": ["人事", "給与", "勤怠", "労務"]},
+    {"name": "経理・財務", "years": false, "other": false, "caseWords": ["経理", "会計", "財務", "債権", "債務", "固定資産", "決算"]},
+    {"name": "総務・バックオフィス", "years": false, "other": false, "caseWords": ["総務", "バックオフィス", "庶務", "稟議"]},
+    {"name": "受発注・在庫", "years": false, "other": false, "caseWords": ["受発注", "受注", "発注", "在庫", "購買", "調達"]},
+    {"name": "生産管理", "years": false, "other": false, "caseWords": ["生産管理", "生産計画", "MES"]},
+    {"name": "規制対応（GxP など）", "years": false, "other": false, "caseWords": ["GxP", "GMP", "薬事", "規制対応"]},
+    {"name": "顧客管理（CRM・コンタクトセンター）", "years": false, "other": false, "caseWords": ["CRM", "顧客管理", "コンタクトセンター", "コールセンター"]}
    ]
   },
   {

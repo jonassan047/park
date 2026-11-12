@@ -15,6 +15,28 @@
 <x-field label="金額のメモ" name="price_note" :value="$c->price_note ?? null" placeholder="例：スキル見合い、精算 140-180h" />
 <x-field label="必須スキル" name="required_skills" type="textarea" rows="2" :value="$c->required_skills ?? null" placeholder="Java、Spring Boot、SQL（「、」区切り）" />
 <x-field label="尚可スキル" name="preferred_skills" type="textarea" rows="2" :value="$c->preferred_skills ?? null" placeholder="AWS、Docker" />
+@php
+    // 業務経験・業務領域（必須・尚可）。今の選び方：項目の名前 → required／preferred
+    $expReq = \App\Support\CaseExp::split($c->required_exp ?? null);
+    $expPref = \App\Support\CaseExp::split($c->preferred_exp ?? null);
+    $expSecs = [];
+    foreach (\App\Support\SkillForm::caseItems() as $expName => $expIt) $expSecs[$expIt['section']][$expName] = $expIt['id'];
+@endphp
+<details open class="span2"><summary>業務経験・業務領域（必須・尚可）</summary>
+<p class="muted">取り込みでは、必須・尚可の文から拾って選んでおきます。確かめて直してください。</p>
+<input type="hidden" name="_exp" value="1">
+@foreach($expSecs as $secKey => $expItems)
+<p><b>{{ \App\Support\SkillForm::shortTitle($secKey) }}</b></p>
+@foreach($expItems as $expName => $expId)
+@php $expNow = in_array($expName, $expReq, true) ? 'required' : (in_array($expName, $expPref, true) ? 'preferred' : ''); @endphp
+<p><select name="exp[{{ $expId }}]" aria-label="{{ $expName }}">
+<option value="">—</option>
+<option value="required"{{ $expNow === 'required' ? ' selected' : '' }}>必須</option>
+<option value="preferred"{{ $expNow === 'preferred' ? ' selected' : '' }}>尚可</option>
+</select> {{ $expName }}</p>
+@endforeach
+@endforeach
+</details>
 <x-field label="経験年数（以上）" name="min_years" type="number" step="0.5" :value="num_disp($c->min_years ?? null)" />
 <x-field label="働き方" name="work_style" type="select" :options="PARK_LABELS['workStyle']" :value="$c->work_style ?? 'any'" />
 <x-field label="場所" name="location" :value="$c->location ?? null" placeholder="例：東京都港区（最寄り：品川）" />

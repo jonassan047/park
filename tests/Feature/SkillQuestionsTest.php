@@ -140,14 +140,14 @@ class SkillQuestionsTest extends TestCase
     public function test_t1_json_has_industry_and_pmpl_in_order(): void
     {
         $tree = SkillForm::tree();
-        $this->assertSame(['roles', 'phases', 'lang', 'db', 'os', 'pm', 'dev', 'industry', 'pmpl'], array_column($tree, 'key'));
-        $ind = $tree[7];
+        $this->assertSame(['roles', 'phases', 'lang', 'db', 'os', 'pm', 'dev', 'work', 'industry', 'area', 'pmpl'], array_column($tree, 'key'));
+        $ind = $tree[8];
         $this->assertSame('システム開発経験のある業界は？', $ind['title']);
         $this->assertSame(self::INDUSTRIES, array_column($ind['items'], 'item'));
         $this->assertCount(26, $ind['items']);
         foreach ($ind['items'] as $n) { $this->assertFalse($n['years'], $n['item']); $this->assertFalse($n['other'], $n['item']); $this->assertSame([], $n['words'], $n['item']); }
         $this->assertFalse($ind['match']);
-        $pp = $tree[8];
+        $pp = $tree[10];
         $this->assertSame('PM/PLご経験者の方へ', $pp['title']);
         $this->assertTrue($pp['single']);
         $this->assertFalse($pp['match']);
@@ -647,8 +647,8 @@ class SkillQuestionsTest extends TestCase
 
     public function test_t20_version_is_shown(): void
     {
-        $this->assertSame('v0.4.1', config('park.version'));
-        $this->get('/login')->assertOk()->assertSee('v0.4.1');
+        $this->assertSame('v0.5.0', config('park.version'));
+        $this->get('/login')->assertOk()->assertSee('v0.5.0');
     }
 
     // ---------- 既存の7節は変わらない ----------

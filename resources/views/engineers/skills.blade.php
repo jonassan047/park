@@ -67,7 +67,7 @@
 @endif
 <x-card><form method="post" action="{{ url('/engineers/'.$e->id.'/skills') }}">@csrf
 <input type="hidden" name="_sf" value="1">
-<p class="muted">経験のある項目にチェックを入れ、年数を選んでください。年数のある項目は、チェックしたら必ず年数も選んでください。業界は当てはまるものすべて、PM/PL の設問は1つずつ選んでください。一覧に無いものは「その他」にチェックして名前を書きます。盛らずに、本当に経験のあるものだけを選んでください。</p>
+<p class="muted">経験のある項目にチェックを入れ、年数を選んでください。年数のある項目は、チェックしたら必ず年数も選んでください。業務経験・業界・業務領域は当てはまるものすべて、PM/PL の設問は1つずつ選んでください。一覧に無いものは「その他」にチェックして名前を書きます。盛らずに、本当に経験のあるものだけを選んでください。</p>
 <p class="sf-bar"><button type="button" class="btn ghost small" id="sf-open">すべて開く</button> <button type="button" class="btn ghost small" id="sf-close">すべて閉じる</button></p>
 @foreach($form as $sec)
 @php

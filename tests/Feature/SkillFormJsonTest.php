@@ -34,7 +34,7 @@ class SkillFormJsonTest extends TestCase
         $paths = array_map(fn ($n) => $n['section']."\0".$n['parent']."\0".$n['item'], $nodes);
         $this->assertSame(count($paths), count(array_unique($paths)));
         $this->assertSame(count($nodes), count(array_unique(array_column($nodes, 'id'))));
-        $this->assertSame(['roles', 'phases', 'lang', 'db', 'os', 'pm', 'dev', 'industry', 'pmpl'], array_column(SkillForm::tree(), 'key'));
+        $this->assertSame(['roles', 'phases', 'lang', 'db', 'os', 'pm', 'dev', 'work', 'industry', 'area', 'pmpl'], array_column(SkillForm::tree(), 'key'));
         foreach ($nodes as $n) $this->assertSame($n, SkillForm::byPath($n['section'], $n['parent'], $n['item']));
     }
 

@@ -269,7 +269,7 @@ class EngineerController extends Controller
             ->merge(DB::table('applications')->where('engineer_id', $eid)->pluck('case_id'))->unique()->all();
         return DB::table('cases')->whereIn('id', $ids)->where('status', '<>', 'draft')
             ->orderByRaw("case when status = 'open' then 0 else 1 end")->orderByDesc('id')
-            ->get(['id', 'title', 'status', 'required_skills', 'preferred_skills']);
+            ->get(['id', 'title', 'status', 'required_skills', 'preferred_skills', 'required_exp', 'preferred_exp']);
     }
 
     public function saveSkills(Request $r, int $id)
@@ -361,6 +361,11 @@ class EngineerController extends Controller
         }
         $idx = Matcher::skillIndex($id);
         $reqRows = $c ? array_map(fn ($r) => [$r, ($s = Matcher::hasSkill($idx, $r)) ? '○ '.($s['years'] ?: '経験あり') : '—'], parse_list($c->required_skills)) : [];
+        // 必須の業務（業務経験・業務領域）：本人がチェックしていれば ○
+        if ($c) {
+            $mine = SkillChecks::expMany([$id])[$id] ?? [];
+            foreach (\App\Support\CaseExp::split($c->required_exp ?? null) as $name) $reqRows[] = [$name, isset($mine[$name]) ? '○ 経験あり' : '—'];
+        }
         // 節ごとの行（左に短い名前、右に「PHP（5年以上）：Laravel」の形の文）。当たる名前の印は、項目の言葉で決める
         $sections = array_values(array_filter($display['sections'], fn ($s) => $s['entries']));
         return view('engineers.sheet', ['e' => $e, 'c' => $c, 'anon' => $r->query('anon') === '1', 'sections' => $sections,

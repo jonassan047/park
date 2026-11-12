@@ -19,7 +19,7 @@ class SkillForm
     const SHORT = [
         'roles' => '役割', 'phases' => '工程', 'lang' => '言語・フレームワーク', 'db' => 'データベース', 'os' => 'OS',
         'pm' => 'プロジェクト管理ツール', 'dev' => '開発・運用ツール',
-        'industry' => '業界', 'pmpl' => 'PM/PL の経験',
+        'work' => '業務経験', 'industry' => '業界', 'area' => '業務領域', 'pmpl' => 'PM/PL の経験',
     ];
 
     // 今のスキルを新しい表に置くときの「その他」の置き場所（分類 => [節, 親]）。OS と、下に無い分類は place() で決める
@@ -56,7 +56,7 @@ class SkillForm
     // 検査ずみの JSON から、項目の一覧・木・索引を組み立てる（誤りは \RuntimeException）
     private static function build(array $json): array
     {
-        $nodes = []; $byId = []; $byPath = []; $tree = []; $heading = null; $showIf = [];
+        $nodes = []; $byId = []; $byPath = []; $tree = []; $heading = null; $showIf = []; $caseNames = [];
         $add = function (array $n) use (&$nodes, &$byId, &$byPath) {
             $n['pos'] = count($nodes);
             $path = $n['section']."\0".$n['parent']."\0".$n['item'];
@@ -73,11 +73,35 @@ class SkillForm
             // match（既定 true）：false の節は、案件とのマッチングに使わない。single：グループごとに1つ選ぶ。showIf：出す条件（検査のあと、項目の id にする）
             $match = ($s['match'] ?? true) !== false;
             $single = !empty($s['single']);
+            // caseMatch：案件の業務（必須・尚可）と名前で突き合わせる節。項目の caseWords が、案件での言い方
+            $caseMatch = !empty($s['caseMatch']);
             $sec = ['key' => $key, 'title' => (string) ($s['title'] ?? ''), 'short' => self::SHORT[$key] ?? (string) ($s['title'] ?? ''), 'items' => [], 'groups' => [],
-                'match' => $match, 'single' => $single, 'showIf' => []];
+                'match' => $match, 'single' => $single, 'showIf' => [], 'caseMatch' => $caseMatch];
             if ($single && !empty($s['items'])) throw new \RuntimeException("skill_form.json の「{$key}」は、1つ選ぶ節なので、グループだけにしてください。");
+            if ($caseMatch) {
+                if ($match) throw new \RuntimeException("skill_form.json の caseMatch の節は、match を false にしてください：$key");
+                if (!empty($s['groups'])) throw new \RuntimeException("skill_form.json の caseMatch の節は、グループを持てません：$key");
+                if ($single) throw new \RuntimeException("skill_form.json の caseMatch の節は、1つ選ぶ節にできません：$key");
+            }
+            foreach ($s['groups'] ?? [] as $grp) {
+                if (isset($grp['caseWords']) || array_filter((array) ($grp['items'] ?? []), fn ($x) => isset($x['caseWords']))) {
+                    throw new \RuntimeException("skill_form.json の caseWords は、caseMatch の節だけで使えます：$key");
+                }
+            }
             foreach ($s['items'] ?? [] as $i => $it) {
                 if (!empty($it['none'])) throw new \RuntimeException("skill_form.json の none は、1つ選ぶ節のグループの中だけで使えます：$key");
+                $nm = (string) ($it['name'] ?? '');
+                if ($caseMatch) {
+                    if (!empty($it['years']) || !empty($it['other'])) throw new \RuntimeException("skill_form.json の caseMatch の項目に、年数と「その他」は付けられません：{$key}／{$nm}");
+                    $cw = $it['caseWords'] ?? null;
+                    if (!is_array($cw) || !$cw || array_filter($cw, fn ($w) => !is_string($w) || trim($w) === '')) {
+                        throw new \RuntimeException("skill_form.json の caseWords は、文字の配列を1つ以上入れてください：{$key}／{$nm}");
+                    }
+                    if (isset($caseNames[$nm])) throw new \RuntimeException("skill_form.json の業務の名前が重なっています：{$nm}");
+                    $caseNames[$nm] = true;
+                } elseif (isset($it['caseWords'])) {
+                    throw new \RuntimeException("skill_form.json の caseWords は、caseMatch の節だけで使えます：{$key}／{$nm}");
+                }
                 $sec['items'][] = $add(self::make($key, "$key-$i", '', $it, true, false, $match));
             }
             foreach ($s['groups'] ?? [] as $g => $grp) {
@@ -121,6 +145,7 @@ class SkillForm
         return ['id' => $id, 'section' => $section, 'parent' => $parent, 'item' => $name, 'group' => $isGroup,
             'years' => $checkable && !empty($it['years']), 'other' => $other, 'checkable' => $checkable,
             'none' => !$isGroup && !empty($it['none']),
+            'caseWords' => !$isGroup && is_array($it['caseWords'] ?? null) ? array_values(array_map('strval', $it['caseWords'])) : [],
             'words' => $other || !$match ? [] : self::words($name)];
     }
 
@@ -147,6 +172,20 @@ class SkillForm
             foreach ($sec['groups'] as $g) $out[$g['node']['id']] = array_column($g['items'], 'id');
         }
         return $out;
+    }
+
+    // 案件の業務と突き合わせる項目（caseMatch の節。JSON の並び）：[名前 => ['id', 'section', 'words' => 案件での言い方]]
+    private static ?array $caseItems = null;
+
+    public static function caseItems(): array
+    {
+        if (self::$caseItems !== null) return self::$caseItems;
+        $out = [];
+        foreach (self::tree() as $sec) {
+            if (!$sec['caseMatch']) continue;
+            foreach ($sec['items'] as $n) $out[$n['item']] = ['id' => $n['id'], 'section' => $sec['key'], 'words' => $n['caseWords']];
+        }
+        return self::$caseItems = $out;
     }
 
     // 項目の平らな一覧（JSON の並び。親はその子より前）

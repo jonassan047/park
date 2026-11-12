@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\CaseExp;
 use Illuminate\Support\Facades\DB;
 
 // マッチング（案件票 × 経験票）。点数と「合う点」「足りない点」を出す。最終判断は人がする。
@@ -59,27 +60,37 @@ class Matcher
     }
 
     // $idx は、まとめて読んだスキルの索引（skillIndexMany）。渡さなければここで読む
-    public static function score(object $c, object $e, ?array $idx = null): array
+    // $exp は、まとめて読んだ業務のチェック（SkillChecks::expMany の1人分。[項目の名前 => true]）。渡さなければここで読む。
+    // 案件の必須・尚可の業務は、技術と同じ重みで、必須・尚可の数に入る（業務の指定が無い案件の点数は変わらない）
+    public static function score(object $c, object $e, ?array $idx = null, ?array $exp = null): array
     {
         $W = self::WEIGHTS;
         $idx ??= self::skillIndex($e->id);
         $reasons = []; $missing = []; $score = 0.0;
+        $reqExp = CaseExp::split($c->required_exp ?? null);
+        $prefExp = CaseExp::split($c->preferred_exp ?? null);
+        if ($reqExp || $prefExp) $exp ??= SkillChecks::expMany([$e->id])[$e->id] ?? [];
 
         $req = parse_list($c->required_skills);
-        if ($req) {
+        if ($req || $reqExp) {
             $hit = 0;
             foreach ($req as $r) {
                 if ($s = self::hasSkill($idx, $r)) { $hit += $s['fromProject'] ? 0.8 : 1; $reasons[] = "必須 $r".($s['years'] ? '（'.$s['years'].'）' : ''); }
                 else $missing[] = "必須 $r";
             }
-            $score += $W['required'] * $hit / count($req);
+            foreach ($reqExp as $r) {
+                if (isset($exp[$r])) { $hit++; $reasons[] = "必須 $r"; }
+                else $missing[] = "必須 $r";
+            }
+            $score += $W['required'] * $hit / (count($req) + count($reqExp));
         } else $score += $W['required'] * 0.5;
 
         $pref = parse_list($c->preferred_skills);
-        if ($pref) {
+        if ($pref || $prefExp) {
             $hit = 0;
             foreach ($pref as $r) if (self::hasSkill($idx, $r)) { $hit++; $reasons[] = "尚可 $r"; }
-            $score += $W['preferred'] * $hit / count($pref);
+            foreach ($prefExp as $r) if (isset($exp[$r])) { $hit++; $reasons[] = "尚可 $r"; }
+            $score += $W['preferred'] * $hit / (count($pref) + count($prefExp));
         } else $score += $W['preferred'] * 0.5;
 
         if ($c->min_years) {
@@ -117,8 +128,9 @@ class Matcher
         $out = [];
         $engs = $q->get()->filter(fn ($e) => !in_array($e->id, $applied))->values();
         $idxs = self::skillIndexMany($engs->pluck('id')->all()); // 人数によらず問い合わせは決まった回数
+        $exps = SkillChecks::expMany($engs->pluck('id')->all());
         foreach ($engs as $e) {
-            $out[] = ['engineer' => $e, 'offered' => $offered[$e->id] ?? null] + self::score($c, $e, $idxs[$e->id] ?? []);
+            $out[] = ['engineer' => $e, 'offered' => $offered[$e->id] ?? null] + self::score($c, $e, $idxs[$e->id] ?? [], $exps[$e->id] ?? []);
         }
         usort($out, fn ($a, $b) => $b['score'] <=> $a['score']);
         return $out;
