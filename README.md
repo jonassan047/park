@@ -136,7 +136,7 @@ set PARK_AI_TOKEN=（.env と同じ合言葉）
 python tools/ai-worker/park_ai_worker.py
 ```
 
-FOCUS では、Windows の起動で自動で動く（2026-10-16〜）。Ollama は自分のショートカットで、つなぎ役は「スタートアップ」の「PARK AI つなぎ役」（`pythonw.exe -I park_ai_worker.py --log`。窓は出ない）。公開版の URL と合言葉は `~/.park-ai/config.json`（この PC にだけ置く。Git には上げない）。記録は `~/.park-ai/worker.log`。止めるときは、タスクマネージャーで pythonw.exe を終わらせる。
+worker は手元の PC の1台だけで動かす（2026-10-16〜 FOCUS、2026-11-12〜 GENESIS。FOCUS に触れない間は GENESIS）。Windows の起動で自動で動く。Ollama は自分のショートカットで、つなぎ役は「スタートアップ」の「PARK AI つなぎ役」（`pythonw.exe -I park_ai_worker.py --log`。窓は出ない）。公開版の URL と合言葉は `~/.park-ai/config.json`（この PC にだけ置く。Git には上げない）。記録は `~/.park-ai/worker.log`。止めるときは、タスクマネージャーで pythonw.exe を終わらせる。
 
 ### 案件の必須・尚可の読み直し（v0.6.0。2026-11-12）
 
@@ -150,7 +150,7 @@ FOCUS では、Windows の起動で自動で動く（2026-10-16〜）。Ollama �
 - **見分け**：`audit_log` の `ai-case-auto`（自動）・`ai-case-same`（同じで閉じた）・`ai-case-stale`（本文が変わった）・`ai-case-apply`（人が使った）・`ai-case-keep`（今のままにした）。これで「自動／選ぶ」の割合を見て、閾値を見直す。
 - **見える人**：`Perms::caseEdit`（管理者・その案件の SES・担当者）だけ。エンジニア・ほかの会社の SES には欄も AI の文も出ず、`apply-case`・`drop` は 403。見本データの削除（`SamplePurge`）は、見本の案件の `case_skills` の仕事も消す。
 - **worker の `system`・`user`・`options`**：`/ai/worker/next` の答えに、あれば付く。worker は `system` と `user` があれば2通で Ollama に渡し、`options` を既定（`temperature 0.2`・`num_ctx 8192`）の上に重ねる。無い仕事（面談スクリプト・経歴書）と古い worker は、今までどおり `prompt` だけ。
-- **FOCUS の worker を新しくする手順**（コードが変わったので1回だけ）：FOCUS で park を `git pull` し、動いている「PARK AI つなぎ役」（`pythonw.exe` の `park_ai_worker.py`）をタスクマネージャーで終わらせ、スタートアップの「PARK AI つなぎ役」を動かして起こし直す（`~/.park-ai/config.json` は変えない）。worker は FOCUS の1台だけにする（取り合いの守りが無いため）。確かめは、架空の本文の案件を登録して、案件の画面の欄が変わるのを見る。
+- **worker を新しくする手順**（コードが変わったとき）：worker を動かしている PC（今は GENESIS）で park を `git pull` し、動いている「PARK AI つなぎ役」（`pythonw.exe` の `park_ai_worker.py`）をタスクマネージャーで終わらせ、スタートアップの「PARK AI つなぎ役」を動かして起こし直す（`~/.park-ai/config.json` は変えない）。worker は1台だけにする（取り合いの守りが無いため。PC を移すときは、前の PC の worker を止めてから）。確かめは、架空の本文の案件を登録して、案件の画面の欄が変わるのを見る。
 
 まだやっていないこと：返信を PARK が受け取って AI に渡すこと（受信用のメールボックスと、手元の AI が要る）。
 
