@@ -762,6 +762,23 @@ class Workflow
     const CASE_FIELDS = ['title', 'client_label', 'price', 'price_note', 'required_skills', 'preferred_skills', 'description', 'location', 'work_style', 'start_date', 'period',
         'days_per_week', 'interviews_count', 'headcount', 'min_years', 'conditions', 'deadline', 'status', 'raw_text'];
 
+    // 必須・尚可の技術を正式な名前にそろえ、マスタに無いものは足して管理者に知らせる（案件の保存と、AI の結果の差し替えで使う）
+    public static function normalizeCaseSkills(array $v, string $title): array
+    {
+        $added = [];
+        foreach (['required_skills', 'preferred_skills'] as $f) {
+            $list = [];
+            foreach (parse_list($v[$f] ?? '') as $w) {
+                if ($name = SkillCatalog::ensure($w)) $added[] = $name;
+                $t = SkillCatalog::find($w);
+                $list[] = $t[1] ?? $w;
+            }
+            $v[$f] = $list ? implode('、', array_unique($list)) : null;
+        }
+        if ($added) N::toAdmins('案件から新しい技術を技術マスタに追加しました', '「'.$title.'」に、マスタに無い技術がありました：'.implode('、', $added)."\n分類（言語・フレームワーク・DB など）と別名を確かめてください。", '/admin/skills', false);
+        return $v;
+    }
+
     public static function saveCase(array $d, $user, ?int $id = null): int
     {
         $v = [];
@@ -772,18 +789,7 @@ class Workflow
         }
         $v['work_style'] = $v['work_style'] ?: 'any';
         $v['status'] = $v['status'] ?: 'open';
-        // 必須・尚可の技術を正式な名前にそろえ、マスタに無いものは足して管理者に知らせる
-        $added = [];
-        foreach (['required_skills', 'preferred_skills'] as $f) {
-            $list = [];
-            foreach (parse_list($v[$f]) as $w) {
-                if ($name = SkillCatalog::ensure($w)) $added[] = $name;
-                $t = SkillCatalog::find($w);
-                $list[] = $t[1] ?? $w;
-            }
-            $v[$f] = $list ? implode('、', array_unique($list)) : null;
-        }
-        if ($added) N::toAdmins('案件から新しい技術を技術マスタに追加しました', '「'.$v['title'].'」に、マスタに無い技術がありました：'.implode('、', $added)."\n分類（言語・フレームワーク・DB など）と別名を確かめてください。", '/admin/skills', false);
+        $v = self::normalizeCaseSkills($v, $v['title']);
         // 必須・尚可の業務（業務経験・業務領域）。技術マスタには通さない。画面（_exp）の保存のときだけ更新する。
         // 画面を通らない保存（見本など）では、新しい案件に限って、送られた文から入れる。更新では触らない
         if (array_key_exists('_exp', $d)) {

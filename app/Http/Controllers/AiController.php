@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\AiJobs;
+use App\Services\CaseAi;
 use App\Services\Notifier as N;
 use App\Services\Workflow as W;
 use App\Support\Perms;
@@ -24,7 +25,11 @@ class AiController extends Controller
         $this->worker($r);
         $j = AiJobs::next();
         if (!$j) return response()->json(['job' => null]);
-        return response()->json(['job' => ['id' => $j->id, 'kind' => $j->kind, 'prompt' => json_decode($j->input, true)['prompt'] ?? '']]);
+        $in = json_decode($j->input, true) ?: [];
+        $job = ['id' => $j->id, 'kind' => $j->kind, 'prompt' => $in['prompt'] ?? ''];
+        // system・user・options があれば足す（無い仕事と古い worker は、今までどおり prompt だけで動く）
+        foreach (['system', 'user', 'options'] as $k) if (isset($in[$k])) $job[$k] = $in[$k];
+        return response()->json(['job' => $job]);
     }
 
     public function result(Request $r, int $id)
@@ -39,7 +44,10 @@ class AiController extends Controller
     {
         $j = DB::table('ai_jobs')->find($id);
         abort_unless($j, 404);
-        if ($j->ref_type === 'interview') {
+        if ($j->ref_type === 'case') {
+            $c = DB::table('cases')->find($j->ref_id);
+            abort_unless($c && in_array($r->user()->role, ['admin', 'ses']) && Perms::caseEdit($r->user(), $c), 403);
+        } elseif ($j->ref_type === 'interview') {
             $iv = DB::table('interviews')->find($j->ref_id);
             abort_unless($iv && in_array($r->user()->role, ['admin', 'ses']) && Perms::app($r->user(), W::loadApp($iv->application_id)), 403);
         } else {
@@ -105,9 +113,29 @@ class AiController extends Controller
         return $this->go("/engineers/$eid#docs", '「'.$p['title'].'」を経験票に足しました。経験票の画面で中身を確かめてください。');
     }
 
+    // 案件の必須・尚可：AI の結果を使う（本文が頼んだときと同じときだけ）
+    public function applyCase(Request $r, int $id)
+    {
+        $j = $this->job($r, $id);
+        abort_unless($j->status === 'done' && $j->kind === 'case_skills', 400);
+        $c = DB::table('cases')->find($j->ref_id);
+        $cmp = CaseAi::compare($j, $c);
+        if ($cmp['stale']) return $this->go("/cases/{$c->id}#ai", '本文が変わったので使えません。もう一度頼んでください。', 'bad');
+        CaseAi::apply($c, $cmp);
+        DB::table('ai_jobs')->where('id', $id)->update(['status' => 'applied']);
+        N::audit($r->user()->id, 'ai-case-apply', "#$id {$c->title}");
+        return $this->go("/cases/{$c->id}#ai", 'AI の結果を使いました。必須・尚可・業務を置き換えました。');
+    }
+
     public function drop(Request $r, int $id)
     {
         $j = $this->job($r, $id);
+        if ($j->kind === 'case_skills') {
+            abort_unless($j->status === 'done', 400);
+            DB::table('ai_jobs')->where('id', $id)->update(['status' => 'dropped']);
+            N::audit($r->user()->id, 'ai-case-keep', "#$id");
+            return $this->go("/cases/{$j->ref_id}#ai", '今のままにしました。');
+        }
         DB::table('ai_jobs')->where('id', $id)->update(['status' => $j->kind === 'resume' && $j->status === 'done' && $r->input('done') ? 'applied' : 'dropped']);
         $back = $j->ref_type === 'interview' ? "/interviews/{$j->ref_id}" : '/engineers/'.(json_decode($j->input, true)['engineer_id'] ?? '').'#docs';
         return $this->go($back, $r->input('done') ? '下書きを閉じました。' : '下書きを捨てました。');

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\CaseMail as CM;
+use App\Services\CaseAi;
 use App\Services\CaseParser;
 use App\Services\Matcher;
 use App\Services\Notifier as N;
@@ -43,6 +44,7 @@ class CaseController extends Controller
     {
         if (!str_in($r->input('title'))) return $this->go('/cases/new', '案件名を入れてください。', 'bad');
         $id = W::saveCase($r->all(), $r->user());
+        CaseAi::queue($id, $r->user(), true); // 本文があれば、手元の AI に必須・尚可を読み直してもらう（入れられなくても登録は成功）
         return $this->go("/cases/$id", $r->user()->role === 'admin' ? '登録しました。マッチングで、合うエンジニアに配信してください。' : '登録しました。続けて「エンジニアに案内する」で、合うエンジニアにメールで案内できます。');
     }
 
@@ -60,7 +62,19 @@ class CaseController extends Controller
         $c = $this->load($id);
         abort_unless(Perms::caseEdit($r->user(), $c), 403);
         W::saveCase($r->all(), $r->user(), $id);
+        $new = (string) DB::table('cases')->where('id', $id)->value('raw_text');
+        if ($new !== (string) $c->raw_text) CaseAi::queue($id, $r->user(), true); // 本文を変えたときだけ、読み直しを入れ直す
         return $this->go("/cases/$id", '保存しました。');
+    }
+
+    // 「AI に読み直してもらう」ボタン
+    public function aiParse(Request $r, int $id)
+    {
+        $c = $this->load($id);
+        abort_unless(Perms::caseEdit($r->user(), $c), 403);
+        if ($why = CaseAi::blocked($c)) return $this->go("/cases/$id#ai", $why, 'bad');
+        if (!CaseAi::queue($id, $r->user())) return $this->go("/cases/$id#ai", 'すでに AI が読み直しています。結果が出るまでお待ちください。', 'bad');
+        return $this->go("/cases/$id#ai", 'AI に頼みました。手元の PC の AI が順に作業します（1件 1分ほどかかります）。');
     }
 
     public function show(Request $r, int $id)

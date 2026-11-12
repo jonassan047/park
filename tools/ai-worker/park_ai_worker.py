@@ -1,5 +1,6 @@
 """PARK の AI の仕事の箱から仕事を取ってきて、手元の AI（Ollama）に渡し、結果を返す。
 
+仕事の種類は、面談スクリプトの言い回し・経歴書から経験票の下書き・案件の必須・尚可の読み直し。
 案件や個人の情報は、この PC と PARK の間だけでやり取りし、ほかの外部のサービスには送らない。
 PC がついていて、これが動いている間だけ、AI の仕事が進む。
 
@@ -59,14 +60,21 @@ def park(path, data=None):
     return post(PARK_URL + path, data or {}, {"X-Park-Ai-Token": TOKEN})
 
 
-def ask_ai(prompt):
+def ask_ai(job):
     # Ollama の chat API。答えを JSON に限らせる（format: json）。CPU だけだと数分かかるので、長く待つ
+    # 仕事に system と user があれば2通で渡す（案件の読み直し）。無ければ、今までどおり prompt を user の1通で渡す
+    if job.get("system") and job.get("user"):
+        messages = [{"role": "system", "content": job["system"]}, {"role": "user", "content": job["user"]}]
+    else:
+        messages = [{"role": "user", "content": job["prompt"]}]
+    options = {"temperature": 0.2, "num_ctx": 8192}
+    options.update(job.get("options") or {})  # 仕事の options（temperature など）を既定の上に重ねる
     res = post(OLLAMA_URL + "/api/chat", {
         "model": MODEL,
-        "messages": [{"role": "user", "content": prompt}],
+        "messages": messages,
         "format": "json",
         "stream": False,
-        "options": {"temperature": 0.2, "num_ctx": 8192},
+        "options": options,
     }, timeout=1800)
     return res["message"]["content"]
 
@@ -77,7 +85,7 @@ def work_once():
         return False
     print(f"[{time.strftime('%H:%M:%S')}] 仕事 #{job['id']}（{job['kind']}）を始めます", flush=True)
     try:
-        out = ask_ai(job["prompt"])
+        out = ask_ai(job)
         park(f"/ai/worker/{job['id']}/result", {"output": out, "engine": f"ollama:{MODEL}"})
         print(f"[{time.strftime('%H:%M:%S')}] 仕事 #{job['id']} を返しました", flush=True)
     except Exception as e:  # AI が止まっていても、PARK には失敗として返す

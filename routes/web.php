@@ -141,6 +141,8 @@ Route::middleware('role:admin,ses')->group(function () {
     Route::post('/case-mails/{id}/submitted', [CMail::class, 'submitted']);
     Route::post('/interviews/{id}/ai', [Ai::class, 'queueScript']);
     Route::post('/ai-jobs/{id}/apply', [Ai::class, 'apply']);
+    Route::post('/ai-jobs/{id}/apply-case', [Ai::class, 'applyCase']);
+    Route::post('/cases/{id}/ai-parse', [Cas::class, 'aiParse']);
 });
 
 Route::middleware('role:admin,eg')->group(function () {

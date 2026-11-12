@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Storage;
 // 結果は下書きとして見せ、採用するかどうかは人が決める（AI は確定しない）。
 class AiJobs
 {
-    const KINDS = ['script' => '面談スクリプトの言い回し', 'resume' => '経歴書から経験票の下書き'];
+    const KINDS = ['script' => '面談スクリプトの言い回し', 'resume' => '経歴書から経験票の下書き', 'case_skills' => '案件の必須・尚可の読み直し'];
     const STATUS = ['queued' => '順番待ち', 'running' => 'AI が作業中', 'done' => '下書きができた', 'failed' => '失敗', 'applied' => '採用した', 'dropped' => '捨てた'];
 
     public static function latest(string $refType, int $refId, string $kind)
@@ -28,6 +28,12 @@ class AiJobs
             'status' => 'queued', 'created_by' => $actor->id ?? null, 'created_at' => now_str()]);
         N::audit($actor->id ?? null, 'ai-queue', self::KINDS[$kind]." #$id");
         return $id;
+    }
+
+    // ---------- 案件の必須・尚可の読み直し（中身は CaseAi） ----------
+    public static function queueCase(int $caseId, array $input, $actor): int
+    {
+        return self::queue('case_skills', 'case', $caseId, $input, $actor);
     }
 
     // ---------- 面談スクリプトの言い回し ----------
@@ -103,6 +109,19 @@ class AiJobs
     {
         $d = self::json($j->output);
         if (!is_array($d)) return null;
+        if ($j->kind === 'case_skills') {
+            if (!is_array($d['required'] ?? null) && !is_array($d['preferred'] ?? null)) return null;
+            $clean = function ($v) {
+                $out = [];
+                foreach (is_array($v) ? $v : [] as $x) {
+                    if (!is_string($x)) continue;
+                    $x = preg_replace('/^[\s　]+|[\s　]+$/u', '', $x) ?? $x;
+                    if ($x !== '') $out[] = mb_substr($x, 0, 300);
+                }
+                return array_slice($out, 0, 60);
+            };
+            return ['required' => $clean($d['required'] ?? null), 'preferred' => $clean($d['preferred'] ?? null)];
+        }
         if ($j->kind === 'script') {
             $list = $d['items'] ?? (array_is_list($d) ? $d : null);
             if (!is_array($list)) return null;
@@ -131,7 +150,9 @@ class AiJobs
         if (!$j || $j->status !== 'running') return;
         $ok = $output !== null && $error === null && self::items((object) ['kind' => $j->kind, 'input' => $j->input, 'output' => $output]) !== null;
         DB::table('ai_jobs')->where('id', $id)->update(['status' => $ok ? 'done' : 'failed', 'output' => $output, 'engine' => $engine, 'done_at' => now_str(),
-            'error' => $ok ? null : ($error ?: ($j->kind === 'script' ? 'AI の答えの形が違うか、項目の数が合いませんでした。もう一度頼んでください' : 'AI の答えの形が違いました。もう一度頼んでください'))]);
+            'error' => $ok ? null : ($error ?: ($j->kind === 'script' ? 'AI の答えの形が違うか、項目の数が合いませんでした。もう一度頼んでください'
+                : ($j->kind === 'case_skills' ? 'AI の答えの形が違いました。もう一度頼むか、規則の結果のまま使ってください' : 'AI の答えの形が違いました。もう一度頼んでください')))]);
+        if ($ok && $j->kind === 'case_skills') { CaseAi::settle($id); return; } // 案件は、本文と突き合わせて自動か選ぶかを決める
         if ($ok && $j->created_by) {
             $link = $j->ref_type === 'interview' ? "/interviews/{$j->ref_id}" : '/engineers/'.(json_decode($j->input, true)['engineer_id'] ?? '').'#docs';
             N::notify((int) $j->created_by, 'AI の下書きができました：'.self::KINDS[$j->kind], '中身を確かめて、採用するか捨ててください。', $link, false, 'ai', json_decode($j->input, true)['actor_role'] ?? null);
