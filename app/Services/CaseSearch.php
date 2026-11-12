@@ -306,22 +306,22 @@ class CaseSearch
 
     // ---------- メール ----------
 
-    // 必須に×がある人への一文：「…に関しては○○様とご検討ください」。自社の人には送る人の氏名＋様、他社の人には「ご所属の会社のご担当者様」。×が無ければ null
+    // 必須に×がある人への確認の一文：「…に関しては○○様とご検討ください」。詳細画面で SES が見る注意書きで、メールには入れない。○○様＝そのエンジニア（他社の人はイニシャル）。×が無ければ null
     public static function noteFor($u, array $row): ?string
     {
         $bad = [];
         foreach ($row['j']['req'] as $it) if (!$it['hit']) $bad[] = $it['name'];
         if (!$bad) return null;
-        $who = $row['own'] ? $u->name.'様' : 'ご所属の会社のご担当者様';
+        $who = ($row['own'] ? $row['e']->name : ($row['e']->initials ?: 'エンジニア')).'様';
         return implode('、', $bad).'に関しては'.$who.'とご検討ください。';
     }
 
-    // メールの雛形（今の案内の本文に、全員へのメッセージ・尚可・個別メッセージ・ご検討の一文の差し込みを足したもの）
+    // メールの雛形（今の案内の本文に、全員へのメッセージ・尚可・個別メッセージの差し込みを足したもの）
     public static function defaultBody(): string
     {
         return "{呼び名} さん\n\nお疲れさまです。{送り主}です。\nあなたに合いそうな案件が届いたので、ご案内します。\n\n{全員へのメッセージ}\n\n"
             ."■案件：{案件名}\n■単価：{単価}\n■開始：{開始}\n■場所・働き方：{場所}／{働き方}\n■必須：{必須}\n■尚可：{尚可}\n■あなたに合う点：{合う点}\n\n"
-            ."{個別メッセージ}\n{検討のお願い}\n\n"
+            ."{個別メッセージ}\n\n"
             ."ご興味があれば、このメールに返信してください（条件で気になる点があれば、それも一緒に）。\n見送る場合も、理由をひとこと返信いただけると、次のご案内の参考にします。";
     }
 
@@ -340,9 +340,8 @@ class CaseSearch
         $names = fn (array $list) => implode('、', array_column($list, 'name'));
         $fit = [];
         foreach (['req', 'pref'] as $side) foreach ($row['j'][$side] as $it) if ($it['hit']) $fit[] = $it['name'].($it['label'] ? '（'.$it['label'].'）' : '');
-        $note = empty($row['member']->omit_note) ? self::noteFor($u, $row) : null;
         $vals = [
-            '{全員へのメッセージ}' => self::clean($s->message_all), '{個別メッセージ}' => self::clean($row['member']->message ?? null), '{検討のお願い}' => (string) $note,
+            '{全員へのメッセージ}' => self::clean($s->message_all), '{個別メッセージ}' => self::clean($row['member']->message ?? null),
             '{必須}' => $names($items['req']) ?: '—', '{尚可}' => $names($items['pref']), '{合う点}' => implode('、', $fit) ?: '—',
         ];
         $tpl = self::defaultBody();

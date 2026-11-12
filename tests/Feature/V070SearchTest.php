@@ -298,9 +298,9 @@ class V070SearchTest extends TestCase
         [$cid, $sid, $full, $gap, $other] = $this->worldForMail();
         $me = $this->user(self::SES1)->name;
         $r = $this->as(self::SES1)->get("/searches/$sid/members/$gap")->assertOk();
-        $r->assertSee('Docker')->assertSee('×', false)->assertSee('○', false)->assertSee('約 ')->assertSee('Dockerに関しては'.$me.'様とご検討ください');
-        $this->as(self::SES1)->get("/searches/$sid/members/$other")->assertOk()->assertSee('Dockerに関してはご所属の会社のご担当者様とご検討ください');
-        $this->as(self::SES1)->get("/searches/$sid/members/$full")->assertOk()->assertDontSee('ご検討のお願い');
+        $r->assertSee('Docker')->assertSee('×', false)->assertSee('○', false)->assertSee('約 ')->assertSee('Dockerに関しては一部 次郎様とご検討ください');
+        $this->as(self::SES1)->get("/searches/$sid/members/$other")->assertOk()->assertSee('Dockerに関してはT.S様とご検討ください');
+        $this->as(self::SES1)->get("/searches/$sid/members/$full")->assertOk()->assertDontSee('確認のメモ');
     }
 
     public function test_t15_other_company_detail_hides_private_data(): void
@@ -326,7 +326,7 @@ class V070SearchTest extends TestCase
             $this->assertDoesNotMatchRegularExpression("/\n{3,}/", $b);
         }
         $this->assertStringContainsString('一部さんだけへの架空の連絡', $bodies[$gap]);
-        $this->assertStringContainsString('Dockerに関しては', $bodies[$gap]);
+        $this->assertStringNotContainsString('ご検討ください', $bodies[$gap]); // 確認の一文はメールに入れない
         $this->assertStringNotContainsString('一部さんだけへの架空の連絡', $bodies[$full]);
         $this->assertStringNotContainsString('ご検討ください', $bodies[$full]);
         // 送ったあとのお知らせは、同じ人のまま次の画面で見る（as() はセッションを捨てるので使わない）
@@ -341,16 +341,6 @@ class V070SearchTest extends TestCase
         $this->assertDoesNotMatchRegularExpression("/\n{3,}/", $b);
         $this->assertStringNotContainsString('{', $b);
         $this->assertStringContainsString('■あなたに合う点：', $b);
-    }
-
-    public function test_t17_omit_note(): void
-    {
-        [$cid, $sid, $full, $gap] = $this->worldForMail();
-        $this->setMessage(self::SES1, $sid, $gap, '架空の一言', true);
-        $this->as(self::SES1)->post("/searches/$sid/send", ['pick' => [$gap]])->assertRedirect();
-        $b = DB::table('case_mails')->where('engineer_id', $gap)->value('body');
-        $this->assertStringContainsString('架空の一言', $b);
-        $this->assertStringNotContainsString('ご検討ください', $b);
     }
 
     public function test_t18_records_offers_notices_and_audit(): void

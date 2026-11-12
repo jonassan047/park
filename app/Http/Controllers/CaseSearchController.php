@@ -123,7 +123,7 @@ class CaseSearchController extends Controller
         if ($back = $this->closed($c)) return $back;
         $mem = DB::table('case_search_members')->where('search_id', $s->id)->where('engineer_id', $eid)->first();
         abort_unless($mem, 404);
-        DB::table('case_search_members')->where('id', $mem->id)->update(['message' => str_in($r->input('message')), 'omit_note' => $r->boolean('omit_note'), 'updated_at' => now_str()]);
+        DB::table('case_search_members')->where('id', $mem->id)->update(['message' => str_in($r->input('message')), 'updated_at' => now_str()]);
         return $this->go("/searches/{$s->id}", '保存しました。');
     }
 

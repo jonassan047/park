@@ -17,13 +17,12 @@
 </tr>@endforeach
 </x-table>
 @endforeach
-@if($note)<div class="note"><b>ご検討のお願い</b><br>{{ $note }}</div>@endif
+@if($note)<div class="note"><b>確認のメモ</b>（SES の方への注意書きです。メールには入りません）<br>{{ $note }}</div>@endif
 </x-card>
 </div><div>
 <form method="post" action="{{ url('/searches/'.$s->id.'/members/'.$e->id) }}">@csrf
 <x-card title="このエンジニアへのメッセージ">
 <x-field label="個別メッセージ" name="message" type="textarea" rows="4" :value="$row['member']->message" hint="このエンジニアあてのメールにだけ入ります（空でもかまいません）。" />
-@if($note)<x-field label="上の「ご検討のお願い」の一文をメールに入れない" name="omit_note" type="checkbox" :value="$row['member']->omit_note" />@endif
 <button class="btn">保存して一覧に戻る</button>
 </x-card>
 </form>

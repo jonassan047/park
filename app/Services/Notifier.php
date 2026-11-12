@@ -32,8 +32,13 @@ class Notifier
         $m = DB::table('mail_outbox')->find($id);
         if (!$m || !self::canSend()) return false;
         try {
-            Mail::raw($m->body, function ($msg) use ($m) {
-                $msg->to($m->to_email, $m->to_name)->subject($m->subject);
+            // 見本データ（@park.example）宛ては、本物のアドレスが無いので、テスト用の受け皿（既定 park@jona.jp）に届ける。本来の宛先は件名と本文の頭に書く
+            $dummy = str_ends_with(strtolower($m->to_email), '@park.example') && config('park.dummy_mailbox');
+            $subject = $dummy ? '[ダミー宛：'.$m->to_email.'] '.$m->subject : $m->subject;
+            $body = $dummy ? '※見本データ宛てのメールです。本来の宛先：'.($m->to_name ? $m->to_name.' ' : '').'<'.$m->to_email.">\n――――――――――\n".$m->body : $m->body;
+            Mail::raw($body, function ($msg) use ($m, $dummy, $subject) {
+                $dummy ? $msg->to(config('park.dummy_mailbox'), 'PARK テスト受信') : $msg->to($m->to_email, $m->to_name);
+                $msg->subject($subject);
                 if (!empty($m->reply_to)) $msg->replyTo($m->reply_to);
                 if ($from = self::fromOf($m)) $msg->from(...$from);
             });
