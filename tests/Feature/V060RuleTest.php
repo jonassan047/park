@@ -117,6 +117,40 @@ class V060RuleTest extends TestCase
         $this->assertSame(['Go の経験'], $s['preferred'], '行の中の（尚可）は尚可へ移り、印は消える');
     }
 
+    // ---------- レビュー H2：【スキル】の下の「・必須：」「・尚可：」は、その種類へ切り替える ----------
+    public function test_h2_skill_heading_with_labeled_lines(): void
+    {
+        foreach (['【スキル】', '◆スキル', '＜スキル＞'] as $head) {
+            $s = $this->sec("$head\n・必須：Java経験3年以上\n・尚可：Spring");
+            $this->assertSame(['Java経験3年以上'], $s['required'], $head);
+            $this->assertSame(['Spring'], $s['preferred'], $head);
+        }
+    }
+
+    // ---------- レビュー M3：印の無い番号・技術名＋コロンは項目として読む ----------
+    public function test_m3_numbers_and_skill_name_colon_stay_in_section(): void
+    {
+        $s = $this->sec("必須:\n1. Java\n2.SQL\n3．Go");
+        $this->assertSame(['Java', 'SQL', 'Go'], $s['required'], '閉じ括弧の無い番号も印として読む');
+
+        $s = $this->sec("必須:\n1. Java\n2. SQL\n４．単価：70万\n・節の外の行");
+        $this->assertSame(['Java', 'SQL'], $s['required'], '後ろが案件の項目名の番号は、今までどおり節の終わり');
+
+        $s = $this->sec("必須:\nJava：3年以上\nPHP:基本\n単価：70万\nSQL");
+        $this->assertSame(['Java：3年以上', 'PHP:基本'], $s['required'], '技術名＋コロンは項目、単価＋コロンは節の終わり');
+    }
+
+    // ---------- レビュー H1：ruleLines は parse が実際に使う行（R9 の戻しを含む） ----------
+    public function test_h1_rule_lines_follow_parse(): void
+    {
+        $text = "案件名：テスト\n必須経験：Java";
+        $this->assertSame([], $this->sec($text)['required'], 'sections では読めない形');
+        $lines = CaseParser::ruleLines($text);
+        $this->assertNotEmpty($lines['required'], '今の読み方に戻した行が入る');
+        $this->assertStringContainsString('Java', implode('、', $lines['required']));
+        $this->assertSame($this->sec("必須:\n・Java"), CaseParser::ruleLines("必須:\n・Java"));
+    }
+
     // ---------- T6：今までの読み方・後処理は変えない ----------
     public function test_t6_parse_keeps_old_behavior(): void
     {

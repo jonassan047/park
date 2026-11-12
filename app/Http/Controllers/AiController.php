@@ -121,8 +121,9 @@ class AiController extends Controller
         $c = DB::table('cases')->find($j->ref_id);
         $cmp = CaseAi::compare($j, $c);
         if ($cmp['stale']) return $this->go("/cases/{$c->id}#ai", '本文が変わったので使えません。もう一度頼んでください。', 'bad');
+        // 二重押しの守り：まだ done のときだけ applied にする（0件なら、もう片付いている）
+        if (!DB::table('ai_jobs')->where('id', $id)->where('status', 'done')->update(['status' => 'applied'])) abort(400);
         CaseAi::apply($c, $cmp);
-        DB::table('ai_jobs')->where('id', $id)->update(['status' => 'applied']);
         N::audit($r->user()->id, 'ai-case-apply', "#$id {$c->title}");
         return $this->go("/cases/{$c->id}#ai", 'AI の結果を使いました。必須・尚可・業務を置き換えました。');
     }
@@ -132,7 +133,7 @@ class AiController extends Controller
         $j = $this->job($r, $id);
         if ($j->kind === 'case_skills') {
             abort_unless($j->status === 'done', 400);
-            DB::table('ai_jobs')->where('id', $id)->update(['status' => 'dropped']);
+            if (!DB::table('ai_jobs')->where('id', $id)->where('status', 'done')->update(['status' => 'dropped'])) abort(400); // 二重押しの守り
             N::audit($r->user()->id, 'ai-case-keep', "#$id");
             return $this->go("/cases/{$j->ref_id}#ai", '今のままにしました。');
         }

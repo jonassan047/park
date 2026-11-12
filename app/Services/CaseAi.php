@@ -46,11 +46,16 @@ TXT;
     public static function queue(int $caseId, $actor, bool $replace = false): ?int
     {
         $c = DB::table('cases')->find($caseId);
-        if (!$c || self::blocked($c)) return null;
+        if (!$c) return null;
         $open = fn () => DB::table('ai_jobs')->where('ref_type', 'case')->where('ref_id', $caseId)->where('kind', self::KIND);
-        if (!$replace && $open()->whereIn('status', ['queued', 'running'])->exists()) return null;
-        $open()->whereIn('status', $replace ? ['queued', 'done'] : ['done'])->update(['status' => 'dropped']);
-        if ($open()->where('status', 'running')->exists()) return null; // 作業中のものは、届いたときに本文の違いで捨てる
+        if (!$replace && (self::blocked($c) || $open()->whereIn('status', ['queued', 'running'])->exists())) return null;
+        // 前の仕事を捨てる（保存のときは、入れ直せない本文でも捨てる。作業中のものは、届いたとき本文の違いで捨てる）
+        $by = $actor->id ?? null;
+        foreach ($open()->whereIn('status', $replace ? ['queued', 'done'] : ['done'])->get(['id']) as $old) {
+            DB::table('ai_jobs')->where('id', $old->id)->update(['status' => 'dropped']);
+            N::audit($by, 'ai-case-stale', "#{$old->id} {$c->title}");
+        }
+        if (self::blocked($c)) return null;
         $raw = (string) $c->raw_text;
         $snap = self::snapshot($c);
         return AiJobs::queueCase($caseId, [
@@ -59,7 +64,7 @@ TXT;
             'user' => $raw,
             'options' => ['temperature' => 0],
             'text_hash' => sha1($raw),
-            'rule' => CaseParser::sections($raw),
+            'rule' => CaseParser::ruleLines($raw),
             'base' => $snap,
             'edited' => $snap !== self::ruleSnapshot($raw),
         ], $actor);
@@ -187,6 +192,7 @@ TXT;
         $reasons = [];
         if (!$sameCount) $reasons[] = 'count';
         if ($missing > 0) $reasons[] = 'missing';
+        if (!$req && !$pref) $reasons[] = 'empty'; // AI が何も読めなかったときは、自動で消さない
         if (!empty($in['edited']) || self::snapshot($case) !== ($in['base'] ?? null)) $reasons[] = 'edited';
         $id = (int) $case->id;
         if (DB::table('case_offers')->where('case_id', $id)->exists() || DB::table('case_mails')->where('case_id', $id)->exists() || DB::table('applications')->where('case_id', $id)->exists()) $reasons[] = 'offered';

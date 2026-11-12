@@ -89,8 +89,30 @@ class CaseParser
     {
         if (preg_match('/^(?:■|【|◆|<<|▼)/u', $h)) return true;
         if (preg_match('/^\d+\.(?!\d)/', $h)) return true; // 「4．」のような番号の見出し
-        if (!$marked && preg_match('/^[^\s:]{1,8}\s*:/u', $h)) return true; // 8字以内の項目名＋コロン
+        // 8字以内の項目名＋コロン（ただし、コロンの左が技術マスタの名前なら、項目の文なので節を終えない）
+        if (!$marked && preg_match('/^([^\s:]{1,8})\s*:/u', $h, $m) && !\App\Support\SkillCatalog::find($m[1])) return true;
         return false;
+    }
+
+    // 節の中の「1. Java」のような番号の項目か。そうなら印を外した文を返す（違えば null）。
+    // 「４．単価」のように後ろが案件の項目名なら、番号の見出し（節の終わり）なので null
+    private static function numberedItem(string $l, string $h): ?string
+    {
+        if (!preg_match('/^\d+\.\s*/', $h, $m)) return null;
+        $rest = self::t(mb_substr($l, mb_strlen($m[0])));
+        if ($rest === '' || self::isOtherLabel($rest)) return null;
+        return $rest;
+    }
+
+    // 必須・尚可の行（読み方は parse と同じ。AI に渡す「規則の結果」もこれ）
+    public static function ruleLines(string $text): array
+    {
+        $sec = self::sections($text);
+        if (!$sec['required'] && !$sec['preferred']) {
+            $b = self::oldBuckets(explode("\n", str_replace("\r", '', $text)));
+            $sec = ['required' => $b['required_skills'] ?? [], 'preferred' => $b['preferred_skills'] ?? []];
+        }
+        return $sec;
     }
 
     // 本文から、必須・尚可の項目を読む（規則。手元の AI も使わず、すぐ返す）
@@ -102,13 +124,14 @@ class CaseParser
         $bulleted = false; // 箇条書きの節か
         $base = null;      // 最初の箇条書きの深さ
         $gap = false;      // 直前に空行があったか
+        $lastNum = false;  // 直前の項目が「1. Java」のような番号の項目だったか
         foreach (explode("\n", str_replace("\r", '', $text)) as $raw) {
             $l = self::t($raw);
             if ($l === '') { $gap = true; continue; }
             if (preg_match('/^[\*＊=＝━─\-－_＿]{3,}/u', $l)) { $cur = null; continue; } // 区切り線
             $hd = self::headingKind($l);
             if ($hd) {
-                $cur = $hd['kind']; $n = 0; $gap = false; $bulleted = $hd['bulleted']; $base = null;
+                $cur = $hd['kind']; $n = 0; $gap = false; $bulleted = $hd['bulleted']; $base = null; $lastNum = false;
                 if ($hd['body'] !== '') { $out[$cur][] = $hd['body']; $n = 1; if ($bulleted) $base = self::indentOf($raw); }
                 continue;
             }
@@ -129,11 +152,21 @@ class CaseParser
                 if ($n > 0) $out[$cur][array_key_last($out[$cur])] .= ' '.$l;
                 $gap = false; continue;
             }
+            // 「・必須：Java」「・尚可：Spring」のように、印を外すと見出しになる行は、その種類の節に切り替える
+            if ($marked && ($hd = self::headingKind(self::t(preg_replace(self::BULLET, '', $l, 1))))) {
+                $cur = $hd['kind']; $n = 0; $gap = false; $bulleted = $hd['bulleted']; $base = null; $lastNum = false;
+                if ($hd['body'] !== '') { $out[$cur][] = $hd['body']; $n = 1; if ($bulleted) $base = $indent; }
+                continue;
+            }
+            // 項目をまだ読んでいない、または前も番号の項目なら、「1. Java」は番号の項目として読む
+            $num = ($n === 0 || $lastNum) ? self::numberedItem($l, $h) : null;
+            if ($num !== null) $marked = true;
             if ($gap && $n > 0 && !$marked) { $cur = null; $gap = false; continue; } // 空行のあとの印の無い行は、節の外
-            if (self::endsSection($l, $h, $marked)) { $cur = null; continue; }
+            if ($num === null && self::endsSection($l, $h, $marked)) { $cur = null; continue; }
             $gap = false;
-            $txt = self::t(preg_replace(self::BULLET, '', $l, 1));
+            $txt = $num ?? self::t(preg_replace(self::BULLET, '', $l, 1));
             if ($txt === '') continue;
+            $lastNum = $num !== null;
             if ($marked) { $bulleted = true; $base ??= $indent; $out[$cur][] = $txt; $n++; }
             elseif ($bulleted && $n > 0) $out[$cur][array_key_last($out[$cur])] .= ' '.$txt; // 前の項目の続き
             else { $out[$cur][] = $txt; $n++; }
@@ -177,10 +210,9 @@ class CaseParser
         ];
     }
 
-    public static function parse(?string $text): array
+    // 今までの読み方：「見出し：」のあとの行を項目ごとにためる（[項目名 => 行の配列]）
+    private static function oldBuckets(array $lines): array
     {
-        $out = [];
-        $lines = explode("\n", str_replace("\r", '', (string) $text));
         $current = null; $buckets = [];
         foreach ($lines as $line) {
             $l = trim($line);
@@ -200,12 +232,17 @@ class CaseParser
             }
             if (!$matched && $current) $buckets[$current][] = self::clean($l);
         }
+        return $buckets;
+    }
+
+    public static function parse(?string $text): array
+    {
+        $out = [];
+        $lines = explode("\n", str_replace("\r", '', (string) $text));
+        $buckets = self::oldBuckets($lines);
         foreach ($buckets as $k => $v) $out[$k] = implode(str_ends_with($k, 'skills') ? '、' : "\n", array_filter($v));
         // 必須・尚可は新しい読み方（sections）で読む。どちらも空なら、今までの読み方の結果を使う（読めていたメールを落とさない）
-        $sec = self::sections((string) $text);
-        if (!$sec['required'] && !$sec['preferred']) {
-            $sec = ['required' => $buckets['required_skills'] ?? [], 'preferred' => $buckets['preferred_skills'] ?? []];
-        }
+        $sec = self::ruleLines((string) $text);
         $fin = self::finishSkills($sec['required'], $sec['preferred'], (string) $text);
         $out = $fin + $out; // 必須・尚可・業務・本文の技術は finishSkills の結果を使う
 

@@ -26,7 +26,7 @@
 </x-card>
 @isset($ai)
 {{-- AI の読み直し（直せる人だけ。EG・ほかの会社の SES には、欄も AI の文も渡さない） --}}
-@php $aj = $ai['job']; $cmp = $ai['cmp']; $reasonText = ['count' => '規則と行数が違います', 'missing' => '本文に無い言い方があります', 'edited' => '登録の前か後に人が直した案件です', 'offered' => 'もう案内・応募があります', 'closed' => '募集を終えた案件です']; @endphp
+@php $aj = $ai['job']; $cmp = $ai['cmp']; $reasonText = ['count' => '規則と行数が違います', 'missing' => '本文に無い言い方があります', 'edited' => '登録の前か後に人が直したか、本文を変えた案件です', 'empty' => 'AI が必須も尚可も読めませんでした', 'offered' => 'もう案内・応募があります', 'closed' => '募集を終えた案件です']; @endphp
 <x-card title="AI の読み直し" id="ai">
 @if(!$aj)
   @if($ai['block'])<p class="muted">{{ $ai['block'] }}</p>
@@ -36,6 +36,9 @@
 @elseif($aj->status === 'applied')
   @if($ai['auto'])<p>AI で読み直し、規則と同じ数だったので AI の結果にしました（{{ fmt_dt($aj->done_at) }}）。@if($ai['fixed'])本文の文に戻した項目：{{ $ai['fixed'] }}件。@endif</p>
   @else<p>AI の結果を使いました（{{ fmt_dt($aj->done_at) }}）。</p>@endif
+@elseif($aj->status === 'done' && $ai['stale'])
+  <p>本文が変わりました。もう一度頼んでください。</p>
+  @if(!$ai['block'])<x-post :action="'/cases/'.$c->id.'/ai-parse'" label="もう一度頼む" />@else<p class="muted">{{ $ai['block'] }}</p>@endif
 @elseif($aj->status === 'done')
   <h3>AI の読み直しの結果を確かめてください</h3>
   <p>規則で読んだ結果とそのまま入れ替えず、確かめてもらうことにしました。理由：{{ implode('、', array_map(fn ($k) => $reasonText[$k] ?? $k, $cmp['reasons'])) ?: '—' }}。</p>
@@ -47,7 +50,7 @@
   @endforeach
   </tbody></table></div>
   <p class="muted">AI の結果を使うと、必須の業務：{{ $ai['exp']['req'] ? implode('、', $ai['exp']['req']) : '—' }}／尚可の業務：{{ $ai['exp']['pref'] ? implode('、', $ai['exp']['pref']) : '—' }}</p>
-  @if(in_array('edited', $cmp['reasons']))<p class="bad-text">人が直した案件です。使うと、直した必須・尚可・業務も置き換わります。</p>@endif
+  @if(in_array('edited', $cmp['reasons']))<p class="bad-text">人が直したか、本文を変えた案件です。使うと、直した必須・尚可・業務も置き換わります。</p>@endif
   <x-post :action="'/ai-jobs/'.$aj->id.'/apply-case'" label="AI の結果を使う" /> <x-post :action="'/ai-jobs/'.$aj->id.'/drop'" label="今のままにする" cls="ghost" />
 @else
   @if($aj->status === 'failed')<p>AI で読めませんでした（{{ $aj->error }}）。規則の結果のまま使えます。</p>

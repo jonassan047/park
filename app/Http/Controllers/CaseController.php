@@ -124,7 +124,7 @@ class CaseController extends Controller
     private function aiView(object $c): array
     {
         $job = AiJobs::latest('case', (int) $c->id, CaseAi::KIND);
-        $v = ['job' => $job, 'block' => CaseAi::blocked($c), 'cmp' => null, 'auto' => false, 'fixed' => 0, 'same' => false, 'now' => null, 'diff' => null, 'exp' => null];
+        $v = ['job' => $job, 'block' => CaseAi::blocked($c), 'cmp' => null, 'auto' => false, 'fixed' => 0, 'same' => false, 'now' => null, 'diff' => null, 'exp' => null, 'stale' => false];
         if (!$job) return $v;
         $audit = fn (string $action) => DB::table('audit_log')->where('action', $action)->where('detail', 'like', "#{$job->id} %")->exists();
         if ($job->status === 'applied') {
@@ -133,6 +133,7 @@ class CaseController extends Controller
             $v['fixed'] = count(array_filter([...$cmp['req'], ...$cmp['pref']], fn ($x) => $x['mark'] === 'fixed'));
         } elseif ($job->status === 'done') {
             $cmp = CaseAi::compare($job, $c);
+            if ($cmp['stale']) { $v['stale'] = true; return $v; } // 本文が変わったあとの結果は、表も使うボタンも出さない
             $now = ['req' => parse_list($c->required_skills), 'pref' => parse_list($c->preferred_skills)];
             $fin = CaseParser::finishSkills(array_column($cmp['req'], 'text'), array_column($cmp['pref'], 'text'), (string) $c->raw_text);
             $v['cmp'] = $cmp;

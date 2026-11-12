@@ -340,6 +340,78 @@ class V060CaseAiTest extends TestCase
         $this->assertSame('done', $this->jobStatus($id));
     }
 
+    // ---------- レビューの指摘（H1・M1・M2・L1・L4） ----------
+
+    public function test_h1_rule_input_uses_parse_lines_and_empty_ai_is_not_auto(): void
+    {
+        // sections では読めず、今の読み方（R9）で読める本文：rule に戻した行が入る
+        $cid = $this->register(self::ADMIN, "案件名：テスト用の在庫管理画面開発\n必須経験：Java での開発経験\n");
+        $in = json_decode($this->jobs($cid)->value('input'), true);
+        $this->assertNotEmpty($in['rule']['required']);
+        $this->assertStringContainsString('Java', implode('、', $in['rule']['required']));
+
+        // 規則でも読めない本文：AI も空なら 0＝0 だが、自動では消さない
+        $cid2 = $this->register(self::ADMIN, "案件名：テスト用の在庫管理画面開発\n概要：PHP と Laravel で作る画面\n");
+        $before = $this->cols($cid2);
+        $id = $this->answer([], []);
+        $cmp = CaseAi::compare(DB::table('ai_jobs')->find($id), DB::table('cases')->find($cid2));
+        $this->assertContains('empty', $cmp['reasons']);
+        $this->assertFalse($cmp['auto']);
+        $this->assertSame($before, $this->cols($cid2));
+        $this->assertDatabaseMissing('audit_log', ['action' => 'ai-case-auto']);
+    }
+
+    public function test_m1_text_change_queues_new_job_even_while_running(): void
+    {
+        $cid = $this->register(self::ADMIN);
+        $running = $this->postJson('/ai/worker/next', [], $this->h)->json('job')['id'];
+        $this->assertSame('running', $this->jobStatus($running));
+        $this->as(self::ADMIN)->post("/cases/$cid", $this->form(self::RAW."\n■尚可\n・Docker の利用経験\n"))->assertRedirect();
+        $this->assertSame(1, $this->jobs($cid)->where('status', 'queued')->count(), '作業中があっても、新しい本文の仕事が入る');
+        $this->assertSame('running', $this->jobStatus($running));
+        // 古い仕事が届くと、本文の違いで捨てる
+        $out = json_encode(['required' => ['Java での開発経験が3年以上'], 'preferred' => []], JSON_UNESCAPED_UNICODE);
+        $this->postJson("/ai/worker/$running/result", ['output' => $out, 'engine' => 'test'], $this->h)->assertOk();
+        $this->assertSame('dropped', $this->jobStatus($running));
+    }
+
+    public function test_m2_blocked_text_still_drops_old_jobs_and_screen_hides_stale_table(): void
+    {
+        $cid = $this->register(self::ADMIN);
+        $id = $this->answer(['Java での開発経験が3年以上', 'SQL の基本的な知識', 'AWS の利用経験'], ['AWS の利用経験']);
+        $this->assertSame('done', $this->jobStatus($id));
+        $this->as(self::ADMIN)->post("/cases/$cid", $this->form('', ['required_skills' => 'Java']))->assertRedirect();
+        $this->assertSame('dropped', $this->jobStatus($id), '本文が空でも、前の done は捨てる');
+        $this->assertSame(0, $this->jobs($cid)->where('status', 'queued')->count());
+        $this->assertDatabaseHas('audit_log', ['action' => 'ai-case-stale']);
+
+        // 本文が変わったあとに開いた画面：done のままでも、表と使うボタンは出さない
+        $cid2 = $this->register(self::ADMIN);
+        $id2 = $this->answer(['Java での開発経験が3年以上', 'SQL の基本的な知識', 'AWS の利用経験'], ['AWS の利用経験']);
+        DB::table('cases')->where('id', $cid2)->update(['raw_text' => self::RAW."\n■尚可\n・Docker の利用経験\n"]);
+        $this->assertSame('done', $this->jobStatus($id2));
+        $this->as(self::ADMIN)->get("/cases/$cid2")->assertOk()->assertSee('本文が変わりました。もう一度頼んでください。')->assertSee('もう一度頼む')
+            ->assertDontSee('AI の結果を使う')->assertDontSee('AI だけ');
+    }
+
+    public function test_l1_queue_drop_leaves_audit_and_l4_double_press_is_400(): void
+    {
+        $cid = $this->register(self::ADMIN);
+        $first = (int) $this->jobs($cid)->value('id');
+        $this->as(self::ADMIN)->post("/cases/$cid", $this->form(self::RAW."\n■尚可\n・Docker の利用経験\n"))->assertRedirect();
+        $this->assertSame('dropped', $this->jobStatus($first));
+        $this->assertTrue(DB::table('audit_log')->where('action', 'ai-case-stale')->where('detail', 'like', "#$first %")->exists());
+
+        // 二重押し：applied・dropped になったあとの「使う」「今のまま」は 400
+        $id = $this->answer(['Java での開発経験が3年以上'], []);
+        $this->assertSame('done', $this->jobStatus($id));
+        $this->post("/ai-jobs/$id/apply-case")->assertRedirect();
+        $this->assertSame('applied', $this->jobStatus($id));
+        $this->post("/ai-jobs/$id/apply-case")->assertStatus(400);
+        $this->post("/ai-jobs/$id/drop")->assertStatus(400);
+        $this->assertSame('applied', $this->jobStatus($id));
+    }
+
     // ---------- 段階4：画面 ----------
 
     public function test_screen_queued_and_button_states(): void // T14 の前の状態・G1
@@ -388,7 +460,7 @@ class V060CaseAiTest extends TestCase
         $cid = $this->register(self::ADMIN);
         $this->as(self::ADMIN)->post("/cases/$cid", $this->form(self::RAW, ['required_skills' => 'Java']))->assertRedirect();
         $this->answer(...$this->sameCountAnswer());
-        $this->as(self::ADMIN)->get("/cases/$cid")->assertOk()->assertSee('登録の前か後に人が直した案件です')->assertSee('直した必須・尚可・業務も置き換わります');
+        $this->as(self::ADMIN)->get("/cases/$cid")->assertOk()->assertSee('登録の前か後に人が直したか、本文を変えた案件です')->assertSee('直した必須・尚可・業務も置き換わります');
     }
 
     public function test_screen_same_as_rule(): void // T19
