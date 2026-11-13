@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\Affiliation;
 use App\Services\EngineerDocs;
 use App\Services\Matcher;
 use App\Services\Notifier as N;
@@ -126,7 +127,7 @@ class EngineerController extends Controller
             'eu' => DB::table('users')->where('engineer_id', $id)->orderByRaw("case when role = 'eg' then 0 else 1 end")->first(),
             // 停止の確認の文の材料：稼働中の契約の有無と、選考中の応募の数
             'working' => DB::table('contracts')->where('engineer_id', $id)->where('status', 'active')->exists(),
-            'inSelection' => DB::table('applications')->where('engineer_id', $id)->whereIn('status', ['applied', 'submitted', 'doc_passed', 'interview', 'interviewed'])->count(),
+            'inSelection' => DB::table('applications')->where('engineer_id', $id)->whereIn('status', Affiliation::IN_SELECTION)->count(),
             'hist' => DB::table('engineer_histories')->where('engineer_id', $id)->orderBy('sort')->get(),
             'certs' => DB::table('engineer_certs')->where('engineer_id', $id)->orderBy('sort')->get(),
             'files' => DB::table('engineer_files')->where('engineer_id', $id)->orderByDesc('id')->get(),
@@ -137,7 +138,23 @@ class EngineerController extends Controller
 
     public function edit(Request $r, int $id)
     {
-        return view('engineers.form', ['e' => $this->loadForEdit($r, $id), 'action' => "/engineers/$id", 'isNew' => false, 'sesFixed' => null]);
+        $e = $this->loadForEdit($r, $id);
+        $u = $r->user();
+        // 「所属」のカード：管理者・SES・担当者には変更先と、変えられない理由。本人には今の会社の名前だけ
+        return view('engineers.form', ['e' => $e, 'action' => "/engineers/$id", 'isNew' => false, 'sesFixed' => null,
+            'sesName' => $e->ses_name,
+            'affBlocker' => $u->role === 'eg' ? null : Affiliation::blocker($u, $e),
+            'affTargets' => $u->role === 'eg' ? [] : Affiliation::targets($u, $e)]);
+    }
+
+    // 所属の SES を変える（管理者と、自社のエンジニアを移す SES・担当者。本人は role ミドルウェアで入れない）。判定は Affiliation に集めている
+    public function affiliation(Request $r, int $id)
+    {
+        $this->load($r, $id);
+        $res = Affiliation::move($r->user(), $id, $r->input('ses_id'));
+        abort_if(isset($res['forbidden']), 403);
+        if (isset($res['bad'])) return back()->with('flash', ['msg' => $res['bad'], 'type' => 'bad']);
+        return $this->go($res['to'], $res['ok']);
     }
 
     public function update(Request $r, int $id)

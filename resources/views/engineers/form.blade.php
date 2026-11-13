@@ -37,4 +37,32 @@
 <x-field label="強み（ひとこと）" name="strengths" :value="$e->strengths ?? null" placeholder="例：業務系 Java の設計〜テストを1人で回せる" />
 <x-field label="自己PR" name="summary" type="textarea" rows="5" :value="$e->summary ?? null" hint="得意分野と、どんな現場で力を出せるか。事実だけを書きます。" />
 <a class="btn ghost" href="{{ url('/engineers/'.$e->id) }}">戻る</a> <button class="btn">保存する</button></form></x-card>
+@if(!($isNew ?? false) && isset($sesName))
+<x-card title="所属">
+@if($isEg)
+  <p>所属：{{ $sesName }}</p>
+  <p class="muted">所属は、ご自身では変えられません。変えるときは、所属の会社か管理者にご相談ください。</p>
+@else
+  <p>今の所属：{{ $sesName }}</p>
+  @if($affBlocker)
+    <p class="muted">{{ $affBlocker }}</p>
+  @elseif(!$affTargets)
+    <p class="muted">移せる参加中の SES がありません。</p>
+  @else
+    {{-- 確認の文は、選んだ会社の名前を入れるため、ここで作る（JavaScript が無いときは確認なしで送られる。送る側の守りは Affiliation にある） --}}
+    <form method="post" action="{{ url('/engineers/'.$e->id.'/affiliation') }}"
+      onsubmit="var s = this.elements['ses_id']; if (!s.value) { alert('変更先を選んでください。'); return false; } return confirm('所属を「' + @js($sesName) + '」から「' + s.options[s.selectedIndex].text + '」に変えます。' + @js($sesName) + ' の SES・担当者からは、この方（スキル・経歴・書類を含む）が見えなくなります。よろしいですか？')">@csrf
+      <div class="field"><label>変更先</label>
+        <select name="ses_id">
+          <option value="">変更先を選んでください</option>
+          @foreach($affTargets as $sid => $sname)<option value="{{ $sid }}">{{ $sname }}</option>@endforeach
+        </select></div>
+      <button class="btn">所属を変える</button>
+    </form>
+    <p class="muted">変えると、今の会社の SES・担当者からは見えなくなります。過去の応募・契約・請求の記録は、今の会社のまま残ります。</p>
+    @if(auth()->user()->role === 'ses')<p class="muted">移す先の会社にも、あらかじめお伝えください。</p>@endif
+  @endif
+@endif
+</x-card>
+@endif
 @endsection

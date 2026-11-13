@@ -138,6 +138,7 @@ Route::middleware('role:admin,ses')->group(function () {
     Route::post('/engineers/{id}/delete', [Eng::class, 'destroy']);
     Route::post('/engineers/{id}/suspend', [Eng::class, 'suspend']);
     Route::post('/engineers/{id}/resume', [Eng::class, 'resume']);
+    Route::post('/engineers/{id}/affiliation', [Eng::class, 'affiliation']);
     // 担当者の停止・再開・退会（管理者はどの会社でも、SES は自社の担当者だけ。中で確かめる）
     Route::post('/admin/ses/{id}/users/{uid}/suspend', [Adm::class, 'sesUserSuspend'])->where('uid', '[0-9]+');
     Route::post('/admin/ses/{id}/users/{uid}/resume', [Adm::class, 'sesUserResume'])->where('uid', '[0-9]+');
