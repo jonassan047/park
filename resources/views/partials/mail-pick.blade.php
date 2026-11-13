@@ -3,10 +3,9 @@
 @if($part === 'top')
 {{-- 行の中に別の form があるので、チェックは表の外の form に form="dm" で結び付ける --}}
 <form id="dm" method="get" action="{{ url('/mails/new') }}" onsubmit="if(!document.querySelector('input.dmpick:checked')){alert('送る相手を選んでください。');return false;}"></form>
-<p><button type="button" class="btn ghost small" id="dmall">表示中の人を全部選ぶ</button> <button type="button" class="btn ghost small" id="dmnone">全部外す</button>
+<p><button class="btn small" form="dm">選んだ人にメールを送る</button> <button type="button" class="btn ghost small" id="dmall">全選択</button> <button type="button" class="btn ghost small" id="dmnone">全部外す</button>
 <span class="muted">（仮登録・停止中・退会の人は選べません）</span></p>
 @else
-<p><button class="btn" form="dm">選んだ人にメールを送る</button></p>
 <script>
 (function () {
     function setAll(on) { document.querySelectorAll('input.dmpick').forEach(function (b) { b.checked = on; }); }

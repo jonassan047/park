@@ -114,10 +114,11 @@ class AdminController extends Controller
         $list = DB::table('ses_companies as s')->where('s.kind', 'ses')->select('s.*')
             ->selectSub(DB::table('engineers')->whereColumn('ses_id', 's.id')->selectRaw('count(*)'), 'engs')
             ->selectSub(DB::table('contracts')->whereColumn('ses_id', 's.id')->where('status', 'active')->selectRaw('count(*)'), 'working')
-            ->orderBy('status')->orderBy('name')->get();
+            ->orderBy('name')->get();
+        [$list, $pager] = page_slice($list); // 名前順・1ページ 20 件
         // SES の人（状態を出すため）
         $reps = DB::table('users')->whereIn('id', $list->pluck('rep_user_id')->filter()->all())->get()->keyBy('id');
-        return view('admin.ses-index', compact('list', 'reps'));
+        return view('admin.ses-index', compact('list', 'reps', 'pager'));
     }
 
     public function sesNew() { return view('admin.ses-new', ['approve' => null, 'v' => (object) []]); }
@@ -367,10 +368,10 @@ class AdminController extends Controller
         if ($q !== '') $list = $list->filter(fn ($e) => str_contains(mb_strtolower(implode(' ', [$e->name, $e->kana, $e->skills, $e->ses_name, $e->strengths])), mb_strtolower($q)));
         // 直属のエンジニアが今いるときだけ、「直属だけ」のボタンを出す（新しく直属を作る入口はない）
         $hasDirect = DB::table('engineers as e')->join('ses_companies as s', 's.id', '=', 'e.ses_id')->where('s.kind', 'direct')->exists();
-        $list = $list->values();
+        [$list, $pager] = page_slice(sort_kana($list)); // あいうえお順・1ページ 20 件
         $egIds = $list->pluck('id');
         return view('admin.engineers', [
-            'list' => $list, 'q' => $q, 'st' => $st, 'direct' => $direct, 'hasDirect' => $hasDirect,
+            'list' => $list, 'pager' => $pager, 'q' => $q, 'st' => $st, 'direct' => $direct, 'hasDirect' => $hasDirect,
             // 連絡メールを送れる人（行にチェックを出す）。判定は DirectMail の1か所
             'mailable' => \App\Services\DirectMail::engineerTargets($r->user(), $egIds->all())['ok'],
             // 停止の確認の文に添える、稼働中の契約と選考中の応募（エンジニアごとに問い合わせず、まとめて取る）

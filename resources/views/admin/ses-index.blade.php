@@ -14,5 +14,6 @@ $repState = $s->status === 'provisional' ? user_state($rep) : null;
 @if($s->status !== 'left')<x-post :action="$base.'/delete'" label="退会" cls="danger small" :fields="$back" confirm="この SES と所属エンジニアを退会済にします。全員ログインできなくなります（記録は残ります）。よろしいですか？" />@endif
 <a class="btn small" href="{{ url($base) }}">詳細</a></td></tr>@endforeach
 </x-table>
+@include('partials.pager', ['pager' => $pager])
 @if($list->isEmpty())<p class="empty">SES はまだありません。「SES を仮登録」から入れます。</p>@endif
 @endsection

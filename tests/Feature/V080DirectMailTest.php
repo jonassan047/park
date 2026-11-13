@@ -399,7 +399,7 @@ class V080DirectMailTest extends TestCase
         $r = $this->as(self::ADMIN)->get('/admin/engineers')->assertOk()
             ->assertSee('name="eg[]" value="'.$eg1.'" form="dm"', false)
             ->assertDontSee('value="'.$prov.'" form="dm"', false)->assertDontSee('value="'.$stop.'" form="dm"', false)
-            ->assertSee('表示中の人を全部選ぶ')->assertSee('選んだ人にメールを送る')->assertSee('id="dm"', false);
+            ->assertSee('全選択')->assertSee('選んだ人にメールを送る')->assertSee('id="dm"', false);
         $this->assertArrayHasKey($eg1, $r->viewData('mailable'));
     }
 

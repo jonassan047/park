@@ -374,3 +374,23 @@ function list_url(string $kind): string
     ];
     return url($map[$kind][$role] ?? '/');
 }
+
+// あいうえお順（ふりがな。無い人は名前）に並べる。カタカナはひらがなにそろえ、ふりがなも名前も無いものは最後
+function sort_kana(\Illuminate\Support\Collection $list, string $kanaKey = 'kana', string $nameKey = 'name'): \Illuminate\Support\Collection
+{
+    $key = fn ($r) => mb_convert_kana(trim((string) (($r->$kanaKey ?? '') !== '' ? $r->$kanaKey : ($r->$nameKey ?? ''))), 'HVc');
+    return $list->sort(function ($a, $b) use ($key) {
+        [$x, $y] = [$key($a), $key($b)];
+        if ($x === '' || $y === '') return ($x === '') <=> ($y === '');
+        return strcmp($x, $y) ?: strcmp((string) ($a->name ?? ''), (string) ($b->name ?? ''));
+    })->values();
+}
+
+// 一覧を1ページ 20 件に切る。[そのページの行, ページ送りの情報] を返す（ページ番号は ?page=）
+function page_slice(\Illuminate\Support\Collection $list, int $per = 20): array
+{
+    $total = $list->count();
+    $last = max(1, (int) ceil($total / $per));
+    $page = min($last, max(1, (int) request()->query('page', 1)));
+    return [$list->slice(($page - 1) * $per, $per)->values(), ['page' => $page, 'last' => $last, 'total' => $total, 'per' => $per]];
+}

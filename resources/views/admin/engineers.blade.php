@@ -15,6 +15,7 @@
 <x-post :action="$egBase.'/delete'" label="退会" cls="danger small" :fields="$back" confirm="このエンジニアを退会済にします。ログインできなくなり、元に戻せません（記録は残ります）。よろしいですか？" />@endif
 <a class="btn small" href="{{ url($egBase) }}">詳細</a></td></tr>@endforeach
 </x-table>
+@include('partials.pager', ['pager' => $pager])
 @include('partials.mail-pick', ['part' => 'bottom'])
 <p class="muted">「管理者」の印：管理をしながらエンジニアとしても入る人。配信・選考は記録に残し、公平に扱います（誓約書は別に用意）。</p>
 <form method="post" action="{{ url('/admin/engineers/operator') }}" class="filters">@csrf

@@ -43,7 +43,8 @@ class SesController extends Controller
     public function engineers(Request $r)
     {
         $list = DB::table('engineers as e')->where('e.ses_id', $r->user()->ses_id)->select('e.*')
-            ->selectSub(DB::table('engineer_projects')->whereColumn('engineer_id', 'e.id')->selectRaw('count(*)'), 'projs')->orderBy('e.name')->get();
+            ->selectSub(DB::table('engineer_projects')->whereColumn('engineer_id', 'e.id')->selectRaw('count(*)'), 'projs')->get();
+        [$list, $pager] = page_slice(sort_kana($list)); // あいうえお順・1ページ 20 件
         $skills = SkillChecks::summaryMany($list->pluck('id')->all());
         // ログインの状態：兼任の人も engineer_id で探す（管理者との兼任かどうかは、ここには出さない）
         $users = DB::table('users')->whereIn('engineer_id', $list->pluck('id'))->orderByRaw("case when role = 'eg' then 1 else 0 end")->get()->keyBy('engineer_id');
@@ -55,7 +56,7 @@ class SesController extends Controller
         }
         $egIds = $list->pluck('id');
         return view('ses.engineers', [
-            'list' => $list,
+            'list' => $list, 'pager' => $pager,
             // 連絡メールを送れる人（行にチェックを出す）。判定は DirectMail の1か所
             'mailable' => \App\Services\DirectMail::engineerTargets($r->user(), $egIds->all())['ok'],
             // 停止の確認の文に添える、稼働中の契約と選考中の応募（エンジニアごとに問い合わせず、まとめて取る）
