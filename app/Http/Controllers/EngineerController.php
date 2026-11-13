@@ -130,6 +130,8 @@ class EngineerController extends Controller
             'hist' => DB::table('engineer_histories')->where('engineer_id', $id)->orderBy('sort')->get(),
             'certs' => DB::table('engineer_certs')->where('engineer_id', $id)->orderBy('sort')->get(),
             'files' => DB::table('engineer_files')->where('engineer_id', $id)->orderByDesc('id')->get(),
+            // 連絡メールを送れる人か（管理者と、その人の会社の SES・担当者。本人には出さない）
+            'canMail' => $r->user()->role !== 'eg' && isset(\App\Services\DirectMail::engineerTargets($r->user(), [$id])['ok'][$id]),
         ]);
     }
 

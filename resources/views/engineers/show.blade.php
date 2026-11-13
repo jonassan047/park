@@ -11,6 +11,7 @@
 <x-post :action="'/engineers/'.$e->id.'/invite'" label="送り直し" cls="ghost small" />
 @endif
 @if($mine)<a class="btn ghost small" href="{{ url('/account#password') }}">パスワード変更</a>@endif
+@if($canMail)<a class="btn ghost small" href="{{ url('/mails/new?eg[]='.$e->id) }}">メールを送る</a>@endif
 <a class="btn small" href="{{ url('/engineers/'.$e->id.'/edit') }}">編集</a>
 </x-slot:actions>
 <dl class="dl">

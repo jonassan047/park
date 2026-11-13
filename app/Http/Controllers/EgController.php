@@ -27,6 +27,8 @@ class EgController extends Controller
             'historyTodo' => W::historyTodo($eid),
             'projectCount' => DB::table('engineer_projects')->where('engineer_id', $eid)->count(),
             'unread' => DB::table('messages')->where('engineer_id', $eid)->where('read_by_eg', false)->count(),
+            // 「担当者への連絡」のカードの文の出し分け（管理者の直属なら、相手は管理者）
+            'sesDirect' => W::isDirect((int) DB::table('engineers')->where('id', $eid)->value('ses_id')),
         ]);
     }
 

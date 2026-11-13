@@ -371,6 +371,8 @@ class AdminController extends Controller
         $egIds = $list->pluck('id');
         return view('admin.engineers', [
             'list' => $list, 'q' => $q, 'st' => $st, 'direct' => $direct, 'hasDirect' => $hasDirect,
+            // 連絡メールを送れる人（行にチェックを出す）。判定は DirectMail の1か所
+            'mailable' => \App\Services\DirectMail::engineerTargets($r->user(), $egIds->all())['ok'],
             // 停止の確認の文に添える、稼働中の契約と選考中の応募（エンジニアごとに問い合わせず、まとめて取る）
             'working' => DB::table('contracts')->whereIn('engineer_id', $egIds)->where('status', 'active')->pluck('engineer_id')->flip(),
             'inSel' => DB::table('applications')->whereIn('engineer_id', $egIds)->whereIn('status', PipelineController::OPEN)->get(['engineer_id'])->groupBy('engineer_id')->map->count(),

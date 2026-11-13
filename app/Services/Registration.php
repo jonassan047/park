@@ -351,7 +351,7 @@ class Registration
 
     // ---------- 知らせ（K10・K25） ----------
     // いま使える人か（使えている・退会していない・本登録済み・SES の人は会社が参加中）
-    private static function usable(?object $x): bool
+    public static function usable(?object $x): bool
     {
         if (!$x || !$x->active || $x->left_at || !$x->registered_at) return false;
         if ($x->role === 'ses') return DB::table('ses_companies')->where('id', $x->ses_id)->value('status') === 'active';

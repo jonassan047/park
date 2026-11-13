@@ -1,3 +1,235 @@
+# PLAN：連絡メール（v0.8.0。2026-11-13）
+
+> **これが今の計画**。下の「v0.7.0」「v0.6.0」「v0.5.0」「v0.4.1」の節は前の計画で、消さずに残している。
+> 依頼：TEZZO（Leo 経由。2026-11-13）「管理者・SES・担当者のEG一覧からEGへメールを出せるようにして欲しい。同様にEGからSES・担当者へもメールが出せるようにしたい」。
+> 作る順：段階1 → 段階2 → 段階3 → 段階4（段階ごとに commit。`php artisan test` を通してから次へ）→ park-reviewer → park-tester。commit・push・公開版への反映は Leo。
+> プレーヤー：管理者・SES・担当者・EG の4つ（担当者は今のアプリでは `role=ses`。SES の代表者と同じ扱い）。
+> **案件の案内メール（`CaseMail`・`CaseSearch`）とは別の「連絡メール」**。案件に結び付かない、自由な件名・本文。今の案内メール・「やり取り」（管理者と EG のメッセージ。`/engineers/{id}/messages`）は変えない。
+> 外部のライブラリは足さない。メール本文・取引先の名前はこのファイルにもテストにも書かない（テストの件名・本文は架空の文）。
+
+## 0. コードで確かめた今の形
+
+- **EG の一覧は2つ**：
+  - 管理者：`GET /admin/engineers`（`AdminController::engineers` → `admin/engineers.blade.php`）。全社の EG。`q`・`status`・`ses=direct` で絞る（サーバで絞る）。行の右に「送り直し」「停止」「退会」「詳細」などの `<x-post>`（**行の中に form がある**）。
+  - SES・担当者：`GET /ses/engineers`（`SesController::engineers` → `ses/engineers.blade.php`）。自社（`e.ses_id = user.ses_id`）の EG だけ。行の作りは管理者と同じ（行の中に form）。
+- **EG の詳細**：`GET /engineers/{id}`（`EngineerController::show` → `engineers/show.blade.php`）。`load()` が `Perms::engineer`（管理者は全員、SES は自社、EG は本人）で 404／403。上のカード「エンジニア情報」の `x-slot:actions`（6〜15行）に「再開・停止・退会・送り直し・編集」。
+- **EG のホーム**：`GET /eg`（`eg/home.blade.php`）。右の列（27〜31行）に「スキルシートを良くするには」のカード。19行に「管理者からのメッセージ」の未読カード。
+- **ナビ**：`layouts/app.blade.php` の `$nav`（4〜7行。admin・ses・eg ごと）。
+- **送る道**：`Notifier::queueMail($to, $name, $subject, $body, $kind, $replyTo, $fromName)`。件名の頭に `[PARK]`、本文の後ろに `$fromName`（無ければ運営の名前）・URL・「PARK から自動で送っています」の足を付ける。`mail_outbox` に残し、送れる設定なら `deliver`。`deliver` が **@park.example 宛てを `config('park.dummy_mailbox')` に差し替える**（v0.7.0 で実装済み）。差出人のアドレスは全メール共通で、名前だけ変わる（`fromOf`）。
+- **今の案内メールの差出人・返信先**（`CaseMail::send` 109行）：管理者は `fromName = admin_sender($u)`（会社名。無ければ null）・返信先なし。SES は `fromName = null`・自社の人あてだけ返信先＝送った人のアドレス。
+- `user_label($u)`：SES は「会社名 氏名」、管理者は「（会社名か運営の名前） 氏名」、直属の EG は氏名だけ。
+- **使える人の条件**：EG は `Registration::usableEngineers`（本登録済み・停止中でない・退会でない）。EG のアカウントは `Notifier::egUsers($eid)`（その EG の `users` の行。兼任の SES・管理者の行も入る。active・本登録済み）。SES の人は `Registration::usable`（**private**。active・`left_at` なし・本登録済み・会社が `active`）。管理者は `Notifier::admins()`。
+- 直属：`ses_companies.kind='direct'`（`Workflow::isDirect`）。直属には SES の人がいない（`Notifier::toSes` も管理者に回す）。
+- 兼任：1つの `users` の行が `role=ses|admin` と `engineer_id` を持つ（`Workflow::isDual`）。ログインのときに立場を選ぶ。お知らせは `for_role` で立場ごとに分ける。
+- お知らせ：`Notifier::notify($userId, $title, $body, $link, $mail, $kind, $forRole)`。`$mail=false` で画面のお知らせだけ。
+- `SamplePurge` は見本の `users`・`engineers` を消す（新しい表に見本の人の行が残ると消せない）。
+- 版は `config/park.php`（今 `v0.7.0`）。版の文字を見ているテスト：`RegistrationFoundationTest`・`SkillQuestionsTest`・`V030RegressionTest`・`V050CatalogTest`・`V060CaseAiTest`・`V070SearchTest`。
+
+## 1. 受け入れ条件
+
+| 番号 | 受け入れ条件 |
+|---|---|
+| **段階1** | **送れる範囲と送る仕組み（画面なし）** |
+| R1 | 管理者は、どの会社の EG にも送れる（直属の EG も） |
+| R2 | SES・担当者は、自社の EG にだけ送れる。他社の EG には送れない |
+| R3 | EG は、自分の所属する会社の SES・担当者（`role=ses`・同じ `ses_id`）にだけ送れる。所属が直属の EG は、宛先が管理者になる |
+| R4 | 宛先に出る・送れるのは使える人だけ：EG は本登録済み・停止中でない・退会でない・アカウントがある人。SES・担当者・管理者は active・退会でない・本登録済み（SES は会社が参加中）。自分自身は宛先に出ない（兼任の人も） |
+| R5 | 今回は無し：SES に所属する EG から管理者へ、EG どうし、SES どうし、管理者から SES・担当者へ |
+| S1 | 1通の連絡メールで、選んだ人それぞれに1通ずつメールが届く（ほかの宛先は見えない） |
+| S2 | メールの件名・本文は送った人が書いたもの。本文の前に宛名、後ろに「誰から（表示名）」「返信すると誰に届くか」「PARK の画面でも読める」の数行が付く |
+| S3 | 差出人の表示名：管理者は `admin_sender`（無ければ運営の名前）、SES・担当者・EG は `user_label`（会社名＋氏名。直属の EG は氏名） |
+| S4 | 返信先（Reply-To）は送った人のメールアドレス。ただし、送った人と受け取る人が同じ会社か、どちらかが管理者のときだけ付ける（他社にアドレスを出さない） |
+| S5 | 受け取った人に、画面のお知らせが届く（メールは重ねて送らない）。押すと連絡メールの画面が開く |
+| S6 | 見本データ（@park.example）宛ては、今の `Notifier::deliver` の差し替えで届く（作り直さない） |
+| S7 | 送り先の人数は 1〜50 人。件名 1〜100 字、本文 1〜5000 字。外れたら送らずに理由を出す |
+| S8 | 同じ作成画面から2回押しても（同時の2回でも）、1回分しか送らない |
+| K1 | 送った記録が残る（送った人・立場・件名・本文・日時・宛先ごとの `outbox_id`）。操作の記録（`audit_log`）にも残る（件名・本文は書かない） |
+| **段階2** | **作成・一覧・詳細の画面** |
+| G1 | 作成画面に、宛先（名前の一覧）・件名・本文・［送る］。押すとブラウザの確かめ「n名に送ります。よろしいですか」が出る |
+| G2 | 送ったあと「n名に連絡メールを送りました」と出て、その連絡メールの画面へ移る |
+| G3 | 「連絡メール」の一覧：「受け取った」「送った」の2つ。管理者には「すべて」もある。新しい順 |
+| G4 | 連絡メールの画面：件名・本文・送った人・日時。送った人と管理者には宛先の一覧（送れたかの状態つき）。受け取った人には自分のことだけ |
+| G5 | メールが「保存のみ」の設定（`N::canSend()` が偽）なら、作成画面に今の案内と同じ注意を出す |
+| G6 | ナビに「連絡メール」（管理者・SES・EG） |
+| **段階3** | **入口** |
+| E1 | 管理者の EG 一覧（`/admin/engineers`）に、行ごとのチェックと［選んだ人にメールを送る］。送れない人（仮登録・停止中・退会）の行にはチェックを出さない |
+| E2 | SES・担当者の EG 一覧（`/ses/engineers`）に、同じチェックとボタン |
+| E3 | 一覧に「表示中の人を全部選ぶ／外す」がある |
+| E4 | EG の詳細（`/engineers/{id}`）に［メールを送る］（管理者・その EG の会社の SES・担当者。送れる人のときだけ）。押すとその人だけが宛先の作成画面 |
+| E5 | EG のホーム（`/eg`）に［担当者にメールを送る］のカード。作成画面で、宛先を自社の SES・担当者（直属なら管理者）からチェックで選ぶ。送れる相手がいなければ「今は送れる相手がいません」 |
+| **共通** | **権限・境界** |
+| P1 | SES・担当者が、他社の EG の id を作成画面の URL・送信に入れると 403。何も送られない |
+| P2 | EG が、他社の SES の人・管理者（直属でないとき）・EG の user id を宛先に入れると 403。何も送られない |
+| P3 | 自分の範囲の人でも、停止中・退会・仮登録になった人は送るときに外し、「送れない n 名を外しました」と出す。全員外れたら送らない |
+| P4 | 連絡メールの画面は、送った人・受け取った人・管理者だけが開ける。ほかは 404（他社の SES・担当者・EG が URL を直打ちしても） |
+| P5 | ログインしていなければログインへ。宛先が0人・選んでいないときは「送る相手を選んでください」 |
+| **段階4** | **まわり** |
+| V1 | 版を v0.8.0 にする。README・マニュアル（`resources/manuals` の admin・ses・engineer と各 -steps）を直す。見本データの削除（`SamplePurge`）で、見本の人の連絡メールの行も消える |
+
+## 2. 決めたこと（Leo の仮の推奨をもとに planner が仮置き。違えば7章で直す）
+
+| 番号 | 決めたこと | 理由 |
+|---|---|---|
+| D1 | 名前は「連絡メール」。サービス `app/Services/DirectMail.php`、画面 `app/Http/Controllers/DirectMailController.php`、画面のファイル `resources/views/mails/index.blade.php`・`new.blade.php`・`show.blade.php` | 今の作りに合わせる |
+| D2 | 表を2つ足す（3-1）。1回の送信＝`direct_mails` 1行、宛先ごと＝`direct_mail_recipients` 1行 | 50 人に送っても本文を1回だけ持つ。宛先ごとの `outbox_id` と状態を持てる |
+| D3 | 宛先の持ち方：管理者・SES が送るときは **EG（`engineers.id`）** を選び、届け先はその EG のアカウント（`Notifier::egUsers` の、`role=eg` を先にした1行）。EG が送るときは **人（`users.id`）** を選ぶ。どちらも `direct_mail_recipients.to_user_id` に入れ、EG あてなら `to_engineer_id` も入れる | 一覧は EG の行、EG の宛先は人。受け取った人の「受け取った」一覧は user id 1つで引ける |
+| D4 | 送れる相手の判定は `DirectMail` の1か所（`engineerTargets($u, array $ids)`・`staffTargets($u)`・`check`）。一覧のチェックの出し分け・作成画面・送信のすべてがこれを使う。`Registration::usable` を public にして使う（中身は変えない） | 正本1か所。画面と送信で食い違わない |
+| D5 | 範囲の外（他社の EG・存在しない id・選べない人の user id）が1つでも来たら **403 で何も送らない**。範囲の中だが使えなくなった人（停止・退会・仮登録）は外して送り、「送れない n 名を外しました」（P1〜P3） | URL の細工ははっきり拒み、開いている間に状態が変わっただけの人は普通に扱う |
+| D6 | 返信先（S4）：送った人の `users.email`。`replyToAllowed($from, $to)`：どちらかが管理者、または送った人の会社（SES は `ses_id`、EG は `engineers.ses_id`）と受け取る人の会社が同じとき。今の範囲（R1〜R3）ではいつも当てはまるが、守りとして必ず通す | EG→自社の SES の返信先は EG のアドレスになるが、自社の SES・担当者は EG の一覧（アカウントの列）で既にそのアドレスを見ている。新しく見せる範囲は増えない（7章 Q2） |
+| D7 | 本文の組み立て（`DirectMail::compose`）：`{宛名} 様` → 空行 → 送った人の本文 → 区切り → 「{送った人の表示名} から、PARK の連絡メールでお送りしています。」「このメールに返信すると、{送った人の表示名} に届きます。」（返信先があるときだけ）「PARK の画面でも読めます：{/mails/{id} の URL}」。宛名は `user_label`（EG あては EG の氏名）。そのあと `queueMail` の今の足が付く | 送った人がだれで、返信がどこへ行くかを受け取った人に示す。`queueMail` は変えない |
+| D8 | 二重送信の守り（S8）：作成画面を開くたびに使い捨ての鍵（32 文字の乱数）を隠し欄 `send_key` に入れ、`direct_mails.send_key` に **unique**。送信は最初に `direct_mails` を入れ、unique で弾かれたら送らずに、前に送った連絡メールの画面へ「もう送っています」で移る。そのあとで宛先ごとに `queueMail` | 同時の2回押しも DB が止める。メールを送るのは行が入った1回だけ |
+| D9 | 受け取った人のお知らせ（S5）：`N::notify(to_user_id, "{送った人の表示名}から連絡メールが届きました", 件名, "/mails/{id}", false, 'direct-mail', 立場)`。立場は EG あてなら `eg`、SES あてなら `ses`、管理者あてなら `admin` | メールは本体が届くので重ねない。兼任の人のお知らせを立場で分ける |
+| D10 | 受け取る人の `mail_opt_in`（お知らせのメールの希望）は見ない（送る） | 人から人への連絡で、今の案内メールも見ていない（7章 Q4） |
+| D11 | 見られる範囲（P4）：送った人（`from_user_id`）・受け取った人（`to_user_id`）・管理者（全部）。同じ会社のほかの SES・担当者は見られない | 個人どうしの連絡として扱う（7章 Q3） |
+| D12 | 管理者が SES の会社の EG に送っても、その会社の SES には知らせない | 今の「やり取り」（管理者と EG）も知らせていない（7章 Q5） |
+| D13 | 一覧のチェックは、行の中に `<x-post>` の form があるので、表の外に `<form id="dm" method="get" action="/mails/new">` を置き、チェックは `<input type="checkbox" name="eg[]" form="dm">` で結び付ける。［選んだ人にメールを送る］はその form の送信。「表示中の人を全部選ぶ／外す」は表の上のボタン＋小さな JavaScript（画面の中に書く） | form の入れ子を作らない。今の画面の作り（Blade＋少しの JS）に合わせる |
+| D14 | 作成画面は `GET /mails/new?eg[]=…`（管理者・SES）／`GET /mails/new`（EG）。51 人以上を選んで来たら、作成画面に「一度に送れるのは 50 名までです。一覧で減らしてください」と出し、［送る］を出さない | 一覧から GET で渡せる。上限を画面の最初で知らせる |
+| D15 | 操作の記録：`audit('direct-mail', "#{id} {立場} → n名")`（件名・本文・名前は書かない） | 記録に中身を残さない |
+| D16 | 送信のルートに `throttle:10,1` | 連打・機械的な送信を抑える |
+| D17 | 版は **v0.8.0**（表の追加と新しい機能） | |
+
+## 3. 仕様の詳細
+
+### 3-1. 表（マイグレーション `2026_11_13_000002_direct_mails.php`）
+
+- `direct_mails`：`id`、`send_key`（string 40・unique）、`from_user_id`（users の id。null 可・`nullOnDelete`）、`from_role`（string 10：admin／ses／eg）、`from_ses_id`（null 可。送った人の会社。管理者は null、EG は `engineers.ses_id`）、`from_label`（string 200。送ったときの表示名）、`subject`（string 150）、`body`（text）、`to_count`（int）、`created_at`。index `from_user_id`。
+- `direct_mail_recipients`：`id`、`direct_mail_id`（direct_mails・cascade）、`to_user_id`（users の id。null 可・`nullOnDelete`）、`to_engineer_id`（null 可・`nullOnDelete`）、`to_role`（string 10）、`to_label`（string 200。送ったときの表示名）、`outbox_id`（null 可）、`created_at`。unique `(direct_mail_id, to_user_id)`、index `to_user_id`。
+- `down` は2つの表を消す。
+- 表示名を写して持つのは、あとで人が消えても（見本の削除など）記録が読めるようにするため。送れたかの状態は `mail_outbox` の `status` を `outbox_id` で引く。
+
+### 3-2. `DirectMail`（段階1）
+
+- `const MAX_TO = 50`、`MAX_SUBJECT = 100`、`MAX_BODY = 5000`。
+- `canCompose($u): bool`：admin・ses・eg（ログインした立場）。
+- `engineerTargets($u, array $ids): array`（管理者・SES 用）：`['ok' => [eid => 届け先の users の行], 'unusable' => [eid…], 'outside' => [id…]]`。範囲：管理者は全 EG、SES は `engineers.ses_id = $u->ses_id`。範囲の中で `usableEngineers` と `egUsers` に当たらない人は `unusable`。自分自身（`$u->engineer_id`）は `outside`。**まとめて1〜2回の問い合わせ**（一覧の行の数で増やさない）。
+- `staffTargets($u): array`（EG 用）：自分の EG の会社が `kind=ses` なら、その会社の `role=ses` の人で `Registration::usable` のもの。`kind=direct` なら `Notifier::admins()` で `left_at` なしのもの。自分の user id は除く。並びは代表者（`ses_companies.rep_user_id`）を先に、ほかは名前順。
+- `replyToAllowed(object $from, object $to): bool`（D6）。
+- `compose(...)`（D7）。
+- `send($u, array $ids, string $subject, string $body, string $key): array`：
+  1. 検査（S7。前後の空白は全角も取る）→ だめなら `['bad' => 文]`。
+  2. 宛先：管理者・SES は `engineerTargets`、EG は `staffTargets` と照らす。`outside` が1つでもあれば `['forbidden' => true]`（コントローラが 403）。`ok` が0なら `['bad' => '送る相手を選んでください。']`（全員 unusable のときは「送れる相手がいません」）。
+  3. `direct_mails` を入れる（D8。unique で弾かれたら `['dup' => 前の id]`）。
+  4. 宛先ごと：`queueMail(届け先のメール, 表示名, 件名, compose(...), 'direct-mail', 返信先, 差出人の表示名)` → `direct_mail_recipients` → `notify`（D9）。
+  5. `audit`（D15）。`['ok' => id, 'sent' => n, 'skipped' => unusable の数]`。
+- `canView($u, object $m): bool`（D11）。
+- `inbox($u)`・`outbox($u)`・`all()`：一覧（50 件ずつ。`paginate` は今の画面にあるものに合わせる。無ければ `?page=` と `limit/offset`）。
+
+### 3-3. ルート（`Route::middleware('role')` のグループに足す）
+
+| ルート | 動き |
+|---|---|
+| `GET /mails` | 一覧（G3）。`?box=in`（既定）・`out`・`all`（管理者だけ。ほかは `in` に戻す） |
+| `GET /mails/new` | 作成画面（G1・G5・D14）。管理者・SES は `eg[]`、EG は宛先のチェック（`to[]`） |
+| `POST /mails` | 送る（`throttle:10,1`）。立場が admin・ses なら `eg[]`、eg なら `to[]` だけを読む（もう一方は無視） |
+| `GET /mails/{id}` | 連絡メールの画面（G4）。`canView` でなければ 404 |
+
+### 3-4. 画面
+
+- **作成画面**（`mails/new.blade.php`）：「宛先（n名）」に名前を並べる（管理者・SES：EG の氏名＋会社名、EG：SES・担当者の氏名と「代表」の印、直属なら「管理者」）。EG のときはチェックで選ぶ（はじめはどれもチェックなし。1人だけなら最初からチェック）。件名・本文（`textarea`）・隠し欄 `send_key`・［送る］（`onsubmit` で「n名に送ります。よろしいですか」。n は送る時点のチェックの数）。下に「返信は {あなた} のメールアドレスに届きます」「管理者は、送った連絡メールを見ることができます」の注意。入力のエラーで戻るときは件名・本文を残す（`old()`）。
+- **一覧**（`mails/index.blade.php`）：タブ（受け取った／送った／すべて）。列：日時・件名・相手（受け取った＝送った人、送った＝宛先の先頭の名前＋「ほか n 名」）。
+- **連絡メールの画面**（`mails/show.blade.php`）：件名・送った人・日時・本文（改行そのまま、`e()` で）。送った人と管理者に宛先の表（名前・立場・状態＝送った／保存のみ／失敗）。受け取った人が SES・担当者・管理者のとき［このエンジニアの詳細］（EG から届いたもの）。EG が送った人の画面に［もう一度送る］は付けない（作成画面へのリンクだけ）。
+- **管理者の EG 一覧**（`admin/engineers.blade.php`）：表の先頭に列「選ぶ」（`$mailable[$e->id]` のときだけチェック、`form="dm"`）。表の上に［表示中の人を全部選ぶ］［全部外す］、表の下に［選んだ人にメールを送る］。`AdminController::engineers` で `DirectMail::engineerTargets($u, 一覧の id)` の `ok` を `$mailable` として渡す。
+- **SES の EG 一覧**（`ses/engineers.blade.php`）：同じ。`SesController::engineers` で同じく `$mailable`。右上の［エンジニアを登録］の隣に［選んだ人にメールを送る］は置かず、表の下にだけ置く（押し間違いを減らす）。
+- **EG の詳細**（`engineers/show.blade.php` の「エンジニア情報」の actions）：`!$mine` で、`DirectMail::engineerTargets($u, [$e->id])['ok']` にあれば `<a class="btn ghost small" href="/mails/new?eg[]={id}">メールを送る</a>`。
+- **EG のホーム**（`eg/home.blade.php` の右の列、「スキルシートを良くするには」の下）：カード「担当者への連絡」。文「所属の会社の担当者に、メールで連絡できます。」（直属なら「管理者に、メールで連絡できます。」）＋［担当者にメールを送る］→ `/mails/new`。
+- **ナビ**（`layouts/app.blade.php`）：admin は「メール」の前、ses は「請求」の後、eg は「やり取り」の後に `['/mails', '連絡メール']`。
+
+## 4. プレーヤーごとに変わること
+
+| プレーヤー | 送れる相手 | 入口 | 見られるもの |
+|---|---|---|---|
+| 管理者 | 全社の EG（使える人） | EG 一覧のチェック、EG の詳細、受け取ったメールの画面 | 全部の連絡メール（「すべて」）。直属の EG から届く |
+| SES | 自社の EG（使える人） | 自社の EG 一覧のチェック、EG の詳細 | 自分が送った・受け取ったもの。自社の EG から届く |
+| 担当者 | SES と同じ（`role=ses`） | SES と同じ | 自分が送った・受け取ったもの（同じ会社のほかの人の分は見えない） |
+| EG | 所属の会社の SES・担当者（直属なら管理者） | ホームのカード、ナビの「連絡メール」 | 自分が送った・受け取ったもの。届いたメールに返信すると、送った人に届く |
+
+- 境界：選んだ人が0人 → 「送る相手を選んでください」。51 人以上 → D14。EG の会社に使える SES・担当者がいない（全員停止など）→ E5 の文。会社が停止中の SES の人は宛先に出ない。兼任の人が自分を選ぶことは無い（R4）。期限切れ・取り消しは無い（送った記録は消さない）。
+
+## 5. 作業の手順（implementer）
+
+### 段階1：表と仕組み
+
+1. マイグレーション（3-1）。`php artisan migrate`（手元）。
+2. `Registration::usable` を `public static` にする（中身は変えない）。
+3. `app/Services/DirectMail.php`（3-2）。`Notifier` は変えない。
+4. `tests/Feature/V080DirectMailTest.php` の T1〜T9 を書き、`php artisan test`。
+
+### 段階2：画面
+
+1. `DirectMailController`（`index`・`create`・`store`・`show`）とルート（3-3）。`store` は `send` の結果で 403／入力に戻す（`withInput`）／前の画面へ／作った画面へ。
+2. `mails/index`・`new`・`show` の3画面（3-4）。ナビ（G6）。
+3. T10〜T16 を書き、`php artisan test`。
+
+### 段階3：入口
+
+1. `AdminController::engineers`・`SesController::engineers` で `$mailable` を渡す。2つの一覧にチェック・全部選ぶ・送るボタン（D13）。
+2. `engineers/show.blade.php` に［メールを送る］、`eg/home.blade.php` にカード。`EgController::home` で直属かどうかを渡す（文の出し分け）。
+3. T17〜T20 を書き、`php artisan test`。
+
+### 段階4：まわり
+
+1. `SamplePurge`：見本の人が送った・受け取った `direct_mails`・`direct_mail_recipients` を消す対象に足す（件数の表示・バックアップにも出す。今の表の並べ方に合わせる）。
+2. `config/park.php` を `v0.8.0`。版を見ているテスト（0章の6つ）を直す。
+3. README：「連絡メール」の節（送れる範囲 R1〜R5、返信先 D6、二重送信の守り D8、上限 S7、表2つ、案内メール・やり取りとの違い）。
+4. マニュアル（`resources/manuals`）：
+   - `admin.md`・`admin-steps.md`：EG 一覧で選んで送る手順、詳細からの1人あて、「連絡メール」の一覧（「すべて」で全体が見える）、直属の EG から届くこと、返信先。
+   - `ses.md`・`ses-steps.md`：自社の EG に送る手順（担当者も同じ。他社の EG には送れない）、EG から届くこと、返信すると EG に届くこと、管理者は連絡メールを見られること。
+   - `engineer.md`・`engineer-steps.md`：ホームの［担当者にメールを送る］の手順、送れる相手（所属の会社の担当者。直属なら管理者）、返信先が自分のアドレスになること、届いたメールへの返信は送った人に届くこと、管理者は連絡メールを見られること。
+   - 04_Manuals の写しは Leo（または park-manager）が push のあとに写し直す。implementer は park の中だけ直す。
+5. T21〜T23 を書き、`php artisan test` が全部通ることを確かめる（zip の既知の1件を除く）。
+
+## 6. テスト（`tests/Feature/V080DirectMailTest.php`）
+
+件名・本文はテストの中で作る**架空の文だけ**。立場は今のやり方（管理者・自社 SES の代表・同じ会社の担当者・他社の SES・自社の EG・他社の EG・直属の EG を作ってログイン）。メールは `mail_outbox` の行で確かめる。
+
+| 番号 | 条件 | 手順 | 確かめること |
+|---|---|---|---|
+| T1 | R1・R2・R4 | 管理者・SES で `engineerTargets`（自社・他社・直属・仮登録・停止中・退会・自分自身の EG） | 管理者は全社の使える人が ok。SES は自社だけ ok、他社は outside。仮登録・停止・退会は unusable、自分は outside |
+| T2 | R3・R4 | 自社 EG・直属 EG で `staffTargets`（代表・担当者・停止中の担当者・会社が停止中の別会社） | 自社 EG は代表と使える担当者だけ（代表が先）。直属 EG は管理者。停止中の人は出ない |
+| T3 | S1・S2・S3・K1 | SES が自社の EG 2人に送る | `mail_outbox` 2通（宛先ごと）。件名・本文が入り、宛名・「…から、PARK の連絡メールで」の行。`from_name` が「会社名 氏名」。`direct_mails` 1行・`direct_mail_recipients` 2行（`outbox_id` あり）。`audit_log` に `direct-mail`（件名が入っていない） |
+| T4 | S4 | SES→自社 EG／EG→自社 SES／管理者→他社の EG／直属 EG→管理者 | どれも `reply_to` が送った人のアドレス。`replyToAllowed` に別の会社どうしを渡すと false |
+| T5 | S5 | T3 のあと | 受け取った2人に `app_notifications`（`for_role=eg`・リンク `/mails/{id}`）。お知らせのメールは増えない |
+| T6 | S7 | 宛先 51 人／件名 101 字／本文が空 | 送られない（行が増えない）。理由の文 |
+| T7 | S8 | 同じ `send_key` で2回送る | `direct_mails` 1行、`mail_outbox` は人数分だけ。2回目は前の画面へ |
+| T8 | S6 | `@park.example` の EG に、送れる設定（`mail.default` を array 以外にし、`Mail::fake`）で送る | 届け先が `park.dummy_mailbox`（今の `deliver` のまま） |
+| T9 | D3 | 兼任（`role=ses`・`engineer_id` あり）の EG に管理者が送る | 届け先はその人の行。お知らせは `for_role=eg` |
+| T10 | G1・G5 | 管理者で `GET /mails/new?eg[]=…`／`mail.default=log` で開く | 宛先の名前・件名・本文・`send_key`・確かめの文／「保存のみ」の注意 |
+| T11 | G2 | `POST /mails` | 「n名に連絡メールを送りました」で `/mails/{id}` へ |
+| T12 | G3 | 送った人・受け取った人・管理者で `GET /mails`（`box` を変えて） | それぞれの一覧に出る。SES の `?box=all` は「受け取った」になる |
+| T13 | G4 | 送った人・受け取った人・管理者で `GET /mails/{id}` | 本文が出る。宛先の表は送った人と管理者だけ（受け取った人にはほかの宛先の名前が出ない） |
+| T14 | P1 | SES が他社の EG の id で `GET /mails/new?eg[]=`・`POST /mails` | 403。`direct_mails`・`mail_outbox` が増えない |
+| T15 | P2 | EG が他社の SES の人／管理者（直属でない EG）／別の EG の user id を `to[]` に入れて送る | 403。増えない |
+| T16 | P3・P5 | 選んだあとで1人を停止して送る／全員停止／何も選ばずに送る | 「送れない 1 名を外しました」で残りに送る／「送れる相手がいません」／「送る相手を選んでください」 |
+| T17 | P4 | 他社の SES・同じ会社のほかの担当者・関係のない EG で `GET /mails/{id}` | 404 |
+| T18 | E1・E3 | 管理者で `GET /admin/engineers`（使える人・仮登録・停止中がいる） | 使える人の行だけに `name="eg[]"` のチェック（`form="dm"`）。全部選ぶのボタン・［選んだ人にメールを送る］ |
+| T19 | E2・E4 | 担当者で `GET /ses/engineers`／自社 EG の詳細／停止中の EG の詳細 | チェックとボタン／［メールを送る］が `/mails/new?eg[]=` を指す／停止中の人には出ない |
+| T20 | E5 | 自社 EG・直属 EG で `GET /eg` と `GET /mails/new`／担当者が全員停止の会社の EG | カードと宛先の候補（直属は管理者）／「今は送れる相手がいません」 |
+| T21 | V1 | 見本の EG に送ってから `SamplePurge` | 見本の人の連絡メールの行が消え、削除が止まらない |
+| T22 | V1 | `/login` | `v0.8.0` |
+| T23 | 既存 | 既存のテスト一式（案内メール・エンジニア検索・やり取りを含む） | 版の文字のほかは変えずに通る |
+
+- 画面の見た目（チェックの列・全部選ぶ・確かめのダイアログ）は reviewer がコードを読み、Leo が手元の画面で確かめる。
+
+## 7. 確認したいこと（Leo が決める。答えが来るまで推奨で作る）
+
+- **Q1 管理者の返信先**：Leo の推奨どおり、管理者の `users.email` にする（D6）。**推奨：このまま**。ただし管理者のアドレスが個人のものなら、EG に見えることになる。避けたいときは、管理者だけ返信先を付けない（今の案内メールと同じ。返信は共通の差出人アドレスへ）に直す（`compose` の一文と `replyToAllowed` の2か所）。
+- **Q2 EG→SES の返信先が EG のアドレスになること**：**推奨：付ける**（D6）。自社の SES・担当者は EG の一覧で既にそのアドレスを見ている。作成画面に「返信は あなたのメールアドレスに届きます」と出して、EG に分かるようにする。
+- **Q3 同じ会社のほかの SES・担当者が見られるか**：**推奨：見られない（本人だけ。管理者は全部）**（D11）。会社で共有したいなら、次の版で「自社の分」を足す（`from_ses_id` と宛先の会社で引ける）。
+- **Q4 お知らせのメールを断っている人（`mail_opt_in` が偽）に送るか**：**推奨：送る**（D10）。人が書いた連絡で、案内メールと同じ扱い。
+- **Q5 管理者が SES の会社の EG に送ったとき、その SES に知らせるか**：**推奨：知らせない**（D12）。SES が気にするなら、次の版で「管理者から貴社の◯◯さんに連絡がありました」（件名だけ）を足す。
+- **Q6 上限**：1回 50 人・件名 100 字・本文 5000 字・1分 10 回（S7・D16）。**推奨：このまま**。
+- **Q7 「やり取り」（管理者と EG のメッセージ）との関係**：**推奨：今回は両方残す**。直属の EG は「やり取り」と連絡メールの両方で管理者に連絡できる。マニュアルに「やり取りは PARK の画面の中だけ、連絡メールはメールで届く」と違いを書く。
+
+## 8. 了承が要ること
+
+- 表を2つ足す（マイグレーション）：公開版への反映（`park-deploy.sh` が migrate する）は常時了承の範囲。`.env` の変更は無い。
+- **メールの送信**：この機能は、使う人が押したときに相手へメールを送る。実装・テストでは `mail_outbox` に入るだけ（テストは送らない）。**公開版で実際の人あてに試しに送ることは、TEZZO の了承を取ってから**（試すなら見本のデータの人あて。`@park.example` は `park@jona.jp` に届く）。
+- データの削除：`SamplePurge` に新しい表を足すだけ（見本の削除を実行するのは今までどおり TEZZO の了承を取ってから）。
+
+---
+
+> 以下は前の計画（v0.7.0。2026-11-13）。消さずに残す。
+
 # PLAN：エンジニア検索 → メール送信（v0.7.0。2026-11-13）
 
 > **これが今の計画**。下の「v0.6.0」の節は前の計画（実装・公開版への反映は済み）で、消さずに残している。v0.5.0 より前の計画は Git の履歴（`git log -p PLAN.md`）にある。

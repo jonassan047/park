@@ -29,5 +29,7 @@
 <ul class="tips">@foreach(array_slice($check['tips'], 0, 5) as $t)<li>{{ $t }}</li>@endforeach</ul>
 <p><a class="btn small" href="{{ url('/engineers/'.$e->id) }}">経験票を編集</a> <a class="btn ghost small" href="{{ url('/engineers/'.$e->id.'/sheet') }}">スキルシートを見る</a> <a class="btn ghost small" href="{{ url('/engineers/'.$e->id.'/messages') }}">管理者に見てもらう</a></p>
 </x-card>
+<x-card title="担当者への連絡"><p>{{ $sesDirect ? '管理者に、メールで連絡できます。' : '所属の会社の担当者に、メールで連絡できます。' }}</p>
+<p><a class="btn small" href="{{ url('/mails/new') }}">担当者にメールを送る</a> <a class="btn ghost small" href="{{ url('/mails') }}">連絡メールの一覧</a></p></x-card>
 </div></div>
 @endsection

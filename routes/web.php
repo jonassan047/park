@@ -6,6 +6,7 @@ use App\Http\Controllers\AiController as Ai;
 use App\Http\Controllers\CaseController as Cas;
 use App\Http\Controllers\CaseMailController as CMail;
 use App\Http\Controllers\CaseSearchController as CSearch;
+use App\Http\Controllers\DirectMailController as DMail;
 use App\Http\Controllers\EgController as Eg;
 use App\Http\Controllers\EngineerController as Eng;
 use App\Http\Controllers\ManualController as Man;
@@ -164,6 +165,14 @@ Route::middleware('role:admin,eg')->group(function () {
 });
 
 Route::middleware('role:ses,eg')->post('/applications/{id}/withdraw', [Pip::class, 'withdraw']);
+
+// 連絡メール（v0.8.0）：管理者・SES（担当者）・エンジニアが、送れる範囲の人にメールを送る。範囲は DirectMail が決める
+Route::middleware('role:admin,ses,eg')->group(function () {
+    Route::get('/mails', [DMail::class, 'index']);
+    Route::get('/mails/new', [DMail::class, 'create']);
+    Route::post('/mails', [DMail::class, 'store'])->middleware('throttle:10,1');
+    Route::get('/mails/{id}', [DMail::class, 'show']);
+});
 
 // ---------- 管理者 ----------
 Route::middleware('role:admin')->group(function () {
