@@ -86,19 +86,20 @@ class Notifier
             ->whereExists(fn ($q) => Registration::usableEngineers($q->select(DB::raw(1))->from('engineers')->whereColumn('engineers.id', 'users.engineer_id')))->get();
     }
 
-    public static function toAdmins(string $title, string $body, string $link, bool $mail = true, string $kind = 'notice'): void
+    // $exceptUserId：この人には出さない（自分で書いたことを、自分に知らせないため）
+    public static function toAdmins(string $title, string $body, string $link, bool $mail = true, string $kind = 'notice', ?int $exceptUserId = null): void
     {
-        foreach (self::admins() as $u) self::notify($u->id, $title, $body, $link, $mail, $kind, 'admin');
+        foreach (self::admins() as $u) if ((int) $u->id !== (int) $exceptUserId) self::notify($u->id, $title, $body, $link, $mail, $kind, 'admin');
     }
-    public static function toSes($sesId, string $title, string $body, string $link, bool $mail = true, string $kind = 'notice'): void
+    public static function toSes($sesId, string $title, string $body, string $link, bool $mail = true, string $kind = 'notice', ?int $exceptUserId = null): void
     {
         // 管理者の直属には SES の担当者がいないので、管理者全員に届ける
-        if (Workflow::isDirect($sesId ? (int) $sesId : null)) { self::toAdmins($title, $body, $link, $mail, $kind); return; }
-        foreach (self::sesUsers($sesId) as $u) self::notify($u->id, $title, $body, $link, $mail, $kind, 'ses');
+        if (Workflow::isDirect($sesId ? (int) $sesId : null)) { self::toAdmins($title, $body, $link, $mail, $kind, $exceptUserId); return; }
+        foreach (self::sesUsers($sesId) as $u) if ((int) $u->id !== (int) $exceptUserId) self::notify($u->id, $title, $body, $link, $mail, $kind, 'ses');
     }
-    public static function toEg($engineerId, string $title, string $body, string $link, bool $mail = true, string $kind = 'notice'): void
+    public static function toEg($engineerId, string $title, string $body, string $link, bool $mail = true, string $kind = 'notice', ?int $exceptUserId = null): void
     {
-        foreach (self::egUsers($engineerId) as $u) self::notify($u->id, $title, $body, $link, $mail, $kind, 'eg');
+        foreach (self::egUsers($engineerId) as $u) if ((int) $u->id !== (int) $exceptUserId) self::notify($u->id, $title, $body, $link, $mail, $kind, 'eg');
     }
 
     public static function audit($userId, string $action, ?string $detail = ''): void

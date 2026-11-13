@@ -82,8 +82,17 @@
 </x-card>
 @endif
 @if($u->role !== 'eg')
+@if($caseThreads->count())
+<x-card title="エンジニアとのやり取り" id="threads">
+<x-table :head="array_values(array_filter(['エンジニア', $u->role === 'admin' ? '会社' : null, '最後の発言', '未読', ''], fn ($h) => $h !== null))" :count="$caseThreads->count()">
+@foreach($caseThreads as $t)<tr><td>{{ $t->eg_name }} <x-code :v="$t->eg_code" /></td>@if($u->role === 'admin')<td>{{ $t->ses_name }}</td>@endif<td>{{ fmt_dt($t->last_post_at) }}</td>
+<td>@if($u->role === 'admin' && $t->ses_kind !== 'direct')<span class="muted">—</span>@elseif($t->unread)<b class="bad-text">{{ $t->unread }}</b>@endif</td>
+<td><a class="btn small" href="{{ url('/cases/'.$c->id.'/threads/'.$t->engineer_id) }}">開く</a></td></tr>@endforeach
+</x-table>
+</x-card>
+@endif
 <x-card title="この案件への応募"><x-table :head="['ID', 'エンジニア', 'SES', '状態', '応募日', '']" :count="$apps->count()">
-@foreach($apps as $a)<tr><td><x-code :v="$a->code" /></td><td>{{ $a->eg_name }} <x-code :v="($u->role !== 'ses' || (int) $a->eg_ses_id === (int) $u->ses_id) ? $a->eg_code : null" /></td><td>{{ $a->ses_name }}</td><td>{{ badge('appStatus', $a->status) }}</td><td>{{ fmt_date($a->applied_at) }}</td><td><a class="btn small" href="{{ url('/applications/'.$a->id) }}">詳細</a></td></tr>@endforeach
+@foreach($apps as $a)<tr><td><x-code :v="$a->code" /></td><td>{{ $a->eg_name }} <x-code :v="($u->role !== 'ses' || (int) $a->eg_ses_id === (int) $u->ses_id) ? $a->eg_code : null" /></td><td>{{ $a->ses_name }}</td><td>{{ badge('appStatus', $a->status) }}</td><td>{{ fmt_date($a->applied_at) }}</td><td><a class="btn small" href="{{ url('/applications/'.$a->id) }}">詳細</a>@if($u->role === 'admin' || (int) $a->eg_ses_id === (int) $u->ses_id) <a class="btn ghost small" href="{{ url('/cases/'.$c->id.'/threads/'.$a->engineer_id) }}">やり取り</a>@endif</td></tr>@endforeach
 </x-table></x-card>
 @endif
 </div><div>
@@ -94,8 +103,9 @@
   @else<p class="muted">グループ全体のエンジニアから、得意分野で候補を出し、メールで案内します（返事のリンク付き）。送った記録と返事は、左の「案内メール」に出ます。</p>
   <a class="btn" href="{{ url('/cases/'.$c->id.'/search') }}">エンジニアに案内する</a>@endif
   </x-card>
-  <x-card title="配信済み"><x-table :head="['エンジニア', '点数', '状態', '配信日']" :count="$offers->count()">
-  @foreach($offers as $o)<tr><td>{{ $o->name }} <x-code :v="$o->eg_code" /></td><td>{{ $o->score }}</td><td>{{ badge('offerStatus', $o->status) }}@if($o->decline_reason)<div class="muted">{{ $o->decline_reason }}</div>@endif</td><td>{{ fmt_dt($o->sent_at) }}</td></tr>@endforeach
+  <x-card title="配信済み"><x-table :head="['エンジニア', '点数', '状態', '配信日', '']" :count="$offers->count()">
+  @foreach($offers as $o)<tr><td>{{ $o->name }} <x-code :v="$o->eg_code" /></td><td>{{ $o->score }}</td><td>{{ badge('offerStatus', $o->status) }}@if($o->decline_reason)<div class="muted">{{ $o->decline_reason }}</div>@endif</td><td>{{ fmt_dt($o->sent_at) }}</td>
+  <td><a class="btn ghost small" href="{{ url('/cases/'.$c->id.'/threads/'.$o->engineer_id) }}">やり取り</a></td></tr>@endforeach
   </x-table></x-card>
   <x-card title="状態の変更">@foreach(['open', 'filled', 'closed'] as $s)@if($s !== $c->status)<x-post :action="'/cases/'.$c->id.'/status'" :label="lbl('caseStatus', $s).'にする'" :fields="['status' => $s]" cls="ghost small" /> @endif @endforeach</x-card>
 
@@ -110,7 +120,8 @@
   @foreach($rows as $row)<tr><td><a href="{{ url('/engineers/'.$row['e']->id) }}">{{ $row['e']->name }}</a> <x-code :v="$row['e']->code" /><div class="muted">{{ lbl('engStatus', $row['e']->status) }}</div></td>
     <td><x-score :n="$row['score']" /></td><td><small class="bad-text">{{ implode('、', $row['missing']) }}</small></td>
     <td>@if(in_array($row['e']->id, $applied))<span class="muted">応募済み</span>@elseif(isset($offered[$row['e']->id]))<span class="muted">案内済み</span>
-    @elseif(!$canMail)<x-post :action="'/cases/'.$c->id.'/recommend'" label="推薦する" :fields="['engineer_id' => $row['e']->id]" cls="ghost small" />@endif</td></tr>@endforeach
+    @elseif(!$canMail)<x-post :action="'/cases/'.$c->id.'/recommend'" label="推薦する" :fields="['engineer_id' => $row['e']->id]" cls="ghost small" />@endif
+    @if(in_array($row['e']->id, $applied) || isset($offered[$row['e']->id]))<a class="btn ghost small" href="{{ url('/cases/'.$c->id.'/threads/'.$row['e']->id) }}">やり取り</a>@endif</td></tr>@endforeach
   </x-table>
   @endif
   </x-card>
@@ -137,6 +148,11 @@
     <x-field label="理由（今後の案件選びに使います）" name="reason" type="select" :options="array_combine($reasons, $reasons)" />
     <button class="btn ghost">見送る</button></form></x-card>
   @endif
+  {{-- 応募の前でも後でも、同じ1本が続く。どの状態でも出す（書けないときは理由を出す） --}}
+  <x-card title="担当者とのやり取り" id="thread">
+  <p class="muted">応募の前に、案件の内容で確かめたいことを担当者に聞けます。</p>
+  @include('partials.case-thread', ['threads' => $threads, 'e' => $me, 'why' => $threadWhy, 'action' => '/cases/'.$c->id.'/threads/'.$u->engineer_id])
+  </x-card>
 @endif
 </div></div>
 <p class="backrow"><a class="btn ghost" href="{{ list_url('cases') }}">案件の一覧に戻る</a></p>

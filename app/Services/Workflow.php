@@ -849,7 +849,8 @@ class Workflow
                 'missing' => implode(' / ', $s['missing']), 'sent_by' => $actor->id, 'sent_at' => now_str()]);
             N::toEg($eid, "あなたに合う案件が届きました：{$c->title}".Ids::tag($c->code),
                 "{$c->title}\n単価：".($c->price ? man($c->price) : '相談').'／開始：'.($c->start_date ? fmt_date($c->start_date) : '相談').'／'.lbl('workStyle', $c->work_style)
-                ."\n合う点：".(implode('、', array_slice($s['reasons'], 0, 4)) ?: '—').($message ? "\n\n管理者より：$message" : '')."\n\n条件を確認のうえ、応募するか見送るかを選んでください。",
+                ."\n合う点：".(implode('、', array_slice($s['reasons'], 0, 4)) ?: '—').($message ? "\n\n管理者より：$message" : '')."\n\n条件を確認のうえ、応募するか見送るかを選んでください。"
+                ."\n\n届いた案件の一覧：".url('/eg/offers'),
                 "/cases/$caseId", true, 'offer');
             $bySes[$e->ses_id][] = "{$e->name}（{$s['score']}点）";
             $count++;

@@ -6,6 +6,7 @@ use App\Http\Controllers\AiController as Ai;
 use App\Http\Controllers\CaseController as Cas;
 use App\Http\Controllers\CaseMailController as CMail;
 use App\Http\Controllers\CaseSearchController as CSearch;
+use App\Http\Controllers\CaseThreadController as Thr;
 use App\Http\Controllers\DirectMailController as DMail;
 use App\Http\Controllers\EgController as Eg;
 use App\Http\Controllers\EngineerController as Eng;
@@ -79,6 +80,9 @@ Route::middleware('role')->group(function () {
 
     Route::get('/cases/{id}', [Cas::class, 'show']);
     Route::post('/cases/{id}/apply', [Cas::class, 'apply']);
+    // 案件のやり取り（v0.10.0）：見える範囲・書ける条件は CaseThread が決める（見られない人は 404）
+    Route::get('/cases/{id}/threads/{eid}', [Thr::class, 'show']);
+    Route::post('/cases/{id}/threads/{eid}', [Thr::class, 'store'])->middleware('throttle:20,1');
 
     Route::get('/engineers/{id}', [Eng::class, 'show']);
     Route::get('/engineers/{id}/edit', [Eng::class, 'edit']);
@@ -107,6 +111,7 @@ Route::middleware('role')->group(function () {
 });
 
 Route::middleware('role:admin,ses')->group(function () {
+    Route::get('/threads', [Thr::class, 'index']); // 案件のやり取りの一覧（v0.10.0）
     Route::get('/cases/new', [Cas::class, 'create']);
     Route::post('/cases/import', [Cas::class, 'import']);
     Route::post('/cases', [Cas::class, 'store']);

@@ -316,7 +316,7 @@ class PurgeSamplesTest extends TestCase
         DB::table('mail_outbox')->delete();
         DB::table('app_notifications')->delete();
         DB::table('audit_log')->delete();
-        foreach (['application_events', 'interviews', 'follow_ups', 'contracts', 'invoices', 'applications', 'case_offers', 'case_mails', 'messages', 'ai_jobs', 'engineer_skills', 'engineer_skill_checks', 'engineer_projects',
+        foreach (['application_events', 'interviews', 'follow_ups', 'contracts', 'invoices', 'applications', 'case_offers', 'case_mails', 'messages', 'case_thread_posts', 'case_threads', 'ai_jobs', 'engineer_skills', 'engineer_skill_checks', 'engineer_projects',
             'engineer_histories', 'engineer_certs', 'engineer_files', 'engineers', 'cases'] as $t) DB::table($t)->delete();
         DB::table('users')->delete();
         DB::table('ses_companies')->delete();

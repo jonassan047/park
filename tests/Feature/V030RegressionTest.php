@@ -174,8 +174,8 @@ class V030RegressionTest extends TestCase
 
     public function test_r_06_version(): void
     {
-        $this->assertSame('v0.9.1', config('park.version'));
-        $this->get('/login')->assertOk()->assertSee('v0.9.1');
+        $this->assertSame('v0.10.0', config('park.version'));
+        $this->get('/login')->assertOk()->assertSee('v0.10.0');
     }
 
     public function test_r_07_manuals_describe_the_new_skill_table(): void

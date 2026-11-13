@@ -45,8 +45,14 @@ class EgController extends Controller
 
     public function offers(Request $r)
     {
-        $list = DB::table('case_offers as o')->join('cases as c', 'c.id', '=', 'o.case_id')->where('o.engineer_id', $r->user()->engineer_id)
-            ->select('o.*', 'c.title', 'c.price', 'c.start_date', 'c.status as case_status', 'c.code as case_code')->orderByDesc('o.sent_at')->get();
+        $eid = $r->user()->engineer_id;
+        // 案件のやり取り：発言の数と、未読（相手側の発言で、まだ読んでいないもの）の数
+        $posts = fn () => DB::table('case_thread_posts as p')->join('case_threads as t', 't.id', '=', 'p.thread_id')->whereColumn('t.case_id', 'o.case_id')->where('t.engineer_id', $eid);
+        $list = DB::table('case_offers as o')->join('cases as c', 'c.id', '=', 'o.case_id')->where('o.engineer_id', $eid)
+            ->select('o.*', 'c.title', 'c.price', 'c.start_date', 'c.status as case_status', 'c.code as case_code')
+            ->selectSub($posts()->selectRaw('count(*)'), 'thread_posts')
+            ->selectSub($posts()->where('p.from_side', '!=', 'eg')->where('p.read_by_eg', false)->selectRaw('count(*)'), 'thread_unread')
+            ->orderByDesc('o.sent_at')->get();
         return view('eg.offers', compact('list'));
     }
 

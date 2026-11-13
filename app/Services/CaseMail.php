@@ -95,8 +95,10 @@ class CaseMail
         $idxs = Matcher::skillIndexMany(array_keys($items)); // 人数によらず、まとめて読む
         $exps = SkillChecks::expMany(array_keys($items));
         foreach ($items as $eid => $it) {
-            $e = DB::table('engineers')->find((int) $eid);
-            if (!$e || !$e->registered_at || DB::table('case_mails')->where('case_id', $c->id)->where('engineer_id', $e->id)->exists()) continue;
+            // 仮登録・停止中・退会済・所属の会社が参加中でない人には送らない（配信 Workflow::distribute と同じ決まり）
+            $e = Registration::usableEngineers(DB::table('engineers')->where('id', (int) $eid)
+                ->whereExists(fn ($q) => $q->select(DB::raw(1))->from('ses_companies')->whereColumn('ses_companies.id', 'engineers.ses_id')->where('ses_companies.status', 'active')))->first();
+            if (!$e || DB::table('case_mails')->where('case_id', $c->id)->where('engineer_id', $e->id)->exists()) continue;
             $own = $sesId === null || (int) $e->ses_id === $sesId;
             $score = Matcher::score($c, $e, $idxs[$e->id] ?? [], $exps[$e->id] ?? []);
             $body = (string) $it['body'];
@@ -104,7 +106,10 @@ class CaseMail
             $token = bin2hex(random_bytes(16));
             $body .= "\n\n▼ご返事はこちらから（押すだけで担当者に届きます）\n"
                 ."応募したい：".url("/r/$token/interested")."\n質問がある：".url("/r/$token/question")."\n見送る　　：".url("/r/$token/declined")
-                .($own ? "\n※このメールに返信しても、担当者に届きます。" : "\n※PARK のグループの案件です。このメールへの返信は担当者に届かないので、上のリンクからお願いします。");
+                .($own ? "\n※このメールに返信しても、担当者に届きます。" : "\n※PARK のグループの案件です。このメールへの返信は担当者に届かないので、上のリンクからお願いします。")
+                // PARK の画面で案件を開き、担当者への質問や応募ができるように（v0.10.0）
+                ."\n\n▼案件の詳細（PARK にログインして見られます。担当者への質問もここから）\n".url("/cases/{$c->id}")
+                ."\n▼あなたに届いた案件の一覧\n".url('/eg/offers');
             $to = $e->email ?: DB::table('users')->where('engineer_id', $e->id)->value('email');
             $outbox = N::queueMail($to, $e->name, (string) $it['subject'], $body, 'case-mail', $own && $sesId ? $u->email : null, $u->role === 'admin' ? admin_sender($u) : null);
             DB::table('case_mails')->insert(['case_id' => $c->id, 'engineer_id' => $e->id, 'ses_id' => $sesId, 'sent_by' => $u->id, 'route' => $own ? 'own' : 'group', 'mode' => $mode,
@@ -114,6 +119,8 @@ class CaseMail
                 DB::table('case_offers')->insert(['case_id' => $c->id, 'engineer_id' => $e->id, 'score' => $score['score'], 'reasons' => implode(' / ', $score['reasons']),
                     'missing' => implode(' / ', $score['missing']), 'sent_by' => $u->id, 'sent_at' => now_str()]);
             }
+            // PARK のお知らせ（ベル）にも出す。メールは案内メールが行くので、お知らせからは送らない（v0.10.0）
+            N::toEg($e->id, "案件のご案内が届きました：{$c->title}".Ids::tag($c->code ?? null), "案件「{$c->title}」のご案内が届きました。案件の詳細から、担当者への質問や応募ができます。", "/cases/{$c->id}", false, 'offer');
             if (!$own) {
                 if (Workflow::isDirect((int) $e->ses_id)) N::toSes($e->ses_id, "グループの案件が、直属のエンジニアに届きました：{$c->title}".Ids::tag($c->code), "直属の{$e->name} さんに、グループの案件「{$c->title}」のご案内が届きました。", "/cases/{$c->id}", true, 'offer-ses');
                 else N::toSes($e->ses_id, "グループの案件が、貴社のエンジニアに届きました：{$c->title}".Ids::tag($c->code), "{$e->name} さんに、グループの案件「{$c->title}」のご案内が届きました。", "/cases/{$c->id}", true, 'offer-ses');

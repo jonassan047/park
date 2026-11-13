@@ -4,6 +4,7 @@
 <x-card><form method="post" action="{{ url('/r/'.$token) }}" class="narrow">@csrf
 @if($m->case_status !== 'open')<p class="note">この案件は、すでに募集を終えています。ご返事は担当者に届きます。</p>@endif
 <p>案件「<b>{{ $m->title }}</b>」へのご返事です。</p>
+@if($answer === 'question')<p class="note">PARK にログインすると、<a href="{{ url('/cases/'.$m->case_id) }}">案件の画面</a>から、担当者とやり取りできます（案件についての質問は、そちらが早く届きます）。</p>@endif
 <x-field label="ご返事" name="answer" type="select" :options="array_diff_key($labels, ['none' => 1])" :value="$answer" />
 <x-field label="ひとこと（任意。条件で気になること、質問、見送りの理由など）" name="note" type="textarea" rows="3" />
 <button class="btn">この内容で返事をする</button>

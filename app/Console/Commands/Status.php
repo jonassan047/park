@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Services\CaseThread;
 use App\Services\Ids;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -50,6 +51,16 @@ class Status extends Command
         }
     }
 
+    // 案件のやり取りの数え。マイグレーション前（表が無い）は、落ちずに「未反映」と出す
+    private function staleThreads(): int|string
+    {
+        try {
+            return Schema::hasTable('case_threads') ? CaseThread::staleCount() : '未反映';
+        } catch (\Throwable $e) {
+            return '未反映';
+        }
+    }
+
     public function handle(): int
     {
         $ago = fn (string $s) => date('Y-m-d H:i:s', strtotime($s));
@@ -66,6 +77,7 @@ class Status extends Command
             'エンジニア：本人の確認がまだ' => DB::table('engineers')->whereNull('self_confirmed_at')->count(),
             'エンジニア：管理者の直属' => DB::table('engineers')->whereIn('ses_id', DB::table('ses_companies')->where('kind', 'direct')->select('id'))->count(),
             '案内メール：返事なし（3日以上）' => DB::table('case_mails')->where('reply', 'none')->where('sent_at', '<', $ago('-3 days'))->count(),
+            '案件のやり取り：返事のない EG の発言（'.CaseThread::STALE_DAYS.'日以上）' => $this->staleThreads(),
             '案内メール：応募したいのに応募になっていない' => DB::table('case_mails as m')->where('m.reply', 'interested')
                 ->whereNotExists(fn ($q) => $q->select(DB::raw(1))->from('applications as a')->whereColumn('a.case_id', 'm.case_id')->whereColumn('a.engineer_id', 'm.engineer_id'))->count(),
             '選考：書類を返して3日以上' => DB::table('applications')->where('status', 'submitted')->where('updated_at', '<', $ago('-3 days'))->count(),

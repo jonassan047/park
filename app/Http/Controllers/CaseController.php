@@ -6,6 +6,7 @@ use App\Services\AiJobs;
 use App\Services\CaseMail as CM;
 use App\Services\CaseAi;
 use App\Services\CaseParser;
+use App\Services\CaseThread;
 use App\Services\Ids;
 use App\Services\Matcher;
 use App\Services\Notifier as N;
@@ -121,6 +122,16 @@ class CaseController extends Controller
             if ($offer && $offer->status === 'sent') DB::table('case_offers')->where('id', $offer->id)->update(['status' => 'viewed', 'viewed_at' => now_str()]);
             $e = DB::table('engineers')->find($u->engineer_id);
             $data += ['offer' => $offer, 'myApp' => DB::table('applications')->where('case_id', $id)->where('engineer_id', $u->engineer_id)->first(), 'fit' => Matcher::score($c, $e)];
+            // 担当者とのやり取り（開いたら、相手の発言を既読にする）
+            $threads = CaseThread::withPosts(CaseThread::threadsFor($u, $id, $e), $e);
+            foreach ($threads as $t) CaseThread::markRead($u, $t);
+            $data += ['me' => $e, 'threads' => $threads, 'threadWhy' => CaseThread::canPost($u, $c, $e)];
+        }
+        if ($u->role !== 'eg') {
+            // エンジニアとのやり取り（担当者は自社の1本だけ、管理者はすべて。持ち込んだ他社には出さない）
+            $tq = CaseThread::listQuery()->where('t.case_id', $id)->orderByDesc('t.last_post_at');
+            if ($u->role === 'ses') $tq->where('t.ses_id', $u->ses_id);
+            $data['caseThreads'] = $tq->get();
         }
         if (Perms::caseEdit($u, $c)) $data['ai'] = $this->aiView($c); // AI の読み直しの欄は、直せる人だけ
         return view('cases.show', $data);

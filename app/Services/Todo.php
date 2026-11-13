@@ -11,8 +11,8 @@ class Todo
     public static function for($u): array
     {
         return match ($u->role) {
-            'admin' => self::admin(),
-            'ses' => self::ses((int) $u->ses_id),
+            'admin' => self::admin($u->engineer_id ? (int) $u->engineer_id : null),
+            'ses' => self::ses((int) $u->ses_id, $u->engineer_id ? (int) $u->engineer_id : null),
             'eg' => self::eg((int) $u->engineer_id),
             default => [],
         };
@@ -44,7 +44,7 @@ class Todo
             ->select('a.*', 'c.title', 'e.name as eg_name');
     }
 
-    public static function ses(int $sesId): array
+    public static function ses(int $sesId, ?int $ownEngineerId = null): array
     {
         $out = [];
         $s = DB::table('ses_companies')->find($sesId);
@@ -63,6 +63,8 @@ class Todo
         $cases = DB::table('cases as c')->where('c.source_ses_id', $sesId)->where('c.status', 'open')
             ->whereNotExists(fn ($q) => $q->select(DB::raw(1))->from('case_mails')->whereColumn('case_mails.case_id', 'c.id'))->get();
         foreach ($cases as $c) $out[] = self::item("新しい案件「{$c->title}」", 'エンジニアに案内する', "/cases/{$c->id}/mail");
+        // 案件のやり取り：エンジニアの未読の発言
+        foreach (CaseThread::unreadForSes($sesId, $ownEngineerId) as $t) $out[] = self::item("{$t->eg_name} さんから案件の質問：{$t->title}", '読んで返事をする', "/cases/{$t->case_id}/threads/{$t->engineer_id}");
         $out = array_merge($out, self::pipeline(self::apps()->where('a.ses_id', $sesId)));
         foreach (DB::table('engineers')->where('ses_id', $sesId)->whereNotNull('registered_at')->whereNull('self_confirmed_at')->get() as $e) {
             $out[] = self::item("{$e->name} さんの本人の確認がまだ", 'ご本人に声をかける（確認するまで応募できません）', "/engineers/{$e->id}");
@@ -82,6 +84,7 @@ class Todo
             ->whereNotExists(fn ($q) => $q->select(DB::raw(1))->from('case_mails as m')->whereColumn('m.case_id', 'o.case_id')->where('m.engineer_id', $engineerId)->where('m.reply', '!=', 'none'))
             ->select('o.case_id', 'c.title')->get();
         foreach ($offers as $o) $out[] = self::item("案件のご案内「{$o->title}」", '中身を見て、応募するか見送るか返事をする', "/cases/{$o->case_id}");
+        foreach (CaseThread::unreadForEg($engineerId) as $t) $out[] = self::item("担当者から返事「{$t->title}」", '読んで返事をする', "/cases/{$t->case_id}#thread");
         $ivs = DB::table('interviews as iv')->join('applications as a', 'a.id', '=', 'iv.application_id')->join('cases as c', 'c.id', '=', 'a.case_id')
             ->where('a.engineer_id', $engineerId)->where('iv.result', 'pending')->where(fn ($q) => $q->whereNull('iv.scheduled_at')->orWhere('iv.scheduled_at', '>=', now_str()))
             ->select('iv.id', 'iv.scheduled_at', 'c.title')->get();
@@ -90,7 +93,7 @@ class Todo
         return $out;
     }
 
-    public static function admin(): array
+    public static function admin(?int $ownEngineerId = null): array
     {
         $out = [];
         foreach (DB::table('ses_companies')->where('kind', 'ses')->where('status', 'pending')->get() as $s) $out[] = self::item("参加の申し込み：{$s->name}", '内容を確かめて承認する', "/admin/ses/{$s->id}");
@@ -99,6 +102,8 @@ class Todo
         foreach ($passed as $a) $out[] = self::item("{$a->eg_name} さん「{$a->title}」：面談を通って2週間", '成約か、次の面談か、見送りかを SES に確かめる', "/applications/{$a->id}");
         $n = DB::table('messages')->where('read_by_admin', false)->distinct()->count('engineer_id');
         if ($n) $out[] = self::item("エンジニアからのメッセージ（{$n}人）", '読んで返事をする', '/admin/messages');
+        // 案件のやり取り：直属のエンジニアの未読の発言（会社の1本は出さない）
+        foreach (CaseThread::unreadDirect($ownEngineerId) as $t) $out[] = self::item("{$t->eg_name} さんから案件の質問：{$t->title}", '読んで返事をする', "/cases/{$t->case_id}/threads/{$t->engineer_id}");
         $n = DB::table('skill_terms')->where('reviewed', false)->count();
         if ($n) $out[] = self::item("技術マスタ：自動で足された技術（{$n}件）", '分類を確かめる', '/admin/skills');
         $n = DB::table('ai_jobs')->where('status', 'done')->count();

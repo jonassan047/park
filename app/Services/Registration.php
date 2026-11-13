@@ -649,7 +649,7 @@ class Registration
             }
             if ($target->role === 'eg' && $target->engineer_id) {
                 $eid = (int) $target->engineer_id;
-                foreach (['applications', 'case_offers', 'case_mails', 'contracts', 'messages', 'engineer_files'] as $t) {
+                foreach (['applications', 'case_offers', 'case_mails', 'contracts', 'messages', 'case_threads', 'engineer_files'] as $t) {
                     if (DB::table($t)->where('engineer_id', $eid)->exists()) { $err = '応募・配信・やり取りなどの記録があるため、取り消せません。'; return; }
                 }
                 // 技術データ（スキル・経験票など）が入っている行は、v0.2.0 より前からいる人の可能性があるので、技術登録は残してアカウントだけ消す
