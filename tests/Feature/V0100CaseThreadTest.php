@@ -353,11 +353,10 @@ class V0100CaseThreadTest extends TestCase
         $this->assertSame(0, (int) DB::table('case_thread_posts')->value('read_by_side'), '管理者が開いても、会社の1本は既読にならない');
         $this->as(self::ADMIN)->get('/admin')->assertDontSee('さんから案件の質問'); // 会社の1本は管理者の「今やること」に出さない
         $mailsBefore = DB::table('mail_outbox')->where('to_email', self::SES1)->count();
-        $this->send(self::ADMIN, $this->caseId, $this->eg1, '管理者から補足')->assertSessionHas('flash.type', 'ok');
-        $this->assertSame(setting('operator_name'), DB::table('case_thread_posts')->where('from_side', 'admin')->value('from_label'));
-        $this->assertSame(1, $this->notes(self::EG1, '管理者から案件の返事が届きました%'));
-        $this->assertSame(1, $this->notes(self::SES1, '管理者が案件のやり取りに書き込みました%'));
-        $this->assertSame($mailsBefore, DB::table('mail_outbox')->where('to_email', self::SES1)->count(), '会社へはお知らせだけ');
+        // 会社と EG のやり取りは、管理者は読むだけ（TEZZO 2026-11-14）
+        $this->bad($this->send(self::ADMIN, $this->caseId, $this->eg1, '管理者から補足'), '読むだけ');
+        $this->assertSame(0, DB::table('case_thread_posts')->where('from_side', 'admin')->count());
+        $this->assertSame($mailsBefore, DB::table('mail_outbox')->where('to_email', self::SES1)->count());
         // 担当者が開けば既読になる
         $this->as(self::SES1)->get("/cases/{$this->caseId}/threads/{$this->eg1}")->assertOk();
         $this->assertSame(1, (int) DB::table('case_thread_posts')->where('from_side', 'eg')->value('read_by_side'));

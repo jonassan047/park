@@ -101,6 +101,8 @@ class CaseThread
             && !DB::table('applications')->where('case_id', $c->id)->where('engineer_id', $e->id)->whereIn('status', Affiliation::IN_SELECTION)->exists()) {
             return '募集を終えた案件なので、読むだけです。';
         }
+        // 管理者は、各社と EG のやり取りは読むだけ（TEZZO 2026-11-14）。直属の EG とのやり取りだけ、管理者が相手なので書ける
+        if ($u->role === 'admin' && !\App\Services\Workflow::isDirect((int) $e->ses_id)) return '会社と EG のやり取りは、管理者は読むだけです。';
         return null;
     }
 
