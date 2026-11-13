@@ -61,6 +61,16 @@ class Status extends Command
         }
     }
 
+    // v0.10.1 より前の形で続く1本の数（持ち込み元と相手が違う）。列が無い（マイグレーション前）は「未反映」
+    private function legacyThreads(): int|string
+    {
+        try {
+            return Schema::hasColumn('case_threads', 'partner_ses_id') ? CaseThread::legacyCount() : '未反映';
+        } catch (\Throwable $e) {
+            return '未反映';
+        }
+    }
+
     public function handle(): int
     {
         $ago = fn (string $s) => date('Y-m-d H:i:s', strtotime($s));
@@ -78,6 +88,7 @@ class Status extends Command
             'エンジニア：管理者の直属' => DB::table('engineers')->whereIn('ses_id', DB::table('ses_companies')->where('kind', 'direct')->select('id'))->count(),
             '案内メール：返事なし（3日以上）' => DB::table('case_mails')->where('reply', 'none')->where('sent_at', '<', $ago('-3 days'))->count(),
             '案件のやり取り：返事のない EG の発言（'.CaseThread::STALE_DAYS.'日以上）' => $this->staleThreads(),
+            '案件のやり取り：v0.10.1 より前の形で続く1本（持ち込み元と相手が違う）' => $this->legacyThreads(),
             '案内メール：応募したいのに応募になっていない' => DB::table('case_mails as m')->where('m.reply', 'interested')
                 ->whereNotExists(fn ($q) => $q->select(DB::raw(1))->from('applications as a')->whereColumn('a.case_id', 'm.case_id')->whereColumn('a.engineer_id', 'm.engineer_id'))->count(),
             '選考：書類を返して3日以上' => DB::table('applications')->where('status', 'submitted')->where('updated_at', '<', $ago('-3 days'))->count(),

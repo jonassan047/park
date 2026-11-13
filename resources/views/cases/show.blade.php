@@ -74,6 +74,7 @@
 <select name="reply">@foreach(\App\Services\CaseMail::REPLIES as $k => $t)<option value="{{ $k }}" @selected($m->reply === $k)>{{ $t }}</option>@endforeach</select>
 <input name="note" value="{{ $m->reply_note }}" placeholder="返信の要点"><button class="btn ghost small">記録</button></form>@else<span class="muted">本人が PARK の画面で返事します</span>@endif</td>
 <td>@if(isset($mailApps[$m->engineer_id]))<a class="btn small" href="{{ url('/applications/'.$mailApps[$m->engineer_id]) }}">応募・面談の画面へ</a><br>@elseif($m->route === 'own' && $m->reply === 'interested')<x-post :action="'/case-mails/'.$m->id.'/submitted'" label="書類を返した（応募した）" cls="small" /><br>@endif
+@if($m->route !== 'own' && !empty($m->canThread))<a class="btn ghost small" href="{{ url('/cases/'.$c->id.'/threads/'.$m->engineer_id) }}">やり取り</a><br>@endif
 @if($m->route === 'own')<a href="{{ url('/case-mails/'.$m->id.'/doc/resume') }}">履歴書</a>・<a href="{{ url('/case-mails/'.$m->id.'/doc/careersheet') }}">業務経歴書</a>・<a href="{{ url('/case-mails/'.$m->id.'/doc/careersheet-anon') }}">業務経歴書（名前を伏せる）</a>
 @elseif($m->reply === 'interested')<a href="{{ url('/case-mails/'.$m->id.'/doc/careersheet-anon') }}">業務経歴書（名前を伏せる）</a>@else<span class="muted">応募したいと返事が来たら出せます</span>@endif</td>
 </tr>@endforeach
@@ -84,9 +85,9 @@
 @if($u->role !== 'eg')
 @if($caseThreads->count())
 <x-card title="エンジニアとのやり取り" id="threads">
-<x-table :head="array_values(array_filter(['エンジニア', $u->role === 'admin' ? '会社' : null, '最後の発言', '未読', ''], fn ($h) => $h !== null))" :count="$caseThreads->count()">
-@foreach($caseThreads as $t)<tr><td>{{ $t->eg_name }} <x-code :v="$t->eg_code" /></td>@if($u->role === 'admin')<td>{{ $t->ses_name }}</td>@endif<td>{{ fmt_dt($t->last_post_at) }}</td>
-<td>@if($u->role === 'admin' && $t->ses_kind !== 'direct')<span class="muted">—</span>@elseif($t->unread)<b class="bad-text">{{ $t->unread }}</b>@endif</td>
+<x-table :head="array_values(array_filter(['エンジニア', $u->role === 'admin' ? '会社' : null, $u->role === 'admin' ? '相手' : null, '最後の発言', '未読', ''], fn ($h) => $h !== null))" :count="$caseThreads->count()">
+@foreach($caseThreads as $t)<tr><td>{{ \App\Services\CaseThread::egNameRow($u->role === 'ses' ? (int) $u->ses_id : null, $t) }} @if(\App\Services\CaseThread::isOwnEg($u, $t))<x-code :v="$t->eg_code" />@endif</td>@if($u->role === 'admin')<td>{{ $t->ses_name }}</td><td>{{ $t->partner_kind === 'direct' ? '管理者' : $t->partner_name }}</td>@endif<td>{{ fmt_dt($t->last_post_at) }}</td>
+<td>@if(\App\Services\CaseThread::isMine($u, $t))@if($t->unread)<b class="bad-text">{{ $t->unread }}</b>@endif @elseif($u->role === 'ses')<span class="muted">読むだけ（相手：{{ $t->partner_name }}）</span>@else<span class="muted">—</span>@endif</td>
 <td><a class="btn small" href="{{ url('/cases/'.$c->id.'/threads/'.$t->engineer_id) }}">開く</a></td></tr>@endforeach
 </x-table>
 </x-card>

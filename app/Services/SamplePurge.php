@@ -60,6 +60,8 @@ class SamplePurge
         $thr = DB::table('case_threads')->where(fn ($q) => $q->whereIn('engineer_id', $e)->orWhereIn('case_id', $c)->orWhere($bySes))->pluck('id')->all();
         // 残る1本にある、見本の人の発言は、書いた人を空にして残す（regBy と同じ扱い）
         $postBy = DB::table('case_thread_posts')->whereNotIn('thread_id', $thr)->whereIn('from_user_id', $u)->pluck('id')->all();
+        // 残る1本で、相手（案件を持ち込んだ会社）が消す会社なら、相手を所属の会社に戻す（行は消さない。v0.10.1）
+        $partnerReset = DB::table('case_threads')->whereNotIn('id', $thr)->whereIn('partner_ses_id', $s)->pluck('id')->all();
 
         $del = [
             'ai_jobs' => DB::table('ai_jobs')->where(fn ($q) => $q->where(fn ($q) => $q->where('ref_type', 'interview')->whereIn('ref_id', $iv))
@@ -137,11 +139,14 @@ class SamplePurge
             $direct = DB::table('ses_companies')->where('kind', 'direct')->pluck('id')->all();
             $clash = DB::table('case_threads as a')->whereIn('a.engineer_id', $keptEngs)->whereIn('a.ses_id', $s)
                 ->whereExists(fn ($q) => $q->select(DB::raw(1))->from('case_threads as b')->whereColumn('b.case_id', 'a.case_id')->whereColumn('b.engineer_id', 'a.engineer_id')->whereIn('b.ses_id', $direct))->count();
-            if ($clash) $guards[] = "残す人を直属へ移すと、案件のやり取りの1本が、すでにある直属の1本と重なります（{$clash}件）。止めました。tezzo に確かめてください。";
+            // 相手が別の会社（案件を持ち込んだ会社）の1本は、直属へ移すと相手の決め方が変わるので、止める
+            $clash += DB::table('case_threads')->whereIn('engineer_id', $keptEngs)->whereIn('ses_id', $s)->whereNotNull('partner_ses_id')
+                ->whereColumn('partner_ses_id', '!=', 'ses_id')->whereNotIn('partner_ses_id', $s)->count();
+            if ($clash) $guards[] = "残す人を直属へ移すと、案件のやり取りの1本が、すでにある直属の1本と重なるか、相手が別の会社の1本が残ります（{$clash}件）。止めました。tezzo に確かめてください。";
         }
 
         return ['del' => $del, 'counts' => $counts, 'total' => $total, 'guards' => $guards, 'sets' => ['users' => $u, 'ses' => $s, 'engineers' => $e, 'cases' => $c],
-            'regBy' => $regBy, 'postBy' => $postBy, 'moveUsers' => $keptUsers, 'moveEngs' => $keptEngs, 'files' => $files->pluck('path')->all(), 'caseSrc' => DB::table('cases')->whereIn('source_ses_id', $s)->whereNotIn('id', $c)->pluck('id')->all()];
+            'regBy' => $regBy, 'postBy' => $postBy, 'partnerReset' => $partnerReset, 'moveUsers' => $keptUsers, 'moveEngs' => $keptEngs, 'files' => $files->pluck('path')->all(), 'caseSrc' => DB::table('cases')->whereIn('source_ses_id', $s)->whereNotIn('id', $c)->pluck('id')->all()];
     }
 
     // 消す。守りに当たったら例外（何も消さない）。戻り値は [表ごとの件数, バックアップの場所]。消すものが無ければバックアップも作らない
@@ -154,7 +159,7 @@ class SamplePurge
         // 1. 消す行を、全部の列ごと JSON に書き出す（書き出せなければ止まる）
         $dir = storage_path(self::BACKUP_DIR);
         if (!is_dir($dir) && !@mkdir($dir, 0775, true) && !is_dir($dir)) throw new RuntimeException('バックアップの置き場所を作れませんでした。何も消していません。');
-        $backup = ['作成' => now_str(), '表' => [], '変える行' => ['users.registered_by を空にする' => $p['regBy'], 'case_thread_posts.from_user_id を空にする' => $p['postBy'],'cases.source_ses_id を空にする' => $p['caseSrc'], '直属へ移す users' => $p['moveUsers'], '直属へ移す engineers' => $p['moveEngs']]];
+        $backup = ['作成' => now_str(), '表' => [], '変える行' => ['users.registered_by を空にする' => $p['regBy'], 'case_thread_posts.from_user_id を空にする' => $p['postBy'], 'case_threads.partner_ses_id を ses_id に戻す' => $p['partnerReset'], 'cases.source_ses_id を空にする' => $p['caseSrc'], '直属へ移す users' => $p['moveUsers'], '直属へ移す engineers' => $p['moveEngs']]];
         foreach (self::ORDER as $t => $key) {
             $rows = [];
             foreach (array_chunk($p['del'][$t], 500) as $ids) $rows = array_merge($rows, DB::table($t)->whereIn($key, $ids)->get()->all());
@@ -168,9 +173,12 @@ class SamplePurge
         DB::transaction(function () use ($p, $moveKept) {
             if ($p['regBy']) DB::table('users')->whereIn('id', $p['regBy'])->update(['registered_by' => null]);
             if ($p['postBy']) DB::table('case_thread_posts')->whereIn('id', $p['postBy'])->update(['from_user_id' => null]);
+            if ($p['partnerReset']) DB::table('case_threads')->whereIn('id', $p['partnerReset'])->update(['partner_ses_id' => DB::raw('ses_id')]);
             if ($moveKept && ($p['moveUsers'] || $p['moveEngs'])) {
                 $direct = W::directSesId();
                 $from = $p['sets']['ses'];
+                // 相手が所属の会社と同じ1本は、相手も一緒に直属へ移す（ses_id を移す前に）
+                DB::table('case_threads')->whereIn('engineer_id', $p['moveEngs'])->whereIn('ses_id', $from)->whereColumn('partner_ses_id', 'ses_id')->update(['partner_ses_id' => $direct]);
                 DB::table('users')->whereIn('id', $p['moveUsers'])->update(['ses_id' => $direct]);
                 DB::table('engineers')->whereIn('id', $p['moveEngs'])->update(['ses_id' => $direct]);
                 foreach (['applications', 'contracts', 'case_mails', 'case_threads'] as $t) DB::table($t)->whereIn('engineer_id', $p['moveEngs'])->whereIn('ses_id', $from)->update(['ses_id' => $direct]);

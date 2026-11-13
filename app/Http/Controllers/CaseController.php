@@ -98,9 +98,13 @@ class CaseController extends Controller
             $q = DB::table('case_mails as m')->join('engineers as e', 'e.id', '=', 'm.engineer_id')->join('ses_companies as s', 's.id', '=', 'e.ses_id')
                 ->where('m.case_id', $id)->select('m.*', 'e.name', 'e.initials', 'e.code as eg_code', 's.name as ses_name')->orderByDesc('m.id');
             $q->addSelect('e.ses_id as eg_ses_id');
-            $data['mails'] = $q->get()->map(function ($m) use ($u) {
+            $data['mails'] = $q->get()->map(function ($m) use ($u, $c) {
                 // 管理者が送った他社の人は、案件を持ち込んだ SES には名前・書類を出さない（グループの人と同じ扱い）
-                if ($u->role === 'ses' && (int) $m->eg_ses_id !== (int) $u->ses_id) $m->route = 'group';
+                if ($u->role === 'ses' && (int) $m->eg_ses_id !== (int) $u->ses_id) {
+                    $m->route = 'group';
+                    // 案件を持ち込んだ自社が、案内した他社のエンジニアに、やり取りで質問を受ける・書き始められる（v0.10.1）
+                    $m->canThread = CaseThread::canStart($u, $c, (object) ['id' => $m->engineer_id, 'ses_id' => $m->eg_ses_id], true); // 行がある＝案内メールの記録がある
+                }
                 return $m;
             });
             $data['mailApps'] = DB::table('applications')->where('case_id', $id)->pluck('id', 'engineer_id')->all();
@@ -128,9 +132,9 @@ class CaseController extends Controller
             $data += ['me' => $e, 'threads' => $threads, 'threadWhy' => CaseThread::canPost($u, $c, $e)];
         }
         if ($u->role !== 'eg') {
-            // エンジニアとのやり取り（担当者は自社の1本だけ、管理者はすべて。持ち込んだ他社には出さない）
+            // エンジニアとのやり取り（担当者は、自社のエンジニアの1本と、自社が相手の1本。管理者はすべて）
             $tq = CaseThread::listQuery()->where('t.case_id', $id)->orderByDesc('t.last_post_at');
-            if ($u->role === 'ses') $tq->where('t.ses_id', $u->ses_id);
+            if ($u->role === 'ses') $tq->where(fn ($w) => $w->where('t.ses_id', $u->ses_id)->orWhere('t.partner_ses_id', $u->ses_id));
             $data['caseThreads'] = $tq->get();
         }
         if (Perms::caseEdit($u, $c)) $data['ai'] = $this->aiView($c); // AI の読み直しの欄は、直せる人だけ

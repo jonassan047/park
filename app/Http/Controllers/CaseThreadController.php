@@ -19,15 +19,16 @@ class CaseThreadController extends Controller
         $sesFilter = 0;
         $sesOptions = [];
         if ($u->role === 'ses') {
-            $q->where('t.ses_id', $u->ses_id);
+            // 自社のエンジニアの1本（相手が別の会社なら読むだけ）と、自社が相手の1本
+            $q->where(fn ($w) => $w->where('t.ses_id', $u->ses_id)->orWhere('t.partner_ses_id', $u->ses_id));
         } else {
             $sesOptions = DB::table('ses_companies')->whereIn('id', DB::table('case_threads')->select('ses_id'))->orderBy('name')->pluck('name', 'id')->all();
             $sesFilter = (int) $r->query('ses', 0);
             if ($sesFilter && isset($sesOptions[$sesFilter])) $q->where('t.ses_id', $sesFilter); else $sesFilter = 0;
         }
-        // 未読があるものを上に、次に新しい順。管理者は、直属の未読だけで並べる（会社の1本は、管理者が読んでも未読が消えないため）
+        // 未読があるものを上に、次に新しい順。未読で並べるのは、自分が相手の1本だけ（読むだけの1本は、読んでも未読が消えないため）
         $list = $q->orderByDesc('t.last_post_at')->orderByDesc('t.id')->get()
-            ->sortByDesc(fn ($t) => ($u->role === 'admin' && $t->ses_kind !== 'direct') ? 0 : (int) $t->unread)->values();
+            ->sortByDesc(fn ($t) => CT::isMine($u, $t) ? (int) $t->unread : 0)->values();
         [$list, $pager] = page_slice($list);
         return view('threads.index', compact('list', 'pager', 'sesOptions', 'sesFilter'));
     }
@@ -42,8 +43,12 @@ class CaseThreadController extends Controller
         $e = DB::table('engineers')->find($eid);
         abort_unless($e, 404);
         if ($u->role === 'eg') abort_unless((int) $e->id === (int) $u->engineer_id, 404);
-        // 所属が変わったあとも、前の会社は、前のやり取りを読める
-        if ($u->role === 'ses') abort_unless((int) $e->ses_id === (int) $u->ses_id || DB::table('case_threads')->where('case_id', $id)->where('engineer_id', $eid)->where('ses_id', $u->ses_id)->exists(), 404);
+        // 自社のエンジニア／自社の1本（前の所属や、相手が自社の1本。所属が変わったあとも読める）／案件を持ち込んだ自社が、案内した相手に書き始める（R9）。無関係な会社は 404
+        if ($u->role === 'ses') {
+            abort_unless((int) $e->ses_id === (int) $u->ses_id
+                || DB::table('case_threads')->where('case_id', $id)->where('engineer_id', $eid)->where(fn ($w) => $w->where('ses_id', $u->ses_id)->orWhere('partner_ses_id', $u->ses_id))->exists()
+                || CT::canStart($u, $c, $e), 404);
+        }
         return [$u, $c, $e];
     }
 
@@ -54,7 +59,8 @@ class CaseThreadController extends Controller
         $threads = CT::withPosts(CT::threadsFor($u, $id, $e), $e);
         foreach ($threads as $t) CT::markRead($u, $t);
         $why = CT::canPost($u, $c, $e);
-        return view('threads.show', compact('c', 'e', 'threads', 'why'));
+        $partnerId = CT::currentPartner($c, $e);
+        return view('threads.show', compact('c', 'e', 'threads', 'why', 'partnerId'));
     }
 
     public function store(Request $r, int $id, int $eid)

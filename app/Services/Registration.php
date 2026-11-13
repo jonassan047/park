@@ -640,7 +640,8 @@ class Registration
                 $s = DB::table('ses_companies')->where('id', $target->ses_id)->lockForUpdate()->first();
                 if ($s && (int) $s->rep_user_id === $id) {
                     if ($s->status !== 'provisional') { $err = '参加中の会社の SES は、取り消せません。'; return; }
-                    $others = DB::table('users')->where('ses_id', $s->id)->where('id', '!=', $id)->count() + DB::table('engineers')->where('ses_id', $s->id)->count();
+                    $others = DB::table('users')->where('ses_id', $s->id)->where('id', '!=', $id)->count() + DB::table('engineers')->where('ses_id', $s->id)->count()
+                        + DB::table('case_threads')->where('partner_ses_id', $s->id)->count(); // 案件のやり取りの相手に残っている会社は消さない
                     if ($others === 0) { DB::table('ses_companies')->where('id', $s->id)->delete(); $sesDeleted = true; }
                     else DB::table('ses_companies')->where('id', $s->id)->update(['rep_user_id' => null]);
                 } elseif ($s && (int) $s->next_rep_user_id === $id) {
