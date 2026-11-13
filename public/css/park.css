@@ -81,7 +81,7 @@ table.edit td { padding: 4px; }
 .empty { color: var(--sub); }
 .muted { color: var(--sub); }
 .small { font-size: 12px; }
-/* 表示 ID（C-000012 など）：等幅の小さな文字 */
+/* 表示 ID（CA-000012 など）：等幅の小さな文字 */
 .code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; color: var(--sub); white-space: nowrap; }
 .findbar { display: inline-flex; gap: 4px; margin-left: 16px; font-weight: 400; }
 .findbar input { width: 130px; padding: 1px 6px; font-size: 12px; }

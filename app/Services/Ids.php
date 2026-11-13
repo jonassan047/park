@@ -4,12 +4,12 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\DB;
 
-// 表示 ID（C-000012 のような、人が口で言える通し番号）。v0.9.0
+// 表示 ID（CA-000012 のような、人が口で言える通し番号）。v0.9.0（接頭辞は v0.9.1 から2文字）
 // 番号は専用の数え表 id_counters で数える。一度使った番号は、行を消しても二度と使わない。
 // 付けた ID は変えない（空でない列は上書きしない）。
 class Ids
 {
-    // 種類 => [表, 列]。種類の文字がそのまま接頭辞になる
+    // 種類 => [表, 列]
     const KINDS = [
         'A' => ['users', 'admin_code'],          // 管理者
         'T' => ['users', 'staff_code'],          // 担当者（SES の人）
@@ -21,11 +21,28 @@ class Ids
         'IV' => ['invoices', 'code'],            // 請求書（発行のときに付ける）
     ];
 
+    // 種類 => 画面に出す接頭辞（アルファベット2文字。v0.9.1）。数え表 id_counters の kind は、種類の文字のまま
+    const PREFIX = ['A' => 'AD', 'T' => 'ST', 'S' => 'SE', 'E' => 'EG', 'C' => 'CA', 'AP' => 'AP', 'CT' => 'CT', 'IV' => 'IV'];
+
     const DIGITS = 6;
 
     public static function format(string $kind, int $n): string
     {
-        return $kind.'-'.str_pad((string) $n, self::DIGITS, '0', STR_PAD_LEFT);
+        return self::PREFIX[$kind].'-'.str_pad((string) $n, self::DIGITS, '0', STR_PAD_LEFT);
+    }
+
+    // ID の接頭辞（新も、v0.9.0 の旧形式の1文字も）から、種類を引く。分からなければ null
+    public static function kindOfPrefix(string $prefix): ?string
+    {
+        $kind = array_search($prefix, self::PREFIX, true);
+        if ($kind !== false) return $kind;
+        return isset(self::PREFIX[$prefix]) ? $prefix : null; // 旧形式（種類の文字そのまま）
+    }
+
+    // 表示 ID（新形式）から、種類を引く
+    public static function kindOf(string $code): ?string
+    {
+        return self::kindOfPrefix(explode('-', $code)[0]);
     }
 
     // 次の番号を取る。作る前に取って、insert の配列に入れる
@@ -63,10 +80,11 @@ class Ids
         $s = mb_convert_kana((string) $input, 'as');
         $s = str_replace(['－', '−', '‐', '―', 'ー', '–', '—'], '-', $s);
         $s = strtoupper(preg_replace('/\s+/u', '', $s));
-        if (!preg_match('/^(AP|CT|IV|A|T|S|E|C)-?(\d{1,12})$/', $s, $m)) return null;
+        // 新しい接頭辞（AD・ST・SE・EG・CA・AP・CT・IV）と、v0.9.0 の旧い1文字（A・T・S・E・C）の両方を受ける（送信済みメールに旧形式が残るため）
+        if (!preg_match('/^(AP|AD|CA|CT|IV|SE|ST|EG|A|C|E|S|T)-?(\d{1,12})$/', $s, $m)) return null;
         $n = (int) ltrim($m[2], '0');
         if ($n < 1) return null;
-        return self::format($m[1], $n);
+        return self::format(self::kindOfPrefix($m[1]), $n);
     }
 
     // お知らせの題・メールの件名の末尾に付ける文字。ID が空なら何も付けない
@@ -100,7 +118,7 @@ class Ids
         [$table, $col] = self::KINDS[$kind];
         $max = 0;
         foreach (DB::table($table)->whereNotNull($col)->pluck($col) as $code) {
-            $max = max($max, (int) substr((string) $code, strlen($kind) + 1));
+            $max = max($max, (int) substr((string) $code, strpos((string) $code, '-') + 1)); // 旧形式（C-…）も新形式（CA-…）も、「-」のあとが番号
         }
         DB::table('id_counters')->insertOrIgnore(['kind' => $kind, 'last_no' => 0]);
         DB::table('id_counters')->where('kind', $kind)->where('last_no', '<', $max)->update(['last_no' => $max]);

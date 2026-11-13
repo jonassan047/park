@@ -5,7 +5,7 @@ namespace App\Console\Commands;
 use App\Services\Ids;
 use Illuminate\Console\Command;
 
-// 表示 ID（C-000012 など）が空の行を、作った順に埋める。ふだんは付け漏れが無いので、0 件のはず。
+// 表示 ID（CA-000012 など）が空の行を、作った順に埋める。ふだんは付け漏れが無いので、0 件のはず。
 // 使い方：php artisan park:fill-ids          （数えるだけ。何も変えない）
 //         php artisan park:fill-ids --apply  （空の行に付ける。付いている ID は変えない）
 class FillIds extends Command

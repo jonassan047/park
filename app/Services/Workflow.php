@@ -395,7 +395,7 @@ class Workflow
             + self::roleCodes($role));
     }
 
-    // 人の ID（表示 ID）。管理者は A-、担当者（SES の人）は T-。エンジニア（eg）の人には付けない（E- は engineers の行にある）
+    // 人の ID（表示 ID）。管理者は AD-、担当者（SES の人）は ST-。エンジニア（eg）の人には付けない（EG- は engineers の行にある）
     public static function roleCodes(string $role): array
     {
         return match ($role) {

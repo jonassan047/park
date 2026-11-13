@@ -7,7 +7,7 @@ use App\Support\Perms;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
-// 「ID で探す」：表示 ID（C-000012 など）から、その詳細の画面へ移る（v0.9.0）。
+// 「ID で探す」：表示 ID（CA-000012 など。旧い1文字の形 C-12 でも探せる）から、その詳細の画面へ移る（v0.9.0）。
 // 見られない ID と無い ID は、同じ文で返す（ID があることだけが漏れないように）。
 class FindController extends Controller
 {
@@ -25,7 +25,8 @@ class FindController extends Controller
     // その人が開いてよい詳細の道。開けない・無いときは null
     private function target($u, string $code): ?string
     {
-        $kind = explode('-', $code)[0];
+        $kind = Ids::kindOf($code);
+        if (!$kind) return null;
         [$table, $col] = Ids::KINDS[$kind];
         $row = DB::table($table)->where($col, $code)->first();
         if (!$row) return null;

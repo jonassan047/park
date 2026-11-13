@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Schema;
 // 使い方：php artisan park:status   （--json で JSON）
 class Status extends Command
 {
-    // 表示 ID（C-000012 など）が空のままの行の数。ふだんは 0（管理者・担当者・会社・エンジニア・案件・応募・契約・発行済みの請求書の合計）
+    // 表示 ID（CA-000012 など）が空のままの行の数。ふだんは 0（管理者・担当者・会社・エンジニア・案件・応募・契約・発行済みの請求書の合計）
     const ID_KEY = 'ID：ID の無い行（0 のはず）';
 
     protected $signature = 'park:status {--json}';

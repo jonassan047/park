@@ -104,25 +104,86 @@ class V090DisplayIdTest extends TestCase
     public function test_t1_next_is_sequential(): void
     {
         DB::table('id_counters')->where('kind', 'C')->update(['last_no' => 0]);
-        $this->assertSame(['C-000001', 'C-000002', 'C-000003'], [Ids::next('C'), Ids::next('C'), Ids::next('C')]);
+        $this->assertSame(['CA-000001', 'CA-000002', 'CA-000003'],[Ids::next('C'), Ids::next('C'), Ids::next('C')]);
     }
 
     // T2：100万件を超えたら、桁が増えるだけ
     public function test_t2_format_grows(): void
     {
-        $this->assertSame('C-1234567', Ids::format('C', 1234567));
+        $this->assertSame('CA-1234567', Ids::format('C', 1234567));
         $this->assertSame('AP-000005', Ids::format('AP', 5));
+        // 接頭辞は、アルファベット2文字（v0.9.1）
+        $this->assertSame(['AD', 'ST', 'SE', 'EG', 'CA', 'AP', 'CT', 'IV'], array_values(Ids::PREFIX));
     }
 
     // T3：入力のゆれ（全角・小文字・前後の空白・ゼロ埋めやハイフンの省略）
     public function test_t3_normalize(): void
     {
-        foreach (['c12', 'Ｃ－１２', ' C-000012 ', 'C12', 'c-12'] as $in) $this->assertSame('C-000012', Ids::normalize($in), $in);
+        foreach (['ca12', 'ＣＡ－１２', ' CA-000012 ', 'CA12', 'ca-12'] as $in) $this->assertSame('CA-000012', Ids::normalize($in), $in);
         $this->assertSame('AP-000005', Ids::normalize('ap5'));
         $this->assertSame('CT-000007', Ids::normalize('ct-7'));
         $this->assertSame('IV-000001', Ids::normalize('iv1'));
-        foreach (['X-1', 'C-', '', 'C-0', 'abc', 'C-12x'] as $bad) $this->assertNull(Ids::normalize($bad), $bad);
+        $this->assertSame('AD-000002', Ids::normalize('ad2'));
+        $this->assertSame('ST-000003', Ids::normalize('st3'));
+        $this->assertSame('SE-000004', Ids::normalize('se-4'));
+        $this->assertSame('EG-000005', Ids::normalize('Eg5'));
+        foreach (['X-1', 'CA-', '', 'CA-0', 'abc', 'CA-12x', 'EGG-1'] as $bad) $this->assertNull(Ids::normalize($bad), $bad);
         $this->assertNull(Ids::normalize(null));
+    }
+
+    // T3b：v0.9.0 の旧い1文字の形も、新形式に読み替える（送信済みメールに残るため）
+    public function test_t3b_normalize_old_prefixes(): void
+    {
+        foreach (['C-12' => 'CA-000012', 'c12' => 'CA-000012', 'Ｃ－１２' => 'CA-000012', 'S-3' => 'SE-000003', 'E-000015' => 'EG-000015', 'A-1' => 'AD-000001', 't-2' => 'ST-000002'] as $in => $want) {
+            $this->assertSame($want, Ids::normalize((string) $in), $in);
+        }
+        $this->assertSame('CA', Ids::PREFIX[Ids::kindOf('CA-000001')]);
+        $this->assertSame('E', Ids::kindOf('EG-000001'));
+    }
+
+    // 旧形式の ID で /find しても、新形式の行が開く
+    public function test_find_accepts_old_prefix(): void
+    {
+        $eid = $this->engId(self::EG1);
+        $n = (int) substr($this->code('engineers', $eid), 3);
+        $this->as(self::ADMIN)->get('/find?code=E-'.$n)->assertRedirect(url("/engineers/$eid"));
+        $cid = $this->mkCase();
+        $nc = (int) substr($this->code('cases', $cid), 3);
+        $this->get('/find?code='.urlencode('ｃ－'.$nc))->assertRedirect(url("/cases/$cid"));
+    }
+
+    // v0.9.1 のマイグレーション：旧い1文字の接頭辞だけを付け替える。番号は同じ・新形式は触らない・何度流しても同じ・id_counters はそのまま
+    public function test_prefix_migration_is_idempotent(): void
+    {
+        $eid = $this->engId(self::EG1);
+        $cid = $this->mkCase();
+        $uid = (int) $this->user(self::ADMIN)->id;
+        $counters = DB::table('id_counters')->orderBy('kind')->get()->all();
+        $newE = $this->code('engineers', $eid); // 例 EG-000001
+        $newC = $this->code('cases', $cid);
+        // 旧形式に戻す（先に取っておいた新しい値と数字が同じになる）
+        DB::table('engineers')->where('id', $eid)->update(['code' => 'E-'.substr($newE, 3)]);
+        DB::table('cases')->where('id', $cid)->update(['code' => 'C-'.substr($newC, 3)]);
+        DB::table('users')->where('id', $uid)->update(['admin_code' => 'A-'.substr((string) $this->code('users', $uid, 'admin_code'), 3)]);
+        $adm = $this->code('users', $uid, 'admin_code');
+        $sesRow = DB::table('ses_companies')->orderBy('id')->first();
+        DB::table('ses_companies')->where('id', $sesRow->id)->update(['code' => 'S-'.substr($sesRow->code, 3)]);
+        $keep = DB::table('applications')->orderBy('id')->pluck('code', 'id')->all(); // AP は旧形式と同じ（変わらない）
+
+        $m = require database_path('migrations/2026_11_13_000004_two_letter_id_prefix.php');
+        $m->up();
+        $this->assertSame($newE, $this->code('engineers', $eid));
+        $this->assertSame($newC, $this->code('cases', $cid));
+        $this->assertSame('AD-'.substr($adm, 2), $this->code('users', $uid, 'admin_code'));
+        $this->assertSame('SE-'.substr($sesRow->code, 3), $this->code('ses_companies', (int) $sesRow->id));
+        $this->assertSame($keep, DB::table('applications')->orderBy('id')->pluck('code', 'id')->all());
+
+        $after = DB::table('engineers')->orderBy('id')->pluck('code')->all();
+        $m->up(); // 2回目は何も変わらない
+        $this->assertSame($after, DB::table('engineers')->orderBy('id')->pluck('code')->all());
+        $this->assertSame($newC, $this->code('cases', $cid));
+        $this->assertEquals($counters, DB::table('id_counters')->orderBy('kind')->get()->all());
+        $this->assertSame(0, array_sum(Ids::missingCounts()));
     }
 
     // T4：空の行を、作った順に埋める。下書きの請求書と、エンジニア（eg）の人は空のまま。続けて取ると次の番号
@@ -169,7 +230,7 @@ class V090DisplayIdTest extends TestCase
         // 数え表が付いている最大の番号より小さいときは、大きいほうにそろえる
         DB::table('id_counters')->where('kind', 'E')->update(['last_no' => 0]);
         Ids::fillMissing(true);
-        $max = (int) substr((string) DB::table('engineers')->max('code'), 2);
+        $max = (int) substr((string) DB::table('engineers')->max('code'), 3);
         $this->assertSame($max, (int) DB::table('id_counters')->where('kind', 'E')->value('last_no'));
     }
 
@@ -183,27 +244,27 @@ class V090DisplayIdTest extends TestCase
         $id2 = W::createEngineer($a, ['name' => '残す 二郎'], $this->user(self::ADMIN), false);
         $code2 = $this->code('engineers', $id2);
         $this->assertNotSame($code1, $code2);
-        $this->assertGreaterThan((int) substr($code1, 2), (int) substr($code2, 2));
+        $this->assertGreaterThan((int) substr($code1, 3), (int) substr($code2, 3));
     }
 
     // ---------- 段階2：作る経路のすべてで付く ----------
-    // T7：管理者が画面からエンジニアを仮登録 → E-。本人の users（eg）には人の ID を付けない
+    // T7：管理者が画面からエンジニアを仮登録 → EG-。本人の users（eg）には人の ID を付けない
     public function test_t7_provisional_engineer(): void
     {
         $this->as(self::ADMIN)->post('/engineers', ['ses_id' => $this->sesId(self::SES1), 'name_sei' => '試験', 'name_mei' => '一郎', 'email' => 'v090-e@example.test'])->assertSessionHas('flash.type', 'ok');
         $u = DB::table('users')->where('email', 'v090-e@example.test')->first();
-        $this->assertMatchesRegularExpression('/^E-\d{6}$/', (string) $this->code('engineers', (int) $u->engineer_id));
+        $this->assertMatchesRegularExpression('/^EG-\d{6}$/', (string) $this->code('engineers', (int) $u->engineer_id));
         $this->assertNull($u->admin_code);
         $this->assertNull($u->staff_code);
     }
 
-    // T8：SES が案件を登録 → C-。編集の保存で変わらない
+    // T8：SES が案件を登録 → CA-。編集の保存で変わらない
     public function test_t8_case_code_stays(): void
     {
         $this->as(self::SES1)->post('/cases', ['title' => '架空の案件T8', 'price' => 60, 'status' => 'open'])->assertRedirect();
         $id = (int) DB::table('cases')->where('title', '架空の案件T8')->value('id');
         $code = $this->code('cases', $id);
-        $this->assertMatchesRegularExpression('/^C-\d{6}$/', (string) $code);
+        $this->assertMatchesRegularExpression('/^CA-\d{6}$/', (string) $code);
         $this->post("/cases/$id", ['title' => '架空の案件T8（直し）', 'price' => 65, 'status' => 'open'])->assertRedirect();
         $this->assertSame($code, $this->code('cases', $id));
     }
@@ -225,22 +286,22 @@ class V090DisplayIdTest extends TestCase
     {
         Mail::fake();
         $this->post('/apply', ['name' => 'V090申込商事', 'email' => 'v090-apply@example.test', 'contact_sei' => '申込', 'contact_mei' => '花子', 'agree' => '1'])->assertOk();
-        $this->assertMatchesRegularExpression('/^S-\d{6}$/', (string) DB::table('ses_companies')->where('name', 'V090申込商事')->value('code'));
+        $this->assertMatchesRegularExpression('/^SE-\d{6}$/', (string) DB::table('ses_companies')->where('name', 'V090申込商事')->value('code'));
 
         $this->as(self::ADMIN)->post('/admin/ses', ['name' => 'V090仮登録商事', 'rep_sei' => '試験', 'rep_mei' => '太郎', 'email' => 'v090-ses@example.test'])->assertRedirect();
         $s = DB::table('ses_companies')->where('name', 'V090仮登録商事')->first();
-        $this->assertMatchesRegularExpression('/^S-\d{6}$/', (string) $s->code);
+        $this->assertMatchesRegularExpression('/^SE-\d{6}$/', (string) $s->code);
         $rep = DB::table('users')->where('id', $s->rep_user_id)->first();
-        $this->assertMatchesRegularExpression('/^T-\d{6}$/', (string) $rep->staff_code);
+        $this->assertMatchesRegularExpression('/^ST-\d{6}$/', (string) $rep->staff_code);
         $this->assertNull($rep->admin_code);
 
         $this->post('/admin/admins', ['company_name' => 'V090企業', 'name_sei' => '試験', 'name_mei' => '次郎', 'email' => 'v090-adm@example.test'])->assertRedirect();
         $adm = DB::table('users')->where('email', 'v090-adm@example.test')->first();
-        $this->assertMatchesRegularExpression('/^A-\d{6}$/', (string) $adm->admin_code);
+        $this->assertMatchesRegularExpression('/^AD-\d{6}$/', (string) $adm->admin_code);
         $this->assertNull($adm->staff_code);
     }
 
-    // T11：エンジニアに担当者の役割を足すと T-。外して戻し、もう一度足すと同じ T-
+    // T11：エンジニアに担当者の役割を足すと ST-。外して戻し、もう一度足すと同じ ST-
     public function test_t11_role_codes_are_kept(): void
     {
         $a = $this->sesId(self::SES1);
@@ -249,7 +310,7 @@ class V090DisplayIdTest extends TestCase
         $this->assertNull($this->code('users', $uid, 'staff_code'));
         W::addSesRole($uid, $this->user(self::ADMIN));
         $t = $this->code('users', $uid, 'staff_code');
-        $this->assertMatchesRegularExpression('/^T-\d{6}$/', (string) $t);
+        $this->assertMatchesRegularExpression('/^ST-\d{6}$/', (string) $t);
         $this->assertSame('ses', $this->code('users', $uid, 'role'));
         $res = W::leaveSesUser($a, $uid, $this->user(self::ADMIN)); // 担当者の役割だけ外す（エンジニアとしては残る）
         $this->assertSame('ok', $res['type']);
@@ -257,9 +318,9 @@ class V090DisplayIdTest extends TestCase
         $this->assertSame($t, $this->code('users', $uid, 'staff_code'));
         W::addSesRole($uid, $this->user(self::ADMIN));
         $this->assertSame($t, $this->code('users', $uid, 'staff_code'));
-        // 管理者の役割を足すと A-（T- も残る）
+        // 管理者の役割を足すと AD-（ST- も残る）
         W::addAdminRole($uid, [], $this->user(self::ADMIN));
-        $this->assertMatchesRegularExpression('/^A-\d{6}$/', (string) $this->code('users', $uid, 'admin_code'));
+        $this->assertMatchesRegularExpression('/^AD-\d{6}$/', (string) $this->code('users', $uid, 'admin_code'));
         $this->assertSame($t, $this->code('users', $uid, 'staff_code'));
         $this->assertNotNull($this->code('engineers', $eid));
     }
@@ -375,7 +436,7 @@ class V090DisplayIdTest extends TestCase
     {
         $direct = W::directSesId();
         $code = $this->code('ses_companies', $direct);
-        $this->assertMatchesRegularExpression('/^S-\d{6}$/', (string) $code);
+        $this->assertMatchesRegularExpression('/^SE-\d{6}$/', (string) $code);
         $this->as(self::ADMIN)->get('/find?code='.urlencode($code))->assertRedirect(url('/admin/engineers?ses=direct'));
         $this->get('/admin/engineers?ses=direct')->assertOk();
         $this->notFound(self::SES1, $code);
@@ -384,7 +445,7 @@ class V090DisplayIdTest extends TestCase
     // code が配列でも 500 にならない
     public function test_find_array_code(): void
     {
-        $this->as(self::ADMIN)->get('/find?code[]=C-1')->assertRedirect()->assertSessionHas('flash.msg', FindController::NOT_FOUND);
+        $this->as(self::ADMIN)->get('/find?code[]=CA-1')->assertRedirect()->assertSessionHas('flash.msg', FindController::NOT_FOUND);
     }
 
     // 他社へ移ったエンジニアの E- は、移る前の会社の SES が見る応募の画面に出ない（管理者には出る）
@@ -448,12 +509,12 @@ class V090DisplayIdTest extends TestCase
     public function test_t20_find_admin(): void
     {
         $eid = $this->engId(self::EG1);
-        $n = (int) substr($this->code('engineers', $eid), 2);
+        $n = (int) substr($this->code('engineers', $eid), 3);
         $this->as(self::ADMIN)->get('/find?code=e'.$n)->assertRedirect(url("/engineers/$eid"));
         $this->get('/find?code='.urlencode('Ｅ－'.$n))->assertRedirect(url("/engineers/$eid"));
         $cid = $this->mkCase();
         $this->get('/find?code='.urlencode($this->code('cases', $cid)))->assertRedirect(url("/cases/$cid"));
-        $this->notFound(self::ADMIN, 'C-999999');
+        $this->notFound(self::ADMIN, 'CA-999999');
         $this->notFound(self::ADMIN, 'でたらめ');
         $this->notFound(self::ADMIN, '');
     }
@@ -543,7 +604,7 @@ class V090DisplayIdTest extends TestCase
     // T26：版
     public function test_t26_version(): void
     {
-        $this->assertSame('v0.9.0', config('park.version'));
-        $this->get('/login')->assertOk()->assertSee('v0.9.0');
+        $this->assertSame('v0.9.1', config('park.version'));
+        $this->get('/login')->assertOk()->assertSee('v0.9.1');
     }
 }
