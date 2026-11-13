@@ -359,6 +359,7 @@ class Workflow
     public static function addSesRole(int $userId, $actor): void
     {
         DB::table('users')->where('id', $userId)->update(['role' => 'ses', 'updated_at' => now_str()]);
+        Ids::assign('T', $userId); // 役割を初めて持ったときだけ付く（外して戻しても同じ ID）
         N::audit($actor->id ?? null, 'dual-add-ses', "#user {$userId}");
         N::notify($userId, 'SES のご担当者としても登録されました', 'ログインのとき「SES 担当者」を選ぶと、SES の画面に入れます。', '/ses', true, 'dual', 'ses');
     }
@@ -372,6 +373,7 @@ class Workflow
         if (($c = clean_name($d['company_name'] ?? null)) !== null) $upd['company_name'] = $c;
         foreach (['position', 'phone', 'postal_code', 'address'] as $f) if (($v = str_in($d[$f] ?? '')) !== null) $upd[$f] = $v;
         DB::table('users')->where('id', $userId)->update($upd);
+        Ids::assign('A', $userId);
         if ($u->engineer_id) DB::table('engineers')->where('id', $u->engineer_id)->update(['is_operator' => 1]);
         N::audit($actor->id ?? null, 'dual-add-admin', "#user {$userId}");
         N::notify($userId, '管理者としても登録されました', 'ログインのとき「管理者」を選ぶと、管理者の画面に入れます。', '/admin', true, 'dual', 'admin');
@@ -389,7 +391,18 @@ class Workflow
     public static function createUser(string $email, string $name, string $role, string $password, array $extra = []): int
     {
         return DB::table('users')->insertGetId(['email' => strtolower($email)] + self::nameCols($name, $extra['sei'] ?? null, $extra['mei'] ?? null) + ['role' => $role, 'password' => Hash::make($password),
-            'ses_id' => $extra['ses_id'] ?? null, 'engineer_id' => $extra['engineer_id'] ?? null, 'registered_at' => now_str(), 'created_at' => now_str(), 'updated_at' => now_str()]);
+            'ses_id' => $extra['ses_id'] ?? null, 'engineer_id' => $extra['engineer_id'] ?? null, 'registered_at' => now_str(), 'created_at' => now_str(), 'updated_at' => now_str()]
+            + self::roleCodes($role));
+    }
+
+    // 人の ID（表示 ID）。管理者は A-、担当者（SES の人）は T-。エンジニア（eg）の人には付けない（E- は engineers の行にある）
+    public static function roleCodes(string $role): array
+    {
+        return match ($role) {
+            'admin' => ['admin_code' => Ids::next('A')],
+            'ses' => ['staff_code' => Ids::next('T')],
+            default => [],
+        };
     }
 
     // 管理者の情報（氏名・企業名・メール）を直す。$d は name_sei・name_mei・company_name・email（メールは無ければ変えない）。
@@ -550,7 +563,7 @@ class Workflow
     {
         $id = DB::table('ses_companies')->where('kind', 'direct')->orderBy('id')->value('id');
         if ($id) return (int) $id;
-        return (int) DB::table('ses_companies')->insertGetId(['name' => '管理者の直属', 'kind' => 'direct', 'status' => 'active',
+        return (int) DB::table('ses_companies')->insertGetId(['name' => '管理者の直属', 'kind' => 'direct', 'status' => 'active', 'code' => Ids::next('S'),
             'self_confirmed_at' => now_str(), 'joined_at' => today_str(), 'created_at' => now_str(), 'updated_at' => now_str()]);
     }
 
@@ -568,7 +581,7 @@ class Workflow
             'email' => strtolower((string) str_in($d['email'] ?? '')), 'phone' => str_in($d['phone'] ?? ''),
             'postal_code' => postal_norm(is_string($d['postal_code'] ?? null) ? $d['postal_code'] : null) ?: null, 'address' => str_in($d['address'] ?? ''),
             'employees' => int_or_null($d['employees'] ?? null), 'strengths' => str_in($d['strengths'] ?? ''), 'message' => str_in($d['message'] ?? ''),
-            'notes' => str_in($d['notes'] ?? ''), 'status' => 'pending', 'agreed_at' => !empty($d['agree']) ? now_str() : null, 'created_at' => now_str(), 'updated_at' => now_str(),
+            'notes' => str_in($d['notes'] ?? ''), 'status' => 'pending', 'code' => Ids::next('S'), 'agreed_at' => !empty($d['agree']) ? now_str() : null, 'created_at' => now_str(), 'updated_at' => now_str(),
         ]);
         if (($actor->role ?? '') === 'admin') return $id;
         $name = str_in($d['name'] ?? ''); $contact = self::sesPeopleCols($d)['contact_name'];
@@ -634,7 +647,7 @@ class Workflow
     public static function createEngineer(int $sesId, array $d, $actor, bool $invite = true, ?object &$linked = null, bool $tellAdmins = true): int
     {
         $v = self::engValues($d);
-        $id = DB::table('engineers')->insertGetId($v + ['ses_id' => $sesId, 'created_at' => now_str(), 'updated_at' => now_str()]);
+        $id = DB::table('engineers')->insertGetId($v + ['ses_id' => $sesId, 'code' => Ids::next('E'), 'created_at' => now_str(), 'updated_at' => now_str()]);
         N::audit($actor->id ?? null, 'engineer-create', "{$v['name']}（SES {$sesId}）");
         $linked = null;
         if ($v['email'] && ($t = self::egShareTarget($v['email'], $sesId, $actor))) {
@@ -812,9 +825,10 @@ class Workflow
             return $id;
         }
         $v['source_ses_id'] = $user->role === 'ses' ? $user->ses_id : int_or_null($d['source_ses_id'] ?? null);
-        $newId = DB::table('cases')->insertGetId($v + ['registered_by' => $user->id, 'created_at' => now_str(), 'updated_at' => now_str()]);
+        $code = Ids::next('C');
+        $newId = DB::table('cases')->insertGetId($v + ['code' => $code, 'registered_by' => $user->id, 'created_at' => now_str(), 'updated_at' => now_str()]);
         N::audit($user->id, 'case-create', $v['title']);
-        if ($user->role === 'ses') N::toAdmins('SES から案件が登録されました', "「{$v['title']}」が登録されました。マッチングして配信してください。", "/cases/$newId", true, 'case');
+        if ($user->role === 'ses') N::toAdmins('SES から案件が登録されました'.Ids::tag($code), "「{$v['title']}」が登録されました。マッチングして配信してください。", "/cases/$newId", true, 'case');
         return $newId;
     }
 
@@ -833,7 +847,7 @@ class Workflow
             $s = Matcher::score($c, $e, $idxs[$eid] ?? [], $exps[$eid] ?? []);
             DB::table('case_offers')->insert(['case_id' => $caseId, 'engineer_id' => $eid, 'score' => $s['score'], 'reasons' => implode(' / ', $s['reasons']),
                 'missing' => implode(' / ', $s['missing']), 'sent_by' => $actor->id, 'sent_at' => now_str()]);
-            N::toEg($eid, "あなたに合う案件が届きました：{$c->title}",
+            N::toEg($eid, "あなたに合う案件が届きました：{$c->title}".Ids::tag($c->code),
                 "{$c->title}\n単価：".($c->price ? man($c->price) : '相談').'／開始：'.($c->start_date ? fmt_date($c->start_date) : '相談').'／'.lbl('workStyle', $c->work_style)
                 ."\n合う点：".(implode('、', array_slice($s['reasons'], 0, 4)) ?: '—').($message ? "\n\n管理者より：$message" : '')."\n\n条件を確認のうえ、応募するか見送るかを選んでください。",
                 "/cases/$caseId", true, 'offer');
@@ -842,7 +856,7 @@ class Workflow
         }
         foreach ($bySes as $sesId => $names) {
             if (self::isDirect($sesId)) continue; // 直属は、操作した管理者への知らせが要らない
-            N::toSes($sesId, "貴社のエンジニアに案件を配信しました：{$c->title}", "次の方に「{$c->title}」を配信しました。\n".implode("\n", $names)."\n\nご本人が応募を決めるほか、貴社から個別にご案内いただくこともできます。", "/cases/$caseId", true, 'offer-ses');
+            N::toSes($sesId, "貴社のエンジニアに案件を配信しました：{$c->title}".Ids::tag($c->code),"次の方に「{$c->title}」を配信しました。\n".implode("\n", $names)."\n\nご本人が応募を決めるほか、貴社から個別にご案内いただくこともできます。", "/cases/$caseId", true, 'offer-ses');
         }
         $mark = '';
         foreach ($engineerIds as $eid) if ($mark === '') $mark = self::selfMark($actor, (int) $eid);
@@ -868,8 +882,10 @@ class Workflow
         if (!$e->self_confirmed_at) throw new \RuntimeException('エンジニアご本人が、まだ登録の内容を確認していません。ご本人がホームの「登録の内容の確認」を済ませてから応募してください');
         // GP の中での二重応募は受け付けない（同じ人が別の SES 経由で出るのを防ぐ）
         if (DB::table('applications')->where('case_id', $caseId)->where('engineer_id', $engineerId)->exists()) throw new \RuntimeException('この案件には応募済みです');
+        $code = Ids::next('AP');
+        $tag = Ids::tag($code);
         $appId = DB::table('applications')->insertGetId([
-            'case_id' => $caseId, 'engineer_id' => $engineerId, 'ses_id' => $e->ses_id, 'status' => 'applied',
+            'case_id' => $caseId, 'engineer_id' => $engineerId, 'ses_id' => $e->ses_id, 'status' => 'applied', 'code' => $code,
             'proposed_price' => num_or_null($d['proposed_price'] ?? null) ?? $c->price,
             'start_ok' => !empty($d['start_ok']), 'price_ok' => !empty($d['price_ok']), 'style_ok' => !empty($d['style_ok']),
             'condition_note' => str_in($d['condition_note'] ?? ''), 'applied_by' => $actor->id, 'applied_at' => now_str(), 'updated_at' => now_str(),
@@ -878,9 +894,9 @@ class Workflow
         DB::table('case_offers')->where('case_id', $caseId)->where('engineer_id', $engineerId)->update(['status' => 'applied']);
         if ($e->status === 'available') DB::table('engineers')->where('id', $engineerId)->update(['status' => 'proposing']);
         $who = ['eg' => 'ご本人', 'ses' => '所属の SES', 'admin' => '管理者'][$actor->role];
-        N::toAdmins("応募がありました：{$c->title}", "{$e->name} さんが「{$c->title}」に応募しました（{$who}から）。スキルシートを案件に合わせて整え、提出してください。", "/applications/$appId", true, 'apply');
-        if (!self::isDirect($e->ses_id)) N::toSes($e->ses_id, "貴社のエンジニアが応募しました：{$c->title}", "{$e->name} さんが「{$c->title}」に応募しました。選考の進み具合は PARK でご確認いただけます。", "/applications/$appId", true, 'apply');
-        if ($actor->role !== 'eg') N::toEg($engineerId, "案件に応募しました：{$c->title}", "「{$c->title}」に、{$who}からあなたの応募を出しました。条件に問題があれば、すぐにご連絡ください。", "/applications/$appId", true, 'apply');
+        N::toAdmins("応募がありました：{$c->title}{$tag}", "{$e->name} さんが「{$c->title}」に応募しました（{$who}から）。スキルシートを案件に合わせて整え、提出してください。", "/applications/$appId", true, 'apply');
+        if (!self::isDirect($e->ses_id)) N::toSes($e->ses_id, "貴社のエンジニアが応募しました：{$c->title}{$tag}","{$e->name} さんが「{$c->title}」に応募しました。選考の進み具合は PARK でご確認いただけます。", "/applications/$appId", true, 'apply');
+        if ($actor->role !== 'eg') N::toEg($engineerId, "案件に応募しました：{$c->title}{$tag}","「{$c->title}」に、{$who}からあなたの応募を出しました。条件に問題があれば、すぐにご連絡ください。", "/applications/$appId", true, 'apply');
         N::audit($actor->id, 'apply', self::selfMark($actor, $engineerId)."{$e->name} → {$c->title}");
         return $appId;
     }
@@ -898,7 +914,7 @@ class Workflow
     {
         return DB::table('applications as a')->join('cases as c', 'c.id', '=', 'a.case_id')->join('engineers as e', 'e.id', '=', 'a.engineer_id')
             ->join('ses_companies as s', 's.id', '=', 'a.ses_id')->where('a.id', $appId)
-            ->select('a.*', 'c.title', 'c.price as case_price', 'c.start_date as case_start', 'c.headcount', 'e.name as eg_name', 's.name as ses_name')->first();
+            ->select('a.*', 'c.title', 'c.price as case_price', 'c.start_date as case_start', 'c.headcount', 'c.code as case_code', 'e.name as eg_name', 'e.code as eg_code', 'e.ses_id as eg_ses_id', 's.name as ses_name')->first();
     }
 
     public static function setStatus(int $appId, string $status, $actor, string $reason = '', string $note = ''): void
@@ -917,11 +933,11 @@ class Workflow
             'withdrawn' => '応募を取り下げました。',
         ];
         if (isset($msgs[$status])) {
-            N::toEg($a->engineer_id, "{$label}：{$a->title}", $msgs[$status], "/applications/$appId", true, 'status');
-            N::toSes($a->ses_id, "{$a->eg_name} さん {$label}：{$a->title}", $msgs[$status], "/applications/$appId", true, 'status');
+            N::toEg($a->engineer_id, "{$label}：{$a->title}".Ids::tag($a->code), $msgs[$status], "/applications/$appId", true, 'status');
+            N::toSes($a->ses_id, "{$a->eg_name} さん {$label}：{$a->title}".Ids::tag($a->code), $msgs[$status], "/applications/$appId", true, 'status');
         }
         // 直属の応募は、上の toSes が管理者に届くので、ここでは重ねて出さない
-        if ($status === 'withdrawn' && !(isset($msgs[$status]) && self::isDirect($a->ses_id))) N::toAdmins("応募の取り下げ：{$a->title}", "{$a->eg_name} さんが応募を取り下げました。$note", "/applications/$appId", false);
+        if ($status === 'withdrawn' && !(isset($msgs[$status]) && self::isDirect($a->ses_id))) N::toAdmins("応募の取り下げ：{$a->title}".Ids::tag($a->code),"{$a->eg_name} さんが応募を取り下げました。$note", "/applications/$appId", false);
         N::audit($actor->id, 'app-status', self::selfMark($actor, $a->engineer_id)."{$a->eg_name} / {$a->title} → $label");
         self::refreshEngineerStatus($a->engineer_id);
     }
@@ -937,9 +953,9 @@ class Workflow
         DB::table('applications')->where('id', $appId)->update(['status' => 'interview', 'updated_at' => now_str()]);
         self::addEvent($appId, 'interview', "{$round}回目 $when ".($d['place'] ?? ''), $actor);
         $whenText = ($when ?: '日時調整中').'／'.(str_in($d['place'] ?? '') ?? '場所・URL は追ってご連絡');
-        N::toEg($a->engineer_id, "面談が決まりました：{$a->title}（{$round}回目）", "面談：{$whenText}\n\nこの案件に合わせた「面談対策の Q&A」を用意しました。面談の前に目を通し、自分の言葉で答えられるようにしておいてください。", "/interviews/$id", true, 'interview');
-        N::toSes($a->ses_id, "面談が決まりました：{$a->title}", "面談：{$whenText}\n面談スクリプト（想定質問と答え方）を作りました。", "/interviews/$id", true, 'interview');
-        if (($actor->role ?? '') === 'ses') N::toAdmins("SES から面談依頼の報告：{$a->title}", "{$a->eg_name} さん／面談：{$whenText}", "/interviews/$id", false, 'interview');
+        N::toEg($a->engineer_id, "面談が決まりました：{$a->title}（{$round}回目）".Ids::tag($a->code), "面談：{$whenText}\n\nこの案件に合わせた「面談対策の Q&A」を用意しました。面談の前に目を通し、自分の言葉で答えられるようにしておいてください。", "/interviews/$id", true, 'interview');
+        N::toSes($a->ses_id, "面談が決まりました：{$a->title}".Ids::tag($a->code), "面談：{$whenText}\n面談スクリプト（想定質問と答え方）を作りました。", "/interviews/$id", true, 'interview');
+        if (($actor->role ?? '') === 'ses') N::toAdmins("SES から面談依頼の報告：{$a->title}".Ids::tag($a->code),"{$a->eg_name} さん／面談：{$whenText}", "/interviews/$id", false, 'interview');
         N::audit($actor->id, 'interview', self::selfMark($actor, $a->engineer_id)."{$a->title} {$round}回目");
         return $id;
     }
@@ -952,8 +968,8 @@ class Workflow
             DB::table('applications')->where('id', $iv->application_id)->update(['status' => 'interviewed', 'updated_at' => now_str()]);
             self::addEvent($iv->application_id, 'interviewed', "{$iv->round}回目 通過。".$feedback, $actor);
             $a = self::loadApp($iv->application_id);
-            N::toEg($a->engineer_id, "面談を通過しました：{$a->title}", "{$iv->round}回目の面談を通過しました。".($feedback ? "\n感想：$feedback" : '')."\n次のご連絡をお待ちください。", "/applications/{$a->id}", true, 'status');
-            N::toSes($a->ses_id, "面談通過：{$a->title}", "{$iv->round}回目の面談を通過しました。", "/applications/{$a->id}", true, 'status');
+            N::toEg($a->engineer_id, "面談を通過しました：{$a->title}".Ids::tag($a->code),"{$iv->round}回目の面談を通過しました。".($feedback ? "\n感想：$feedback" : '')."\n次のご連絡をお待ちください。", "/applications/{$a->id}", true, 'status');
+            N::toSes($a->ses_id, "面談通過：{$a->title}".Ids::tag($a->code),"{$iv->round}回目の面談を通過しました。", "/applications/{$a->id}", true, 'status');
             N::audit($actor->id ?? null, 'interview-result', self::selfMark($actor, $a->engineer_id)."{$a->eg_name} / {$a->title} {$iv->round}回目 通過");
         } else {
             self::setStatus($iv->application_id, 'rejected', $actor, '面談の受け答え', (string) $feedback);
@@ -969,15 +985,16 @@ class Workflow
         $end = str_in($d['end_date'] ?? '') ?? month_end($start, 2);
         $price = num_or_null($d['price'] ?? null) ?? $a->proposed_price ?? $a->case_price;
         if (!$price) throw new \RuntimeException('契約の金額を入れてください');
-        $kid = DB::table('contracts')->insertGetId(['application_id' => $appId, 'case_id' => $a->case_id, 'engineer_id' => $a->engineer_id, 'ses_id' => $a->ses_id,
+        $code = Ids::next('CT');
+        $kid = DB::table('contracts')->insertGetId(['application_id' => $appId, 'case_id' => $a->case_id, 'engineer_id' => $a->engineer_id, 'ses_id' => $a->ses_id, 'code' => $code,
             'price' => $price, 'start_date' => $start, 'end_date' => $end, 'status' => 'active', 'created_at' => now_str()]);
         DB::table('applications')->where('id', $appId)->update(['status' => 'won', 'updated_at' => now_str()]);
         self::addEvent($appId, 'won', "契約 {$start}〜{$end}／".man($price), $actor);
         DB::table('engineers')->where('id', $a->engineer_id)->update(['status' => 'working']);
         $won = DB::table('applications')->where('case_id', $a->case_id)->where('status', 'won')->count();
         if ($won >= ($a->headcount ?: 1)) DB::table('cases')->where('id', $a->case_id)->update(['status' => 'filled', 'updated_at' => now_str()]);
-        N::toEg($a->engineer_id, "成約おめでとうございます：{$a->title}", "「{$a->title}」に決まりました。開始は {$start} です。\n最初の1か月に、困りごとがないか短くお話を聞かせてください（PARK のホームから記入できます）。\nこの案件を、経験票にも追加してください（ホームの「経歴の更新」から）。", "/eg", true, 'won');
-        N::toSes($a->ses_id, "成約しました：{$a->title}", "{$a->eg_name} さんが「{$a->title}」に決まりました。\n契約：{$start}〜{$end}／".man($price).(self::isDirect($a->ses_id) ? '' : "\n成功報酬（初期費用）は、稼働開始の月の請求に含まれます。"), "/contracts/$kid", true, 'won');
+        N::toEg($a->engineer_id, "成約おめでとうございます：{$a->title}".Ids::tag($code),"「{$a->title}」に決まりました。開始は {$start} です。\n最初の1か月に、困りごとがないか短くお話を聞かせてください（PARK のホームから記入できます）。\nこの案件を、経験票にも追加してください（ホームの「経歴の更新」から）。", "/eg", true, 'won');
+        N::toSes($a->ses_id, "成約しました：{$a->title}".Ids::tag($code),"{$a->eg_name} さんが「{$a->title}」に決まりました。\n契約：{$start}〜{$end}／".man($price).(self::isDirect($a->ses_id) ? '' : "\n成功報酬（初期費用）は、稼働開始の月の請求に含まれます。"), "/contracts/$kid", true, 'won');
         N::audit($actor->id, 'contract', self::selfMark($actor, $a->engineer_id)."{$a->eg_name} / {$a->title} ".man($price));
         return $kid;
     }
@@ -987,8 +1004,8 @@ class Workflow
         $k = DB::table('contracts as k')->join('cases as c', 'c.id', '=', 'k.case_id')->where('k.id', $id)->select('k.*', 'c.title')->first();
         $newEnd = month_end($k->end_date ?: today_str(), $months ?: 3);
         DB::table('contracts')->where('id', $id)->update(['end_date' => $newEnd, 'extensions' => $k->extensions + 1, 'status' => 'active']);
-        N::toSes($k->ses_id, "契約が延長されました：{$k->title}", "契約の終わりが {$newEnd} になりました。", "/contracts/$id", true, 'contract');
-        N::toEg($k->engineer_id, "契約が延長されました：{$k->title}", "契約の終わりが {$newEnd} になりました。引き続きよろしくお願いします。", "/contracts/$id", true, 'contract');
+        N::toSes($k->ses_id, "契約が延長されました：{$k->title}".Ids::tag($k->code), "契約の終わりが {$newEnd} になりました。", "/contracts/$id", true, 'contract');
+        N::toEg($k->engineer_id, "契約が延長されました：{$k->title}".Ids::tag($k->code),"契約の終わりが {$newEnd} になりました。引き続きよろしくお願いします。", "/contracts/$id", true, 'contract');
         N::audit($actor->id, 'contract-extend', self::selfMark($actor, $k->engineer_id)."{$k->title} → $newEnd");
     }
 
@@ -999,6 +1016,6 @@ class Workflow
         N::audit($actor->id, 'contract-end', self::selfMark($actor, $k->engineer_id)."#$id ".($d['end_reason'] ?? ''));
         self::refreshEngineerStatus($k->engineer_id);
         $title = DB::table('cases')->where('id', $k->case_id)->value('title');
-        N::toEg($k->engineer_id, "経歴を更新してください：{$title}", "「{$title}」が終わりました。おつかれさまでした。\n終わった月、担当したこと、成果を経験票に書いてください（ホームの「経歴の更新」から）。次の案件のスキルシートに使います。", '/eg', true, 'history');
+        N::toEg($k->engineer_id, "経歴を更新してください：{$title}".Ids::tag($k->code),"「{$title}」が終わりました。おつかれさまでした。\n終わった月、担当したこと、成果を経験票に書いてください（ホームの「経歴の更新」から）。次の案件のスキルシートに使います。", '/eg', true, 'history');
     }
 }

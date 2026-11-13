@@ -9,6 +9,7 @@ use App\Http\Controllers\CaseSearchController as CSearch;
 use App\Http\Controllers\DirectMailController as DMail;
 use App\Http\Controllers\EgController as Eg;
 use App\Http\Controllers\EngineerController as Eng;
+use App\Http\Controllers\FindController as Find;
 use App\Http\Controllers\ManualController as Man;
 use App\Http\Controllers\PeopleController as People;
 use App\Http\Controllers\PipelineController as Pip;
@@ -70,6 +71,7 @@ Route::middleware('role')->group(function () {
     // 足りない項目の画面（必須項目や同意が足りない人は、ここだけを通れる）
     Route::get('/register/complete', [Acc::class, 'completeForm']);
     Route::post('/register/complete', [Acc::class, 'complete']);
+    Route::get('/find', [Find::class, 'find']); // 「ID で探す」（v0.9.0）
     Route::get('/account', [Acc::class, 'show']);
     Route::post('/account', [Acc::class, 'update']);
     Route::get('/account/profile', [Acc::class, 'profile']);

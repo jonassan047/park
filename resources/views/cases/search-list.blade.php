@@ -11,6 +11,7 @@
 @foreach($rows as $row)@php $e = $row['e']; $j = $row['j']; @endphp<tr>
 <td>@if($row['sent'] !== null)<span class="muted">送信済み</span>@else<input type="checkbox" name="pick[]" value="{{ $e->id }}" @checked($row['member']->checked)>@endif</td>
 <td><button class="linkbtn" name="go" value="{{ $e->id }}" style="background:none;border:0;padding:0;color:var(--blue);cursor:pointer;text-decoration:underline;font:inherit">{{ $row['name'] }}</button>
+@if($row['own'] || auth()->user()->role === 'admin') <x-code :v="$e->code" />@endif
 @if($row['member']->by_hand)<span class="badge info">手で足した</span>@endif</td>
 <td>必須 {{ $j['h'] }}/{{ $j['n'] }}　尚可 {{ $j['k'] }}/{{ $j['m'] }}</td>
 <td>@if(!$row['pass'])<small class="muted">条件に届いていません</small>@endif</td>

@@ -47,7 +47,7 @@ class ReplyController extends Controller
         $who = $m->route === 'own' ? $m->eg_name : 'グループのエンジニア';
         // 案内メールは SES 担当者か管理者の立場で送るもの。兼任の人には、その立場あてのお知らせにする
         $senderRole = $m->sent_by ? DB::table('users')->where('id', $m->sent_by)->value('role') : null;
-        if ($m->sent_by) N::notify((int) $m->sent_by, "{$who} さんから返事：{$label}（{$m->title}）", $note ?: '', "/cases/{$m->case_id}#mails", true, 'reply', in_array($senderRole, ['admin', 'ses'], true) ? $senderRole : null);
+        if ($m->sent_by) N::notify((int) $m->sent_by, "{$who} さんから返事：{$label}（{$m->title}）".\App\Services\Ids::tag(DB::table('cases')->where('id', $m->case_id)->value('code')),$note ?: '', "/cases/{$m->case_id}#mails", true, 'reply', in_array($senderRole, ['admin', 'ses'], true) ? $senderRole : null);
         N::audit(null, 'case-mail-reply', "#{$m->id} {$answer}（リンク）");
         return view('public.message', ['title' => 'ご返事を受け付けました', 'text' => "「{$m->title}」に「{$label}」とお伝えしました。担当者から追ってご連絡します。"]);
     }

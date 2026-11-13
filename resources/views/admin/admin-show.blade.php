@@ -19,6 +19,7 @@
 <a class="btn small" href="{{ url($base.'/edit') }}">{{ $provisional ? '仮登録の内容を直す' : '編集' }}</a>@endif
 </x-slot:actions>
 <dl class="dl">
+<dt>ID</dt><dd><x-code :v="$u->admin_code" />@if($u->engineer_id)　<x-code :v="DB::table('engineers')->where('id', $u->engineer_id)->value('code')" />@endif</dd>
 <dt>状態</dt><dd>{{ $state }}</dd>
 <dt>氏名</dt><dd>{{ $u->name }}@if($u->engineer_id) <a class="badge info" href="{{ url('/engineers/'.$u->engineer_id) }}">エンジニア兼任</a>@endif</dd>
 <dt>ふりがな</dt><dd>{{ $u->kana ?: '—' }}</dd>

@@ -250,7 +250,7 @@ class DummySeed
                 $pending = $c['status'] === 'pending';
                 $prov = $c['status'] === 'provisional';
                 $sesIds[$i] = DB::table('ses_companies')->insertGetId([
-                    'name' => $c['name'], 'kind' => 'ses',
+                    'name' => $c['name'], 'kind' => 'ses', 'code' => Ids::next('S'),
                     ...W::sesPeopleCols(['rep_sei' => $c['rep']['sei'], 'rep_mei' => $c['rep']['mei'], 'contact_sei' => $c['contact']['sei'], 'contact_mei' => $c['contact']['mei'],
                         'contact_kana_sei' => $c['contact']['kana_sei'], 'contact_kana_mei' => $c['contact']['kana_mei']]),
                     'email' => $c['email'], 'employees' => $c['employees'], 'strengths' => $c['strengths'],
@@ -329,7 +329,7 @@ class DummySeed
     private static function createUser(string $hash, array $p, string $role, int $sesId, ?int $engineerId): int
     {
         return DB::table('users')->insertGetId(['email' => $p['email']] + W::nameCols(join_name($p['sei'], $p['mei']), $p['sei'], $p['mei'])
-            + ['role' => $role, 'password' => $hash, 'ses_id' => $sesId, 'engineer_id' => $engineerId, 'created_at' => now_str(), 'updated_at' => now_str()]);
+            + ['role' => $role, 'password' => $hash, 'ses_id' => $sesId, 'engineer_id' => $engineerId, 'created_at' => now_str(), 'updated_at' => now_str()] + W::roleCodes($role));
     }
 
     // 状態ごとの列（担当者・エンジニアのアカウント）。A＝本登録済み（必須項目がそろっている）／B＝参加中だが必須項目が足りない／

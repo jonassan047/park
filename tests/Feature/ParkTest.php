@@ -239,7 +239,7 @@ class ParkTest extends TestCase
         $eg->get('/eg')->assertDontSee('経歴の更新');
         DB::table('contracts')->where('id', $kid)->update(['history_updated_at' => date('Y-m-d H:i:s', strtotime('-1 day'))]);
         $this->as('admin@park.example')->post("/contracts/$kid/end", ['end_date' => date('Y-m-d'), 'end_reason' => '満了']);
-        $this->assertDatabaseHas('app_notifications', ['title' => '経歴を更新してください：'.DB::table('cases')->where('id', 1)->value('title')]);
+        $this->assertDatabaseHas('app_notifications', ['title' => '経歴を更新してください：'.DB::table('cases')->where('id', 1)->value('title').'［'.DB::table('contracts')->where('id', $kid)->value('code').'］']);
         $this->as('eg1@park.example')->get('/eg')->assertSee('終わった案件を書く');
     }
 
@@ -281,7 +281,7 @@ class ParkTest extends TestCase
         $this->as('ses2@park.example')->get("/cases/$cid/mail")->assertForbidden();
         // 持ち込んでいない SES は、自社のエンジニアを推薦できる（持ち込んだ SES に知らせる）
         $this->post("/cases/$cid/recommend", ['engineer_id' => 2])->assertRedirect();
-        $this->assertDatabaseHas('app_notifications', ['user_id' => DB::table('users')->where('email', 'ses1@park.example')->value('id'), 'title' => 'エンジニアの推薦がありました：Java の保守案件']);
+        $this->assertDatabaseHas('app_notifications', ['user_id' => DB::table('users')->where('email', 'ses1@park.example')->value('id'), 'title' => 'エンジニアの推薦がありました：Java の保守案件［'.DB::table('cases')->where('id', $cid)->value('code').'］']);
         $this->post("/cases/$cid/recommend", ['engineer_id' => 1])->assertForbidden(); // 他社のエンジニアは推薦できない
         // 案内メールの返事のリンク：開くだけでは記録しない。ボタンで記録し、送った SES に知らせる
         $tok = DB::table('case_mails')->where('id', $m->id)->value('token');

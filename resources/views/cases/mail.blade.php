@@ -15,7 +15,7 @@
 <x-table :head="['', 'エンジニア', '点数', '合う点', '足りない点', 'これまでの案内']" :count="count($cands)" empty="候補がいません。">
 @foreach($cands as $m)@php $e = $m['engineer']; @endphp<tr>
 <td>@if($m['sent']){{ \App\Services\CaseMail::REPLIES[$m['sent']] ?? '' }}<div class="muted">送信済み</div>@else<input type="checkbox" name="engineer_id[]" value="{{ $e->id }}" @checked($m['score'] >= $th)>@endif</td>
-<td>@if($m['own'])<a href="{{ url('/engineers/'.$e->id) }}">{{ $e->name }}</a>@if($e->nickname) <span class="muted">（{{ $e->nickname }}）</span>@endif @else{{ $e->initials ?: '—' }}<div class="muted">{{ $e->ses_name }}</div>@endif
+<td>@if($m['own'])<a href="{{ url('/engineers/'.$e->id) }}">{{ $e->name }}</a>@if($e->nickname) <span class="muted">（{{ $e->nickname }}）</span>@endif <x-code :v="$e->code" /> @else{{ $e->initials ?: '—' }}<div class="muted">{{ $e->ses_name }}</div>@endif
 <div class="muted">{{ lbl('engStatus', $e->status) }}</div></td>
 <td><x-score :n="$m['score']" /></td><td><small>{{ implode('、', $m['reasons']) }}</small></td><td><small class="bad-text">{{ implode('、', $m['missing']) }}</small></td>
 <td><small>@if($m['past']['sent'])案内 {{ $m['past']['sent'] }}回・応募したい {{ $m['past']['interested'] }}・見送り {{ $m['past']['declined'] }}@else—@endif</small></td></tr>@endforeach

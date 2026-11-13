@@ -3,15 +3,16 @@
 @section('content')
 <div class="cols"><div>
 <x-card title="応募の内容"><dl class="dl">
-<dt>案件</dt><dd><a href="{{ url('/cases/'.$a->case_id) }}">{{ $a->title }}</a></dd>
-<dt>エンジニア</dt><dd><a href="{{ url('/engineers/'.$a->engineer_id) }}">{{ $a->eg_name }}</a>@if($u->role === 'admin' && base_role() === 'admin' && (int) $u->engineer_id === (int) $a->engineer_id) <span class="badge warn">管理者ご本人の応募</span>@endif</dd>
+<dt>ID</dt><dd><x-code :v="$a->code" /></dd>
+<dt>案件</dt><dd><a href="{{ url('/cases/'.$a->case_id) }}">{{ $a->title }}</a> <x-code :v="$a->case_code" /></dd>
+<dt>エンジニア</dt><dd><a href="{{ url('/engineers/'.$a->engineer_id) }}">{{ $a->eg_name }}</a> <x-code :v="($u->role !== 'ses' || (int) $a->eg_ses_id === (int) $u->ses_id) ? $a->eg_code : null" />@if($u->role === 'admin' && base_role() === 'admin' && (int) $u->engineer_id === (int) $a->engineer_id) <span class="badge warn">管理者ご本人の応募</span>@endif</dd>
 <dt>SES</dt><dd>{{ $a->ses_name }}</dd><dt>状態</dt><dd>{{ badge('appStatus', $a->status) }}</dd>
 <dt>提示の金額</dt><dd>{{ man($a->proposed_price) }}</dd><dt>応募日</dt><dd>{{ fmt_dt($a->applied_at) }}</dd>
 <dt>開始に間に合う</dt><dd>{{ $yes($a->start_ok) }}</dd><dt>金額</dt><dd>{{ $yes($a->price_ok) }}</dd><dt>働き方・場所</dt><dd>{{ $yes($a->style_ok) }}</dd>
 <dt>気になること</dt><dd>{!! nl2br(e($a->condition_note)) ?: '—' !!}</dd>
 @if($a->status === 'rejected')<dt>見送りの理由</dt><dd>{{ $a->reject_reason }} {{ $a->reject_note }}</dd>@endif
 <dt>スキルシート</dt><dd><a href="{{ $sheetUrl }}" target="_blank">この案件に合わせたスキルシート</a></dd>
-@if($contract)<dt>契約</dt><dd><a href="{{ url('/contracts/'.$contract->id) }}">{{ fmt_date($contract->start_date) }}〜{{ fmt_date($contract->end_date) }}（{{ man($contract->price) }}）</a></dd>@endif
+@if($contract)<dt>契約</dt><dd><a href="{{ url('/contracts/'.$contract->id) }}">{{ fmt_date($contract->start_date) }}〜{{ fmt_date($contract->end_date) }}（{{ man($contract->price) }}）</a> <x-code :v="$contract->code" /></dd>@endif
 </dl></x-card>
 
 <x-card title="面談"><x-table :head="['回', '日時', '場所', '結果', '']" :count="$ivs->count()" empty="まだ面談はありません。">

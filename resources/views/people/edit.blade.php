@@ -2,6 +2,8 @@
 @section('content')
 <p class="muted">本登録が済む前だけ、直せます。メールアドレス{{ $sesOptions ? 'や所属' : '' }}を直して保存すると、新しい仮登録のご案内が届き、前のリンクは使えなくなります。</p>
 <x-card><form method="post" action="{{ url('/people/'.$t->id) }}">@csrf
+@php $pid = $t->role === 'ses' ? $t->staff_code : ($t->engineer_id ? DB::table('engineers')->where('id', $t->engineer_id)->value('code') : null); @endphp
+@if($pid)<p>ID：<x-code :v="$pid" /></p>@endif
 @if($sesOptions)
 <x-field label="所属する SES（参加中の SES から選びます）" name="ses_id" type="select" :options="$sesOptions" :value="$t->ses_id" />
 @elseif($company)

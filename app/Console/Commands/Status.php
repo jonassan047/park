@@ -2,14 +2,19 @@
 
 namespace App\Console\Commands;
 
+use App\Services\Ids;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 // PARK の状態をまとめて出す（PARK 担当のエージェントが点検に使う）。
 // 名前・メールアドレスなどの個人情報は出さず、数と日時だけを出す。
 // 使い方：php artisan park:status   （--json で JSON）
 class Status extends Command
 {
+    // 表示 ID（C-000012 など）が空のままの行の数。ふだんは 0（管理者・担当者・会社・エンジニア・案件・応募・契約・発行済みの請求書の合計）
+    const ID_KEY = 'ID：ID の無い行（0 のはず）';
+
     protected $signature = 'park:status {--json}';
     protected $description = 'PARK の状態（メール・AI の仕事・選考・確認待ちなど）を数で出す';
 
@@ -32,6 +37,17 @@ class Status extends Command
             'SES：SES のいない会社（申込中を除く）' => DB::table('ses_companies')->where('kind', 'ses')->where('status', '!=', 'pending')->whereNull('rep_user_id')->count(),
             'アカウント：パスワードがあるのに本登録の日時が無い（0 のはず）' => $u()->whereNotNull('password')->whereNull('registered_at')->count(),
         ];
+    }
+
+    // ID の無い行の数。マイグレーション前（表や列が無い）は、落ちずに「未反映」と出す
+    private function missingIds(): int|string
+    {
+        try {
+            if (!Schema::hasTable('id_counters')) return '未反映';
+            return array_sum(Ids::missingCounts());
+        } catch (\Throwable $e) {
+            return '未反映';
+        }
     }
 
     public function handle(): int
@@ -59,6 +75,7 @@ class Status extends Command
             '技術マスタ：確かめ待ち' => DB::table('skill_terms')->where('reviewed', false)->count(),
             '兼任（SES 担当者）' => DB::table('users')->where('role', 'ses')->whereNotNull('ses_id')->whereNotNull('engineer_id')->count(),
             '兼任（管理者）' => DB::table('users')->where('role', 'admin')->whereNotNull('engineer_id')->count(),
+            self::ID_KEY => $this->missingIds(),
             '見本データ（@park.example）' => DB::table('users')->where('email', 'like', '%@park.example')->count(),
         ] + $this->registrationCounts();
         if ($this->option('json')) {

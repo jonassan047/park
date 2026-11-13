@@ -7,6 +7,9 @@
 @endphp
 <div class="grid2">
 <x-card title="基本"><p><a href="{{ url('/account/profile') }}">登録情報を見る</a></p>
+{{-- 自分の ID。管理者は A-、担当者は T-（と会社の S-）、エンジニア（兼任の人も）は E- --}}
+<p>ID：@if($u->role === 'admin')<x-code :v="$u->admin_code" />@elseif($u->role === 'ses')<x-code :v="$u->staff_code" />　会社：<x-code :v="DB::table('ses_companies')->where('id', $u->ses_id)->value('code')" />@endif
+@if($u->engineer_id || $u->role === 'eg')@if($u->role !== 'eg')　@endif<x-code :v="DB::table('engineers')->where('id', $u->engineer_id)->value('code')" />@endif</p>
 @if(is_dual())<p class="muted">このアカウントの立場：{{ base_role() === 'admin' ? '管理者' : 'SES 担当者（'.DB::table('ses_companies')->where('id', $u->ses_id)->value('name').'）' }}・エンジニア</p>@endif
 <form method="post" action="{{ url('/account') }}">@csrf
 <div class="pair">

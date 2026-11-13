@@ -24,6 +24,8 @@ class AccountProfileTest extends TestCase
     // 入力欄が無い（ログアウトの form の hidden だけは layout にあるので除く）
     private function assertNoFormFields(string $html): void
     {
+        // v0.9.0：layout の「ID で探す」（findbar）は入力欄だが、画面の本体ではないので除く
+        $html = preg_replace('/<form[^>]*class="findbar".*?<\/form>/su', '', $html);
         $this->assertDoesNotMatchRegularExpression('/<input(?![^>]*type="hidden")/u', $html);
         $this->assertStringNotContainsString('<textarea', $html);
         $this->assertStringNotContainsString('<select', $html);

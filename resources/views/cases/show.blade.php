@@ -7,6 +7,7 @@
 @if(\App\Support\Perms::caseEdit($u, $c))<a class="btn small" href="{{ url('/cases/'.$c->id.'/edit') }}">編集</a>@endif
 </x-slot:actions>
 <dl class="dl">
+<dt>ID</dt><dd><x-code :v="$c->code" /></dd>
 <dt>状態</dt><dd>{{ badge('caseStatus', $c->status) }}</dd>
 <dt>金額</dt><dd>{{ man($c->price) }} <span class="muted">{{ $c->price_note }}</span></dd>
 @if($u->role !== 'eg')<dt>元請け</dt><dd>{{ $c->client_label ?: '—' }}</dd><dt>持ち込み</dt><dd>{{ $c->ses_name ?: '管理者' }}</dd>@endif
@@ -66,7 +67,7 @@
 <div id="mails"></div>
 <x-table :head="['エンジニア', '送った日', '返事', '記録する', '案件をくれた先へ返す書類']" :count="$mails->count()" empty="まだ送っていません。「エンジニアに案内する」で、候補を絞ってメールを送れます。">
 @foreach($mails as $m)<tr>
-<td>@if($m->route === 'own'){{ $m->name }}@else{{ $m->initials ?: '—' }} <span class="muted">（{{ $m->ses_name }}・PARK から）</span>@endif<div class="muted">{{ $m->score }}点・{{ \App\Services\CaseMail::MODES[$m->mode] ?? '同じ内容' }}</div></td>
+<td>@if($m->route === 'own'){{ $m->name }} <x-code :v="$m->eg_code" />@else{{ $m->initials ?: '—' }} <span class="muted">（{{ $m->ses_name }}・PARK から）</span>@endif<div class="muted">{{ $m->score }}点・{{ \App\Services\CaseMail::MODES[$m->mode] ?? '同じ内容' }}</div></td>
 <td>{{ fmt_dt($m->sent_at) }}</td>
 <td>{{ \App\Services\CaseMail::REPLIES[$m->reply] ?? $m->reply }}@if($m->reply_note)<div class="muted">{{ $m->reply_note }}</div>@endif @if($m->reply_via === 'app')<div class="muted">（本人が画面で）</div>@endif</td>
 <td>@if($m->route === 'own')<form method="post" action="{{ url('/case-mails/'.$m->id.'/reply') }}" class="inline">@csrf
@@ -81,8 +82,8 @@
 </x-card>
 @endif
 @if($u->role !== 'eg')
-<x-card title="この案件への応募"><x-table :head="['エンジニア', 'SES', '状態', '応募日', '']" :count="$apps->count()">
-@foreach($apps as $a)<tr><td>{{ $a->eg_name }}</td><td>{{ $a->ses_name }}</td><td>{{ badge('appStatus', $a->status) }}</td><td>{{ fmt_date($a->applied_at) }}</td><td><a class="btn small" href="{{ url('/applications/'.$a->id) }}">詳細</a></td></tr>@endforeach
+<x-card title="この案件への応募"><x-table :head="['ID', 'エンジニア', 'SES', '状態', '応募日', '']" :count="$apps->count()">
+@foreach($apps as $a)<tr><td><x-code :v="$a->code" /></td><td>{{ $a->eg_name }} <x-code :v="($u->role !== 'ses' || (int) $a->eg_ses_id === (int) $u->ses_id) ? $a->eg_code : null" /></td><td>{{ $a->ses_name }}</td><td>{{ badge('appStatus', $a->status) }}</td><td>{{ fmt_date($a->applied_at) }}</td><td><a class="btn small" href="{{ url('/applications/'.$a->id) }}">詳細</a></td></tr>@endforeach
 </x-table></x-card>
 @endif
 </div><div>
@@ -94,7 +95,7 @@
   <a class="btn" href="{{ url('/cases/'.$c->id.'/search') }}">エンジニアに案内する</a>@endif
   </x-card>
   <x-card title="配信済み"><x-table :head="['エンジニア', '点数', '状態', '配信日']" :count="$offers->count()">
-  @foreach($offers as $o)<tr><td>{{ $o->name }}</td><td>{{ $o->score }}</td><td>{{ badge('offerStatus', $o->status) }}@if($o->decline_reason)<div class="muted">{{ $o->decline_reason }}</div>@endif</td><td>{{ fmt_dt($o->sent_at) }}</td></tr>@endforeach
+  @foreach($offers as $o)<tr><td>{{ $o->name }} <x-code :v="$o->eg_code" /></td><td>{{ $o->score }}</td><td>{{ badge('offerStatus', $o->status) }}@if($o->decline_reason)<div class="muted">{{ $o->decline_reason }}</div>@endif</td><td>{{ fmt_dt($o->sent_at) }}</td></tr>@endforeach
   </x-table></x-card>
   <x-card title="状態の変更">@foreach(['open', 'filled', 'closed'] as $s)@if($s !== $c->status)<x-post :action="'/cases/'.$c->id.'/status'" :label="lbl('caseStatus', $s).'にする'" :fields="['status' => $s]" cls="ghost small" /> @endif @endforeach</x-card>
 
@@ -106,7 +107,7 @@
   <p><a class="btn" href="{{ url('/cases/'.$c->id.'/search') }}">エンジニアに案内する</a></p>
   @else<p class="muted">この案件は{{ $c->ses_name ? 'ほかの SES' : '管理者' }}が持ち込んだものです。合う方がいれば「推薦する」で、持ち込んだ{{ $c->ses_name ? ' SES' : '管理者' }}に知らせます（名前は伏せて伝えます）。</p>@endif
   <x-table :head="['エンジニア', '点数', '足りない点', '']" :count="count($rows)" empty="登録しているエンジニアがいません。">
-  @foreach($rows as $row)<tr><td><a href="{{ url('/engineers/'.$row['e']->id) }}">{{ $row['e']->name }}</a><div class="muted">{{ lbl('engStatus', $row['e']->status) }}</div></td>
+  @foreach($rows as $row)<tr><td><a href="{{ url('/engineers/'.$row['e']->id) }}">{{ $row['e']->name }}</a> <x-code :v="$row['e']->code" /><div class="muted">{{ lbl('engStatus', $row['e']->status) }}</div></td>
     <td><x-score :n="$row['score']" /></td><td><small class="bad-text">{{ implode('、', $row['missing']) }}</small></td>
     <td>@if(in_array($row['e']->id, $applied))<span class="muted">応募済み</span>@elseif(isset($offered[$row['e']->id]))<span class="muted">案内済み</span>
     @elseif(!$canMail)<x-post :action="'/cases/'.$c->id.'/recommend'" label="推薦する" :fields="['engineer_id' => $row['e']->id]" cls="ghost small" />@endif</td></tr>@endforeach

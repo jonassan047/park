@@ -1,6 +1,7 @@
 @extends('layouts.app', ['title' => $e->name.' さん', 'wide' => true])
 @section('content')
 <x-todo />
+<p class="muted">あなたの ID：<x-code :v="$e->code" /></p>
 <x-stats :items="[['スキルシートの完成度', $check['score'].'%', $check['score'] < 80 ? 'あと少し' : 'いい感じです'], ['届いている案件', $offers->count()],
     ['選考中', $apps->where('status', '!=', 'won')->count()], ['今の状態', lbl('engStatus', $e->status)]]" />
 @if(!$e->self_confirmed_at)<div id="confirm"></div><x-card title="登録の内容の確認"><p>あなたの登録の内容（プロフィール・スキル・経験票）は、所属の SES や管理者が入れたものも含めて、<b>あなたご自身が責任を持つもの</b>です。中身を確かめ、違うところは直してから、「確認しました」を押してください。確認が済むまでは、案件に応募できません。</p>
@@ -19,10 +20,10 @@
 @if($unread)<x-card title="管理者からのメッセージ"><p>未読が {{ $unread }} 件あります。</p><a class="btn small" href="{{ url('/engineers/'.$e->id.'/messages') }}">読む</a></x-card>@endif
 <div class="cols"><div>
 <x-card title="あなたに届いた案件"><x-table :head="['案件', '相性', '金額', '開始', '']" :count="$offers->count()" empty="いまは届いていません。経験票を充実させると、合う案件が届きやすくなります。">
-@foreach($offers as $o)<tr><td>{{ $o->title }}</td><td><x-score :n="$o->score" /></td><td>{{ man($o->price) }}</td><td>{{ fmt_date($o->start_date) }}</td><td><a href="{{ url('/cases/'.$o->case_id) }}">@if($o->status === 'sent')<b>新着</b>@else開く@endif</a></td></tr>@endforeach
+@foreach($offers as $o)<tr><td>{{ $o->title }} <x-code :v="$o->case_code" /></td><td><x-score :n="$o->score" /></td><td>{{ man($o->price) }}</td><td>{{ fmt_date($o->start_date) }}</td><td><a href="{{ url('/cases/'.$o->case_id) }}">@if($o->status === 'sent')<b>新着</b>@else開く@endif</a></td></tr>@endforeach
 </x-table></x-card>
 <x-card title="応募・選考"><x-table :head="['案件', '状態', '']" :count="$apps->count()" empty="ありません。">
-@foreach($apps as $a)<tr><td>{{ $a->title }}</td><td>{{ badge('appStatus', $a->status) }}</td><td><a class="btn small" href="{{ url('/applications/'.$a->id) }}">開く</a></td></tr>@endforeach
+@foreach($apps as $a)<tr><td>{{ $a->title }} <x-code :v="$a->code" /></td><td>{{ badge('appStatus', $a->status) }}</td><td><a class="btn small" href="{{ url('/applications/'.$a->id) }}">開く</a></td></tr>@endforeach
 </x-table></x-card>
 </div><div>
 <x-card title="スキルシートを良くするには"><div class="meter"><i style="width:{{ $check['score'] }}%"></i><b>{{ $check['score'] }}%</b></div>

@@ -29,9 +29,9 @@ class Billing
             $endYm = $k->end_date ? substr($k->end_date, 0, 7) : null;
             $base = (int) round($k->price * 10000);
             $n = month_diff($startYm, $period) + 1; // 稼働の何か月目か
-            if ($n === 1) $items[] = ['contract_id' => $k->id, 'type' => 'initial', 'label' => "初期費用 {$k->case_title}（{$k->eg_name}）", 'base' => $base, 'rate' => $r['initial'], 'amount' => (int) round($base * $r['initial'])];
+            if ($n === 1) $items[] = ['contract_id' => $k->id, 'type' => 'initial', 'label' => '初期費用 '.($k->code ? $k->code.' ' : '')."{$k->case_title}（{$k->eg_name}）", 'base' => $base, 'rate' => $r['initial'], 'amount' => (int) round($base * $r['initial'])];
             $active = $n >= $r['monthlyFrom'] && (!$endYm || $period <= $endYm);
-            if ($n >= 1 && $active) $items[] = ['contract_id' => $k->id, 'type' => 'monthly', 'label' => "月額費用 {$k->case_title}（{$k->eg_name}・{$n}か月目）", 'base' => $base, 'rate' => $r['monthly'], 'amount' => (int) round($base * $r['monthly'])];
+            if ($n >= 1 && $active) $items[] = ['contract_id' => $k->id, 'type' => 'monthly', 'label' => '月額費用 '.($k->code ? $k->code.' ' : '')."{$k->case_title}（{$k->eg_name}・{$n}か月目）", 'base' => $base, 'rate' => $r['monthly'], 'amount' => (int) round($base * $r['monthly'])];
         }
         $subtotal = array_sum(array_column($items, 'amount'));
         $tax = (int) floor($subtotal * $r['tax']);

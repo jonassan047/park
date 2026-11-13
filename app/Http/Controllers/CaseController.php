@@ -6,6 +6,7 @@ use App\Services\AiJobs;
 use App\Services\CaseMail as CM;
 use App\Services\CaseAi;
 use App\Services\CaseParser;
+use App\Services\Ids;
 use App\Services\Matcher;
 use App\Services\Notifier as N;
 use App\Services\Registration;
@@ -88,13 +89,13 @@ class CaseController extends Controller
         abort_unless(Perms::caseView($u, $c), 403);
 
         $apps = DB::table('applications as a')->join('engineers as e', 'e.id', '=', 'a.engineer_id')->join('ses_companies as s', 's.id', '=', 'a.ses_id')
-            ->where('a.case_id', $id)->select('a.*', 'e.name as eg_name', 's.name as ses_name')->orderBy('a.id');
+            ->where('a.case_id', $id)->select('a.*', 'e.name as eg_name', 'e.code as eg_code', 'e.ses_id as eg_ses_id', 's.name as ses_name')->orderBy('a.id');
         if ($u->role === 'ses') $apps->where('a.ses_id', $u->ses_id);
         if ($u->role === 'eg') $apps->where('a.engineer_id', $u->engineer_id);
         $data = ['c' => $c, 'apps' => $apps->get(), 'canMail' => CM::canSend($u, $c)];
         if ($data['canMail']) {
             $q = DB::table('case_mails as m')->join('engineers as e', 'e.id', '=', 'm.engineer_id')->join('ses_companies as s', 's.id', '=', 'e.ses_id')
-                ->where('m.case_id', $id)->select('m.*', 'e.name', 'e.initials', 's.name as ses_name')->orderByDesc('m.id');
+                ->where('m.case_id', $id)->select('m.*', 'e.name', 'e.initials', 'e.code as eg_code', 's.name as ses_name')->orderByDesc('m.id');
             $q->addSelect('e.ses_id as eg_ses_id');
             $data['mails'] = $q->get()->map(function ($m) use ($u) {
                 // 管理者が送った他社の人は、案件を持ち込んだ SES には名前・書類を出さない（グループの人と同じ扱い）
@@ -106,7 +107,7 @@ class CaseController extends Controller
 
         if ($u->role === 'admin') {
             $data += [
-                'offers' => DB::table('case_offers as o')->join('engineers as e', 'e.id', '=', 'o.engineer_id')->where('o.case_id', $id)->select('o.*', 'e.name')->orderByDesc('o.score')->get(),
+                'offers' => DB::table('case_offers as o')->join('engineers as e', 'e.id', '=', 'o.engineer_id')->where('o.case_id', $id)->select('o.*', 'e.name', 'e.code as eg_code')->orderByDesc('o.score')->get(),
             ];
         } elseif ($u->role === 'ses') {
             $engs = Registration::usableEngineers(DB::table('engineers')->where('ses_id', $u->ses_id)->whereNotIn('status', ['unavailable', 'left']))->orderBy('name')->get();
@@ -178,8 +179,8 @@ class CaseController extends Controller
         $s = Matcher::score($c, $e);
         $text = "{$ses} から、案件「{$c->title}」にエンジニアの推薦がありました。\n".($e->initials ?: '—')."（{$s['score']}点）。合う点：".(implode('、', array_slice($s['reasons'], 0, 4)) ?: '—')
             ."\n案内するときは、案件の「エンジニアに案内する」の「グループのほかの人」から選んでください。";
-        if ($c->source_ses_id) N::toSes($c->source_ses_id, "エンジニアの推薦がありました：{$c->title}", $text, "/cases/$id/mail?scope=group", true, 'recommend');
-        N::toAdmins("エンジニアの推薦がありました：{$c->title}", $text, "/cases/$id/mail", !$c->source_ses_id, 'recommend');
+        if ($c->source_ses_id) N::toSes($c->source_ses_id, "エンジニアの推薦がありました：{$c->title}".Ids::tag($c->code), $text, "/cases/$id/mail?scope=group", true, 'recommend');
+        N::toAdmins("エンジニアの推薦がありました：{$c->title}".Ids::tag($c->code),$text, "/cases/$id/mail", !$c->source_ses_id, 'recommend');
         N::audit($u->id, 'recommend', $key);
         return $this->go("/cases/$id", '推薦しました。持ち込んだ'.($c->source_ses_id ? ' SES' : '管理者').'に知らせました。');
     }

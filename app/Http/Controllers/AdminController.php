@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\Billing;
+use App\Services\Ids;
 use App\Services\Notifier as N;
 use App\Services\Registration;
 use App\Services\Workflow as W;
@@ -365,7 +366,7 @@ class AdminController extends Controller
         if ($st) $list = $list->where('status', $st);
         $direct = $r->query('ses') === 'direct';
         if ($direct) $list = $list->where('ses_kind', 'direct');
-        if ($q !== '') $list = $list->filter(fn ($e) => str_contains(mb_strtolower(implode(' ', [$e->name, $e->kana, $e->skills, $e->ses_name, $e->strengths])), mb_strtolower($q)));
+        if ($q !== '') $list = $list->filter(fn ($e) => str_contains(mb_strtolower(implode(' ', [$e->name, $e->kana, $e->skills, $e->ses_name, $e->strengths, $e->code])), mb_strtolower($q)));
         // 直属のエンジニアが今いるときだけ、「直属だけ」のボタンを出す（新しく直属を作る入口はない）
         $hasDirect = DB::table('engineers as e')->join('ses_companies as s', 's.id', '=', 'e.ses_id')->where('s.kind', 'direct')->exists();
         [$list, $pager] = page_slice(sort_kana($list)); // あいうえお順・1ページ 20 件
@@ -404,7 +405,7 @@ class AdminController extends Controller
     public function applications()
     {
         $list = DB::table('applications as a')->join('cases as c', 'c.id', '=', 'a.case_id')->join('engineers as e', 'e.id', '=', 'a.engineer_id')
-            ->join('ses_companies as s', 's.id', '=', 'a.ses_id')->select('a.*', 'c.title', 'e.name as eg_name', 's.name as ses_name')->orderByDesc('a.updated_at')->get();
+            ->join('ses_companies as s', 's.id', '=', 'a.ses_id')->select('a.*', 'c.title', 'c.code as case_code', 'e.name as eg_name', 's.name as ses_name')->orderByDesc('a.updated_at')->get();
         return view('admin.applications', ['list' => $list, 'lanes' => ['applied', 'submitted', 'doc_passed', 'interview', 'interviewed']]);
     }
 
@@ -436,15 +437,23 @@ class AdminController extends Controller
     {
         $inv = DB::table('invoices')->find($id);
         abort_unless($inv, 404);
-        DB::table('invoices')->where('id', $id)->update(['status' => 'issued', 'issued_at' => now_str()]);
-        N::toSes($inv->ses_id, "{$inv->period} 分のご請求書", "{$inv->period} 分の成功報酬のご請求書を発行しました。\nご請求金額：".yen($inv->total).'（税込）', "/invoices/$id", true, 'invoice');
+        // 下書きだけを1回だけ発行にする（2回押しても、番号もお知らせも1回分）
+        // 発行と番号付けは1つのトランザクション（途中で止まっても、番号の無い発行済みができない）
+        $code = DB::transaction(function () use ($id) {
+            $issued = DB::table('invoices')->where('id', $id)->where('status', 'draft')->update(['status' => 'issued', 'issued_at' => now_str()]);
+            return $issued ? Ids::assign('IV', $id) : false; // 請求書の番号は、発行のときに付ける
+        });
+        if ($code === false) return $this->go("/invoices/$id", 'すでに発行済みです。');
+        N::toSes($inv->ses_id, "{$inv->period} 分のご請求書".Ids::tag($code), "{$inv->period} 分の成功報酬のご請求書を発行しました。\nご請求金額：".yen($inv->total).'（税込）', "/invoices/$id", true, 'invoice');
         N::audit($r->user()->id, 'invoice-issue', "{$inv->period} SES {$inv->ses_id}");
         return $this->go("/invoices/$id", '発行し、SES に知らせました。');
     }
 
     public function paidInvoice(Request $r, int $id)
     {
-        DB::table('invoices')->where('id', $id)->update(['status' => 'paid', 'paid_at' => now_str()]);
+        // 発行済みのものだけ入金にできる（下書きを入金にしない・2回押しても1回分）
+        $n = DB::table('invoices')->where('id', $id)->where('status', 'issued')->update(['status' => 'paid', 'paid_at' => now_str()]);
+        if (!$n) return $this->go("/invoices/$id", '発行済みの請求書だけ、入金を記録できます。', 'bad');
         N::audit($r->user()->id, 'invoice-paid', (string) $id);
         return $this->go("/invoices/$id", '入金を記録しました。');
     }

@@ -424,7 +424,7 @@ class V070SearchTest extends TestCase
 
     public function test_t23_version(): void
     {
-        $this->assertSame('v0.8.1', config('park.version'));
-        $this->get('/login')->assertOk()->assertSee('v0.8.1');
+        $this->assertSame('v0.9.0', config('park.version'));
+        $this->get('/login')->assertOk()->assertSee('v0.9.0');
     }
 }

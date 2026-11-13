@@ -1,6 +1,228 @@
+# PLAN：表示 ID（通し番号つきの ID）（v0.9.0。2026-11-13）
+
+> **これが今の計画**。下の「v0.8.1」以降は前の計画で、消さずに残している。
+> 依頼：TEZZO（Leo 経由。2026-11-13）「案件、管理者・SES・EG など、全てに ID を振ってほしい」。
+> 作る順：段階1 → 段階2 → 段階3 → 段階4（段階ごとに commit。`php artisan test` を通してから次へ）→ park-reviewer → park-tester。commit・push・公開版への反映は Leo。
+> プレーヤー：管理者・SES・担当者・EG の4つ（担当者は `users.role=ses` の人。SES の代表者も担当者の1人）。
+> 外部のライブラリは足さない。名前・メールはこのファイルにもテストにも書かない（テストは架空の人）。
+> **本番で既存データに ID が付く**（段階1のマイグレーション）。完了報告で必ず警告する（R1）。
+> TEZZO に上げる件（末尾 9章）は、推奨で仮置きして作る。答えが違えば直す。
+
+## 0. コードで確かめた今の形
+
+- 画面に出る ID は無い。どの表も内部の `id`（自動連番）だけ。URL は `/cases/{id}` などで内部 id を使う（今回 URL は変えない）。
+- 人の持ち方：ログインは `users` の1行。`role` は `admin`／`ses`（担当者）／`eg` の1つだけで、兼任は `role=ses|admin` の行が `engineer_id` を持つ形（`Workflow::isDual`）。エンジニアの技術登録は `engineers`（`users.role=eg` の行は `engineer_id` でここを指す）。
+- `users.role` は変わる：`Workflow::addSesRole`（eg→ses、361行）、`addAdminRole`（eg→admin、371行。`ses_id` を空に）、兼任を外すと eg に戻る（93行・157行）。→ **役割で接頭辞を決める ID を `users` の1列に持たせると、不変にできない**（D2）。
+- 会社：`ses_companies.kind` は `ses`／`direct`（直属。`Workflow::directSesId` が必要なときに1行だけ作る）。`status` は pending／provisional／active／suspended など。
+- 行が消える経路がある：`Registration::cancel`（仮登録の取り消しで users・engineers・ses_companies を消す）、`SamplePurge`（見本の会社と人を消す）、`Billing::build`（明細が無くなった下書きの請求書を消す）。テストは sqlite（`:memory:`）。→ 内部 id から ID を作ると、消したあとに番号が戻る心配がある。**採番は専用の数え表で行う**（D3）。
+- 請求書は「下書き（draft）→ 発行（issued、`AdminController::issueInvoice` 439行）→ 入金（paid）」。下書きは何度も作り直し・削除される。`issueInvoice` は今、状態を確かめずに更新する（2回押しで2回知らせる）。
+- 作成の経路（`DB::table(...)->insert` を全部 grep で確認）：
+  - users：`Workflow::createUser`（はじめの設定・見本・テスト）、`Registration::provisionalSes`（153行）・`provisionalAdmin`（190行）・`provisionalPerson`（464行）・`resendEngineer`（552行。eg）・`provisionalNextRep`（601行）、`InviteAdmin`（40行）、`DummySeed::createUser`（331行）。
+  - ses_companies：`Workflow::applySes`（566行）・`directSesId`（553行）、`Registration::provisionalSes`（151行）、`DummySeed`（252行）、`SampleSeeder`（31・40行。直書き）。
+  - engineers：`Workflow::createEngineer`（637行）だけ（見本・仮登録・画面すべてここを通る）。
+  - cases：`Workflow::saveCase`（815行）だけ（画面の登録・取り込み後の登録・見本）。
+  - applications：`Workflow::apply`（871行）だけ（画面・案内メールの返事 `CaseMailController` 94行・推薦）。
+  - contracts：`Workflow::makeContract`（972行）だけ。
+  - invoices：`Billing::build`（52行。下書き）。
+- テストは 17 ファイル・35 か所で、これらの表へ直接 `insert` している（code は入らない）。→ 列を NOT NULL にするとテストが大量に壊れる。**列は空を許し、作成の経路で必ず入れる＋穴埋めの道具を持つ**（D5）。
+- 一覧の絞り込み：管理者のエンジニア一覧（`AdminController::engineers` 359〜368行）は `q` を名前・かな・技術・会社名で探す。ほかの一覧に文字の検索は無い。
+- 名前を伏せた書類：`EngineerDocs::careersheet(..., $anon)`（イニシャルを出す）、スキルシートの `?anon=1`、`CaseMailController` 103〜114行（グループのほかの SES には名前を伏せた業務経歴書だけ）。グループの他社の人は `CaseMail::callName` でイニシャル・呼び名だけ。
+- お知らせとメール：`N::toSes`・`N::toEg`・`N::toAdmins`・`N::notify` は、同じ `title` をお知らせの題とメールの件名に使う。テストに件名・題を完全一致で見ているところが 12 ファイル・35 か所ある。
+- 案件の案内メール：`CaseMail::defaultSubject`（`【案件のご案内】{title}`）・`defaultBody`（`{案件名}` などの差し込み）。送る人が件名・本文を直せる。
+- 見える範囲：`Perms::engineer`・`caseView`・`caseEdit`・`app`（応募・契約）。請求書は管理者と自社の SES。
+- 版は `config/park.php`（今 `v0.8.1`）。版の文字を見ているテスト：`RegistrationFoundationTest`・`SkillQuestionsTest`・`V030RegressionTest`・`V050CatalogTest`・`V060CaseAiTest`・`V070SearchTest`・`V080DirectMailTest`・`V081AffiliationTest`。
+
+## 1. 決定事項
+
+| 番号 | 決めたこと | 理由 |
+|---|---|---|
+| D1 | ID を付ける相手と接頭辞：管理者 **A-**、担当者（SES の人）**T-**、会社 **S-**（SES も直属も）、エンジニア **E-**、案件 **C-**、応募 **AP-**、契約 **CT-**、請求書 **IV-**。形は「接頭辞＋`-`＋6桁のゼロ埋め」（例 `C-000012`）。100万件を超えたら桁が増えるだけ（`C-1000000`） | 依頼の「全てに」を、人が話題にする単位（人・会社・案件・選考・契約・請求）で満たす。`-` があるので A と AP は取り違えない |
+| D2 | **人の ID は役割ごとに持つ**。`users.admin_code`（A-）と `users.staff_code`（T-）の2列。その役割を初めて持ったときに付け、役割が外れても消さない（戻ったら同じ ID）。エンジニアの ID は `engineers.code`（E-）で、`role=eg` の `users` の行には付けない（EG の人の ID は E-）。兼任の人は2つ持つ（例：T- と E-）。直属の会社の行も S- を持つ（名前は「管理者の直属」のまま） | `users.role` は変わるので、1列に役割の接頭辞を固めると不変にできない（0章）。エンジニアは会社を移っても `engineers` の行は同じなので E- が一生ついて回る |
+| D3 | 採番は `app/Services/Ids.php` の1か所。数え表 `id_counters`（`kind` 主キー・`last_no`）の行を `lockForUpdate` で読んで +1 する（`DB::transaction` の中）。**作る前に番号を取り、insert の配列に入れる**。番号の欠け（insert の失敗・行の削除）は許し、**一度使った番号は二度と使わない** | 内部 id から作ると、消した行の番号が戻ることがある（0章）。同時に2人が作っても、行の鍵で重ならない。列の unique が最後の守り |
+| D4 | **請求書の番号は発行のときに付ける**（下書きには付けない）。発行は `where status='draft'` で1回だけ通す（2回押しは番号もお知らせも1回分） | 下書きは作り直し・削除を繰り返すので、付けると欠番だらけになる。請求書番号は発行順にそろうのが自然 |
+| D5 | 列は空を許す（`nullable`＋`unique`）。作成の経路では必ず入れる。空の行を埋める `php artisan park:fill-ids`（既定は件数を見るだけ、`--apply` で埋める）を作り、`park:status` に「ID の無い行」の件数を出す | テストの直接 insert（35 か所）を壊さない。万一の付け漏れも後から埋められ、朝の点検で気づける |
+| D6 | 既存データはマイグレーションで、**作成の順（`id` の小さい順）** に付ける。請求書は発行済み・入金済みだけ、`issued_at`→`id` の順。人：今 `role=admin` の行に A-、`role=ses` の行に T-（過去の役割は記録が無いので見ない）。エンジニア・会社は退会・停止・申込中・仮登録・直属も含め全部。**何度流しても安全**：列・表は無ければ作る、埋めるのは空の行だけ、数え表は「今の値と、付いている最大の番号の大きいほう」にする | 依頼どおり、作成順の通し番号。2回目に流しても何も変わらない |
+| D7 | ID は付けたら変えない。直す画面は作らない。`Ids` は空でない列を上書きしない | 不変の約束 |
+| D8 | 見せる相手（詳細は 3章）：管理者は全部。SES・担当者は「自社の会社 S-・自社の担当者 T-・自社のエンジニア E-・見られる案件 C-・自社の応募 AP-・契約 CT-・請求 IV-」。EG は「自分の E-・届いた／応募した案件 C-・自分の応募 AP-・契約 CT-」。**A- は管理者にだけ見せる**。**他社のエンジニアの E- は SES に見せない**（今のイニシャルの扱いのまま） | 今の `Perms` の範囲を超えて新しい情報を見せない（仮置き。9章 1） |
+| D9 | **書き出す書類には ID を入れない**：名前を伏せた／伏せない業務経歴書・履歴書（xlsx）、スキルシートの印刷（`?anon=1` も無しも） | 書類は案件をくれた先（PARK の外）へ渡る。外に PARK の内部の番号を出さない。名前を伏せた書類に E- があると、別の機会に出た書類と同じ人だと突き合わせられる（仮置き。9章 1） |
+| D10 | **ID で探す**：上の帯に「ID で探す」の小さな入力欄（ログインした全員）。`GET /find?code=…` で、見つかればその詳細へ飛ぶ。**見られない ID と無い ID は同じ文**（「その ID は見つからないか、開けません。」）で返す。入力のゆれは受ける（全角→半角、小文字→大文字、前後の空白、ゼロ埋め・ハイフンの省略。例 `c12`・`Ｃ－１２` → `C-000012`）。あわせて、一覧の絞り込み（`q`）でも ID が当たるようにする | 存在だけが漏れるのを防ぐ。電話やメールで「C-12 の件」と言われてもすぐ開ける |
+| D11 | メール・お知らせ：**題（＝メールの件名）の末尾に `［ID］`** を付ける。対象は案件・応募・面談・契約・請求のお知らせ（4章の表）。案件の案内メール（`CaseMail`）は件名を送る人が直せるので、既定の本文に `■案件 ID：{案件ID}` の行と差し込み `{案件ID}` を足す（既定の件名は変えない）。請求書の画面に「請求書番号」、明細の文に契約の ID（新しく作る下書きから。発行済みの明細は書き換えない） | 受け取った人がメールから ID で探せる。件名を直せる案内メールは、本文で確実に伝える |
+| D12 | ID を付けないもの：面談（「AP-000012 の2回目」で言える）、配信（`case_offers`）・案件の案内（`case_mails`）・連絡メール・やり取り・お知らせ・記録・技術の表 | 人が番号で呼ぶ単位ではない。親の ID で足りる |
+| D13 | URL・記録（`audit_log` の文）の形は変えない | 範囲を広げない。リンク・ブックマークを壊さない |
+| D14 | 画面の出し方は1つの部品：Blade の `<x-code :v="$e->code" />`（`<span class="code">E-000015</span>`。空なら `—`）。等幅の小さな文字（`public/css/park.css` に `.code` を足す） | 書き方をそろえる |
+
+## 2. データ（マイグレーション1本）
+
+`database/migrations/2026_11_13_000003_display_ids.php`（名前は実装時に今日の日付の次の番号で）。
+
+- `id_counters`：`kind` string(4) 主キー、`last_no` unsignedBigInteger 既定 0。行は `A`・`T`・`S`・`E`・`C`・`AP`・`CT`・`IV` を最初に作る（`insertOrIgnore`）。
+- 列を足す（無ければ）：`ses_companies.code`、`engineers.code`、`cases.code`、`applications.code`、`contracts.code`、`invoices.code`、`users.admin_code`、`users.staff_code`。どれも `string(12)->nullable()->unique()`。
+- 穴埋め：`Ids::fillMissing()` を呼ぶ（`park:fill-ids --apply` と同じ処理。D6）。
+- `down`：列と表を消す。
+- `Schema::hasColumn`・`hasTable` で囲み、2回流しても落ちない・変わらない。
+
+## 3. 見せる場所（プレーヤーごと）
+
+| 画面 | 管理者 | SES・担当者 | EG |
+|---|---|---|---|
+| アカウント（`/account`） | 自分の A-（兼任なら E- も） | 自分の T-・会社の S-（兼任なら E- も） | 自分の E- |
+| 管理者の一覧・詳細（`admin/admins`・`admin-show`） | A- の列・見出し | — | — |
+| SES の一覧・詳細（`admin/ses-index`・`ses-show`・`ses-user-show`） | S-、担当者ごとの T- | — | — |
+| 自社の画面（`ses/company`） | — | S-、担当者ごとの T- | — |
+| エンジニアの一覧・詳細（`admin/engineers`・`ses/engineers`・`engineers/show`） | E- | 自社の人の E- | 自分の E-（`eg/home`・プロフィール） |
+| 仮登録の直し（`people/edit`） | その人の ID（付いていれば） | 自社の人の ID | — |
+| 案件の一覧・詳細（`admin/cases`・`ses/cases`・`cases/show`・`eg/offers`） | C- | 見られる案件の C- | 届いた／応募した案件の C- |
+| 案件のマッチング・検索・案内の候補（`cases/search*`・`cases/mail*`） | 候補の E- | 自社の人だけ E-。他社の人は出さない（D8） | — |
+| 応募の一覧・詳細（`admin/applications`・`ses/applications`・`eg/applications`・`pipeline/application`・`pipeline/interview`） | AP-（と C-・E-） | 自社の AP-（と C-・E-） | 自分の AP-（と C-） |
+| 契約（`admin/contracts`・`ses/contracts`・`pipeline/contract`） | CT- | 自社の CT- | 自分の CT-（応募の画面から） |
+| 請求（`admin/invoices`・`ses/invoices`・`pipeline/invoice`） | IV-（下書きは「発行時に付けます」） | 自社の IV- | — |
+| 書き出す書類（xlsx・スキルシートの印刷） | 出さない（D9） | 出さない | 出さない |
+
+- 詳細の画面は見出しの近く（題の横）、一覧は先頭の列に出す。並び順は今のまま。
+
+## 4. メール・お知らせに付ける ID（D11）
+
+| 呼んでいる所 | 付ける ID |
+|---|---|
+| `Workflow::saveCase` の `toAdmins`（SES から案件が登録された） | C- |
+| `Workflow::distribute` の `toEg`・`toSes` | C- |
+| `CaseMail::send` の `toSes`（グループの案件が届いた） | C- |
+| `CaseController::recommend` のお知らせ | C- |
+| `Workflow::apply`・`setStatus`・`scheduleInterview`・`interviewResult` | AP- |
+| `Workflow::makeContract`・`extendContract`・契約の終了（`PipelineController::end` の先） | CT- |
+| `AdminController::issueInvoice` | IV-（発行で付けた番号） |
+| `CaseMail::defaultBody` | 本文に `■案件 ID：{案件ID}`（`render` に差し込みを足す） |
+| `Billing::items` の明細の文 | 契約の CT- を足す（例 `初期費用 CT-000003 {案件名}（{名前}）`。新しい下書きから） |
+
+- 題の形：`今の題［C-000012］`。ID が空なら何も足さない（`Ids::tag(?string)` が `［…］` か空文字を返す）。
+- エンジニアの名前・SES の名前の扱いは今のまま（ID を足すだけ）。
+
+## 5. 作業の段階
+
+### 段階1　土台（画面なし）
+1. `app/Services/Ids.php` を作る：
+   - `const KINDS`（kind → 表・列・接頭辞。A→`users.admin_code`、T→`users.staff_code`、S→`ses_companies.code`、E→`engineers.code`、C→`cases.code`、AP→`applications.code`、CT→`contracts.code`、IV→`invoices.code`）。
+   - `next(string $kind): string`：`DB::transaction` の中で `id_counters` の行を `lockForUpdate` で読み、`last_no+1` を保存して `接頭辞-` ＋ `str_pad(6桁)` を返す。行が無ければ作ってから読む。
+   - `format(string $kind, int $n): string`、`normalize(string $input): ?string`（D10 のゆれを吸収。形が合わなければ null）。
+   - `assign(string $kind, int $rowId): ?string`：その行の列が空のときだけ `next` で付けて返す（空でなければ今の値を返す）。役割の付与・発行で使う。
+   - `fillMissing(bool $apply = true): array`：D6 の順で空の行を埋め、数え表を「今の値と最大の番号の大きいほう」にそろえる。kind ごとの件数を返す。
+   - `tag(?string $code): string`。
+2. マイグレーション（2章）。
+3. コマンド `app/Console/Commands/FillIds.php`（`park:fill-ids {--apply}`）。
+4. `park:status`（`Console/Commands/Status.php`）に「ID の無い行」の件数を足す（JSON にも）。
+5. テスト T1〜T6 → `php artisan test` → commit。
+
+### 段階2　作成のすべての経路で付ける
+1. insert の配列に `'code' => Ids::next('…')` を足す：`Workflow::createEngineer`・`saveCase`（新規だけ）・`apply`・`makeContract`・`applySes`・`directSesId`、`Registration::provisionalSes`（会社）、`DummySeed`（会社）、`SampleSeeder`（会社の直書き2か所）。
+2. users：`Workflow::createUser`・`Registration::provisionalSes`・`provisionalAdmin`・`provisionalPerson`・`provisionalNextRep`・`InviteAdmin`・`DummySeed::createUser` で、`role` が admin なら `admin_code`、ses なら `staff_code` を入れる（eg は入れない）。`addSesRole` は `Ids::assign('T', $userId)`、`addAdminRole` は `Ids::assign('A', $userId)`。eg へ戻す処理（93・157行）は ID に触らない。
+3. 請求：`issueInvoice` を「`where('id')->where('status','draft')->update(...)` が1件のときだけ、`Ids::assign('IV', $id)` してお知らせ」に変える。0件（発行済み）なら知らせず「すでに発行済みです。」。
+4. 付け漏れの検出：`app` の下で `DB::table('<8つの表>')->insert` を新しく足したら気づけるよう、テスト T13（経路を全部通して空の行が無いこと）を置く。
+5. テスト T7〜T14 → test → commit。
+
+### 段階3　画面に出す・探す
+1. 部品 `resources/views/components/code.blade.php` と `.code` の CSS（D14）。
+2. 3章の表の画面すべてに出す。コントローラは、`select` に `code` が入っていない所だけ足す（`e.*` などで取っている所はそのまま）。他社のエンジニアを並べる所（`CaseMail::candidates` の group、`CaseSearch` の他社の人）では、SES の画面に E- を出さない。
+3. `FindController`（`GET /find`）と、上の帯の入力欄（`layouts/app.blade.php`。ログイン・2要素認証・立場選びが済んだときだけ）。`Ids::normalize` → kind ごとに行を読み → 下の権限で判定 → 詳細へ redirect。だめなら同じ文で `back()`。
+   - A-：管理者だけ → `/admin/admins/{id}`。T-：管理者 → `/admin/ses/{ses_id}/users/{id}`、同じ会社の SES → 自社の画面。S-：管理者 → `/admin/ses/{id}`、自社の SES → `/ses/company`。E-：`Perms::engineer` → `/engineers/{id}`。C-：`Perms::caseView` → `/cases/{id}`。AP-・CT-：`Perms::app` → `/applications/{id}`・`/contracts/{id}`。IV-：管理者か自社の SES → `/invoices/{id}`。EG は A-・T-・S-・IV- を開けない。
+   - 兼任の人は、今の立場（`session('acting_role')` で入れ替わった `role`）で判定する。
+4. 一覧の `q`：管理者のエンジニア一覧の検索対象に `code` を足す。案件・応募・契約・請求・SES・管理者の一覧には、今の画面に検索欄が無ければ足さない（帯の「ID で探す」で足りる）。
+5. テスト T15〜T22 → test → commit。
+
+### 段階4　メール・請求書・マニュアル・版
+1. 4章の表のとおり、題と本文に ID を足す。件名・題を完全一致で見ているテスト（0章）を、ID 込みの形に直す（`assertStringContainsString` にしない。期待する題をそのまま書く）。
+2. 請求書の画面（`pipeline/invoice.blade.php`）に「請求書番号 IV-…」。下書きは「発行時に付けます」。
+3. マニュアル（`resources/manuals/admin.md`・`ses.md`・`engineer.md`）に「ID（番号）」の短い節：何に何が付くか、どこに出るか、「ID で探す」の使い方、書類には出ないこと。操作手順書（`*-steps.md`）に「ID で探す」の手順を1つ。README に「表示 ID（v0.9.0）」の節（`park:fill-ids` と `park:status` の見方）。
+4. `config/park.php` を `v0.9.0` に。0章の版を見ているテスト8つを直す。
+5. テスト T23〜T26 → test → commit。
+
+## 6. 受け入れ条件
+
+| 番号 | 受け入れ条件 |
+|---|---|
+| A1 | 管理者・担当者・会社（SES・直属）・エンジニア・案件・応募・契約・発行済みの請求書のすべてに、1章 D1 の形の ID が付く |
+| A2 | 新しく作ったものには、どの経路（画面・仮登録・申し込み・見本・ダミー・コマンド・案内メールの返事からの応募）でも、作ったその時に ID が付く |
+| A3 | ID は重ならない。同じ種類で続けて／同時に作っても別の番号。消した行の番号は使い直さない |
+| A4 | ID は変わらない（所属の変更・停止・退会・兼任の付け外し・編集の保存のどれでも） |
+| A5 | 既存のデータには、マイグレーションで作成順に ID が付く。マイグレーション（と `park:fill-ids --apply`）を2回流しても何も変わらない |
+| A6 | 担当者に管理者や担当者の役割を足すと、その役割の ID が付く。役割を外して戻すと、前と同じ ID |
+| A7 | 請求書の ID は発行のときに付き、下書きには無い。発行の2回押しで、番号もお知らせも1回分 |
+| A8 | 3章の画面に、その人が見てよい ID だけが出る。A- は管理者にだけ、他社のエンジニアの E- は SES に出ない |
+| A9 | 書き出す書類（名前を伏せた／伏せない業務経歴書・履歴書、スキルシートの印刷）に ID は出ない |
+| A10 | 「ID で探す」で、見てよい ID はその詳細が開く。見られない ID と無い ID は同じ文。入力のゆれ（全角・小文字・ゼロ埋めの省略）を受ける |
+| A11 | 4章のお知らせ・メールの題に `［ID］` が付く。案件の案内メールの既定の本文に案件 ID が入る。請求書に請求書番号が出る |
+| A12 | `park:status` に ID の無い行の件数が出る（ふだんは 0） |
+| A13 | マニュアル3つ・手順書・README を直し、版が v0.9.0 になる。既存のテストがすべて通る |
+
+## 7. テスト（`tests/Feature/V090DisplayIdTest.php`。人・会社は架空の名前だけ）
+
+| 番号 | 手順 → 確かめること | 条件 |
+|---|---|---|
+| T1 | `Ids::next('C')` を3回 → `C-000001`・`C-000002`・`C-000003` | A1・A3 |
+| T2 | `Ids::format('C', 1234567)` → `C-1234567` | A1 |
+| T3 | `Ids::normalize`：`c12`・`Ｃ－１２`・` C-000012 `・`ap5` → `C-000012`・`C-000012`・`C-000012`・`AP-000005`。`X-1`・`C-`・空 → null | A10 |
+| T4 | code の無い行を直接 insert（会社2・エンジニア3・案件2・発行済みの請求1・下書きの請求1・admin と ses の users）→ `Ids::fillMissing()` → id 順に 1 から付く。下書きの請求と eg の users は空のまま。続けて `next('E')` → 4 番 | A5・A7 |
+| T5 | `fillMissing()` を2回 → 2回目は件数 0・値は同じ。マイグレーションを `migrate:refresh --path=…` で流し直しても落ちない | A5 |
+| T6 | エンジニアを作って消し、もう1人作る → 消した番号を使わない | A3 |
+| T7 | 管理者が画面からエンジニアを仮登録（`POST /engineers`）→ `engineers.code` が E-、その人の `users`（eg）の `admin_code`・`staff_code` は空 | A1・A2 |
+| T8 | SES が案件を登録（`POST /cases`）→ C-。編集の保存（`POST /cases/{id}`）で C- が変わらない | A2・A4 |
+| T9 | 応募（`POST /cases/{id}/apply`）→ AP-。契約（`POST /applications/{id}/contract`）→ CT- | A2 |
+| T10 | 参加の申し込み（`POST /apply`）→ 会社に S-。管理者が SES を仮登録 → 会社に S-・代表者に T-。管理者を仮登録 → A- | A2 |
+| T11 | eg のアカウントに担当者の役割を足す → T-。外して eg に戻し、もう一度足す → 同じ T- | A6 |
+| T12 | 請求の下書きを作る（`POST /admin/invoices/build`）→ code は空。発行（`POST /admin/invoices/{id}/issue`）→ IV-。もう一度発行 → 番号もお知らせ（`app_notifications`）も増えない | A7 |
+| T13 | 見本（`SampleSeeder`）と `DummySeed` を入れる → 8つの対象のどの行にも空が無い（eg の users と下書きの請求を除く）。`park:status --json` の「ID の無い行」が 0 | A2・A12 |
+| T14 | エンジニアの所属を変える（`POST /engineers/{id}/affiliation`）・停止・再開 → E- が変わらない | A4 |
+| T15 | 管理者で `/admin/engineers`・`/engineers/{id}`・`/admin/admins` を開く → E-・A- が出る | A8 |
+| T16 | SES で `/ses/engineers`・`/ses/company`・`/cases/{id}` を開く → 自社の E-・S-・T-・C- が出る。管理者の A- は出ない | A8 |
+| T17 | SES で、他社のエンジニアが候補に入る案件の検索・案内の画面を開く → 他社の人の E- が出ない | A8 |
+| T18 | EG で `/eg`・`/eg/offers`・`/eg/applications` → 自分の E-・案件の C-・応募の AP- | A8 |
+| T19 | スキルシート `/engineers/{id}/sheet?anon=1` と無し、業務経歴書（名前を伏せた版）の書き出し → 画面・xlsx の文に E- が無い | A9 |
+| T20 | 管理者で `/find?code=e1`（小文字・ゼロ埋め無し）→ `/engineers/{id}` へ。`/find?code=C-999999`（無い）→ 決まった文 | A10 |
+| T21 | SES で、他社のエンジニアの E-・他社の請求書の IV-・管理者の A- を探す → 無い ID と同じ文。自社の E- → 開く | A10 |
+| T22 | EG で、自分の AP- → 開く。他人の AP-・S- → 同じ文。兼任（担当者＋EG）の人は、今の立場で結果が変わる | A10 |
+| T23 | 配信・応募・発行のあと、`app_notifications.title` と `mail_outbox.subject` に `［C-…］`・`［AP-…］`・`［IV-…］` | A11 |
+| T24 | 案件の案内の画面（`/cases/{id}/mail`）の既定の本文に `■案件 ID：C-…` | A11 |
+| T25 | 請求書の画面に「請求書番号 IV-…」。下書きは「発行時に付けます」 | A11 |
+| T26 | `config('park.version')` が `v0.9.0`、`/login` に出る | A13 |
+
+## 8. 境界の挙動
+
+- 0件：データが空の DB でマイグレーション → 数え表だけでき、どれも 0。最初の1件が `-000001`。
+- 権限が無い：`/find` は無い ID と同じ文（存在を漏らさない）。詳細の画面は今の 403 のまま。
+- 二重の操作：作成の2回押しは今までどおり（それぞれ別の ID）。請求の発行は1回分（D4）。役割の付与の2回は `assign` が空のときだけ付けるので1つ。
+- 同時の作成：`id_counters` の行の鍵で順番に取る。万一ぶつかっても列の unique で insert が失敗し、画面は今の失敗の扱い（番号は欠けるだけ）。
+- 仮登録の取り消し・見本の削除：消えた行の番号は欠番のまま。使い直さない。
+- 退会・停止・申込中・仮登録の人と会社：ID を持ったまま。画面の出し方は今のまま。
+- 兼任：A-／T- と E- の両方を持つ。「ID で探す」は今の立場で判定。担当者が管理者を兼ねると（`addAdminRole`）、T- は残り、A- が増える。
+- 所属の変更：E- は変わらない。元の会社の SES は、次から「ID で探す」でもその人を開けない。
+- 1件目より前の古い通知・メール：ID は入らない（書き換えない）。
+- 発行済みの請求書の明細の文：書き換えない（新しい下書きから CT- が入る）。
+- 999999 を超えた：桁が増えるだけ（並べ替えは id で行うので崩れない）。
+
+## 9. リスク
+
+| 番号 | リスク | 手当て |
+|---|---|---|
+| R1 | **本番（Xserver）で、反映のマイグレーションが既存データに ID を付ける**。付いた ID は戻さない約束なので、やり直しにくい | 先に手元で `migrate` → `park:fill-ids`（見るだけ）→ 件数を確かめる。完了報告で「本番で既存データに ID が付く」と警告する。`down` はあるが、使えば ID が消えて付け直しになる |
+| R2 | テストの直接 insert で code が空の行がある（テストの中だけ） | 画面は空を `—` で出す。付け漏れは T13・`park:status` で見る |
+| R3 | 件名の変更で、件名を完全一致で見ている既存のテストが落ちる | 段階4でまとめて直す（0章の 12 ファイル） |
+| R4 | 外への書類に ID が混ざる（今後の変更で） | T19 で、書類に E- が無いことを見張る |
+| R5 | 連番から件数がわかる（9章の TEZZO 1） | 推奨で仮置き。答えが違えば `Ids::format` と開始の番号だけ直せば済む形にしておく |
+| R6 | 数え表の行の鍵が、外側の長いトランザクション（仮登録など）の間持たれる | 作る件数が少ないので許容。重い一括処理（ダミー）は、すでに1件ずつ作っている |
+
+## 10. TEZZO に上げる件
+
+**1** SES・エンジニアに見せる ID の範囲と、連番が件数を表すこと
+- 背景：ID を SES・エンジニアの画面とメールに出すと、`C-000012` から「案件はまだ12件」、`E-000040` から「エンジニアは40人くらい」と、PARK の規模が外の人（SES・エンジニア）に読み取れる。また、名前を伏せた業務経歴書は案件をくれた先（PARK の外）へ渡るので、そこに E- を入れると、別々の機会に出た書類を「同じ人」と突き合わせられる。
+- 推奨：**a. 通し番号を 1 から付け、SES・エンジニアにも出す。ただし書き出す書類には出さず、他社のエンジニアの E- も SES に見せない**（今の仮置き）。理由：依頼は「通し番号」。件数が見えるのは始めたばかりの今だけの話で、ID で話が通じる便利さのほうが大きい。書類と他社の人は、今も名前を伏せている所なので、そこから同じ人とわからないようにする。
+- 選択肢：a. 上の推奨のとおり／b. 番号の始まりを大きくする（例：`C-100001` から。件数は読みにくくなるが通し番号のまま）／c. SES・エンジニアには ID を出さず、管理者の画面だけにする。
+
+**2** メールの件名に ID を付けること
+- 背景：SES・エンジニアに届くお知らせのメールの件名が、`…［AP-000012］` の形に変わる（外の人に見える文の変更）。
+- 推奨：**付ける**（今の仮置き）。理由：メールから「ID で探す」でそのまま開ける。案件の案内メールは送る人が件名を直せるので、件名ではなく本文に入れる。
+- 選択肢：a. 付ける（推奨）／b. 件名には付けず、本文の最後に `ID：…` の行を足す。
 # PLAN：エンジニアの所属 SES を変えられるようにする（v0.8.1。2026-11-13）
 
-> **これが今の計画**。下の「v0.8.0」から「v0.4.1」までの節は前の計画で、消さずに残している。
+> **前の計画（実装済み）**。下の「v0.8.0」から「v0.4.1」までの節は前の計画で、消さずに残している。
 > 依頼：TEZZO（Leo 経由。2026-11-13）「エンジニアの所属 SES（直属あり）が変更できない（エンジニア自身はできなくても、管理者・SES・担当者はできていいのではないか）」。
 > 作る順：段階1 → 段階2 → 段階3（段階ごとに commit。`php artisan test` を通してから次へ）→ park-reviewer → park-tester。commit・push・公開版への反映は Leo。
 > プレーヤー：管理者・SES・担当者・EG の4つ（担当者は今のアプリでは `role=ses`。SES の代表者と同じ扱い）。

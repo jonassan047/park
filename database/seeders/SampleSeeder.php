@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Services\Ids;
 use App\Services\Workflow as W;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
@@ -28,7 +29,7 @@ class SampleSeeder extends Seeder
         foreach ([['みどり情報システム', '緑川 一郎', 'ses1@park.example', 'Java の業務系、テスト'], ['あおぞらテック', '青木 花子', 'ses2@park.example', 'Web 系（PHP・JavaScript）'],
             ['ひだまりソリューションズ', '日向 健', 'ses3@park.example', 'インフラ・クラウド']] as [$name, $contact, $email, $str]) {
             [$rs, $rm] = split_name($contact);
-            $id = DB::table('ses_companies')->insertGetId(['name' => $name, 'rep_name' => $contact, 'rep_sei' => $rs, 'rep_mei' => $rm, 'contact_name' => $contact, 'email' => $email, 'status' => 'active',
+            $id = DB::table('ses_companies')->insertGetId(['name' => $name, 'rep_name' => $contact, 'rep_sei' => $rs, 'rep_mei' => $rm, 'contact_name' => $contact, 'email' => $email, 'status' => 'active', 'code' => Ids::next('S'),
                 'phone' => '03-0000-0002', 'postal_code' => '100-0001', 'address' => '東京都千代田区（見本）',
                 'strengths' => $str, 'agreed_at' => now_str(), 'self_confirmed_at' => now_str(), 'joined_at' => today_str(), 'created_at' => now_str(), 'updated_at' => now_str()]);
             $uid = W::createUser($email, $contact, 'ses', $pw, ['ses_id' => $id]);
@@ -37,7 +38,7 @@ class SampleSeeder extends Seeder
             DB::table('ses_companies')->where('id', $id)->update(['rep_user_id' => $uid]);
             $ses[] = $id;
         }
-        DB::table('ses_companies')->insert(['name' => 'こもれび開発', 'contact_name' => '木下 さくら', 'email' => 'ses4@park.example', 'status' => 'pending',
+        DB::table('ses_companies')->insert(['name' => 'こもれび開発', 'contact_name' => '木下 さくら', 'email' => 'ses4@park.example', 'status' => 'pending', 'code' => Ids::next('S'),
             'message' => '少人数ですが参加したいです。', 'agreed_at' => now_str(), 'created_at' => now_str(), 'updated_at' => now_str()]);
 
         $engs = [

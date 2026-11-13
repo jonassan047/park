@@ -13,7 +13,7 @@ class CaseMail
     const REPLIES = ['none' => '返事なし', 'interested' => '応募したい', 'question' => '質問あり', 'declined' => '見送り'];
     // 送り方（case_mails.mode）：same 同じ内容／each 個別／search エンジニア検索（v0.7.0）
     const MODES = ['same' => '同じ内容', 'each' => '個別', 'search' => 'エンジニア検索'];
-    const PLACEHOLDERS = ['{呼び名}', '{案件名}', '{単価}', '{開始}', '{場所}', '{働き方}', '{必須}', '{合う点}', '{送り主}'];
+    const PLACEHOLDERS = ['{呼び名}', '{案件名}', '{単価}', '{開始}', '{場所}', '{働き方}', '{必須}', '{合う点}', '{送り主}', '{案件ID}'];
 
     // 誰が案内できるか：管理者と、案件を持ち込んだ SES
     public static function canSend($u, $c): bool
@@ -60,7 +60,7 @@ class CaseMail
 
     public static function defaultBody(): string
     {
-        return "{呼び名} さん\n\nお疲れさまです。{送り主}です。\nあなたに合いそうな案件が届いたので、ご案内します。\n\n■案件：{案件名}\n■単価：{単価}\n■開始：{開始}\n■場所・働き方：{場所}／{働き方}\n■必須：{必須}\n■あなたに合う点：{合う点}\n\nご興味があれば、このメールに返信してください（条件で気になる点があれば、それも一緒に）。\n見送る場合も、理由をひとこと返信いただけると、次のご案内の参考にします。";
+        return "{呼び名} さん\n\nお疲れさまです。{送り主}です。\nあなたに合いそうな案件が届いたので、ご案内します。\n\n■案件：{案件名}\n■案件 ID：{案件ID}\n■単価：{単価}\n■開始：{開始}\n■場所・働き方：{場所}／{働き方}\n■必須：{必須}\n■あなたに合う点：{合う点}\n\nご興味があれば、このメールに返信してください（条件で気になる点があれば、それも一緒に）。\n見送る場合も、理由をひとこと返信いただけると、次のご案内の参考にします。";
     }
 
     public static function render(string $tpl, object $c, object $e, array $score, bool $own, string $from): string
@@ -68,7 +68,7 @@ class CaseMail
         return strtr($tpl, [
             '{呼び名}' => self::callName($e, $own), '{案件名}' => $c->title, '{単価}' => $c->price ? man($c->price) : '相談',
             '{開始}' => $c->start_date ? fmt_date($c->start_date) : '相談', '{場所}' => $c->location ?: '—', '{働き方}' => lbl('workStyle', $c->work_style),
-            '{必須}' => implode('、', parse_list($c->required_skills)) ?: '—', '{合う点}' => implode('、', array_slice($score['reasons'], 0, 4)) ?: '—', '{送り主}' => $from,
+            '{必須}' => implode('、', parse_list($c->required_skills)) ?: '—', '{合う点}' => implode('、', array_slice($score['reasons'], 0, 4)) ?: '—', '{送り主}' => $from, '{案件ID}' => ($c->code ?? null) ?: '—',
         ]);
     }
 
@@ -115,8 +115,8 @@ class CaseMail
                     'missing' => implode(' / ', $score['missing']), 'sent_by' => $u->id, 'sent_at' => now_str()]);
             }
             if (!$own) {
-                if (Workflow::isDirect((int) $e->ses_id)) N::toSes($e->ses_id, "グループの案件が、直属のエンジニアに届きました：{$c->title}", "直属の{$e->name} さんに、グループの案件「{$c->title}」のご案内が届きました。", "/cases/{$c->id}", true, 'offer-ses');
-                else N::toSes($e->ses_id, "グループの案件が、貴社のエンジニアに届きました：{$c->title}", "{$e->name} さんに、グループの案件「{$c->title}」のご案内が届きました。", "/cases/{$c->id}", true, 'offer-ses');
+                if (Workflow::isDirect((int) $e->ses_id)) N::toSes($e->ses_id, "グループの案件が、直属のエンジニアに届きました：{$c->title}".Ids::tag($c->code), "直属の{$e->name} さんに、グループの案件「{$c->title}」のご案内が届きました。", "/cases/{$c->id}", true, 'offer-ses');
+                else N::toSes($e->ses_id, "グループの案件が、貴社のエンジニアに届きました：{$c->title}".Ids::tag($c->code), "{$e->name} さんに、グループの案件「{$c->title}」のご案内が届きました。", "/cases/{$c->id}", true, 'offer-ses');
             }
             $n++;
         }

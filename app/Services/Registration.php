@@ -148,10 +148,10 @@ class Registration
                 DB::table('ses_companies')->where('id', $pending->id)->update($company + ['agreed_at' => null]);
                 $sesId = (int) $pending->id;
             } else {
-                $sesId = (int) DB::table('ses_companies')->insertGetId($company + ['kind' => 'ses', 'created_at' => now_str()]);
+                $sesId = (int) DB::table('ses_companies')->insertGetId($company + ['kind' => 'ses', 'code' => Ids::next('S'), 'created_at' => now_str()]);
             }
             $uid = (int) DB::table('users')->insertGetId(['email' => $email] + W::nameCols(join_name($sei, $mei), $sei, $mei)
-                + ['role' => 'ses', 'ses_id' => $sesId, 'registered_by' => $actor->id ?? null, 'created_at' => now_str(), 'updated_at' => now_str()]);
+                + ['role' => 'ses', 'ses_id' => $sesId, 'registered_by' => $actor->id ?? null, 'created_at' => now_str(), 'updated_at' => now_str()] + W::roleCodes('ses'));
             DB::table('ses_companies')->where('id', $sesId)->update(['rep_user_id' => $uid]);
             return [$sesId, $uid];
         });
@@ -188,7 +188,7 @@ class Registration
             return ['ok' => true, 'user_id' => (int) $share->id, 'linked' => $share];
         }
         $uid = (int) DB::table('users')->insertGetId(['email' => $email] + W::nameCols(join_name($sei, $mei), $sei, $mei)
-            + ['role' => 'admin', 'company_name' => $company, 'registered_by' => $actor->id ?? null, 'created_at' => now_str(), 'updated_at' => now_str()]);
+            + ['role' => 'admin', 'company_name' => $company, 'registered_by' => $actor->id ?? null, 'created_at' => now_str(), 'updated_at' => now_str()] + W::roleCodes('admin'));
         self::sendLink(DB::table('users')->find($uid), $actor);
         N::audit($actor->id ?? null, 'reg-person', "管理者 #{$uid}"); // 氏名・アドレスは記録に書かない
         return ['ok' => true, 'user_id' => $uid, 'linked' => null];
@@ -462,7 +462,7 @@ class Registration
                 if ($linked) return;
             }
             $uid = (int) DB::table('users')->insertGetId(['email' => $email] + W::nameCols(join_name($sei, $mei), $sei, $mei)
-                + ['role' => $kind, 'ses_id' => $sesId, 'engineer_id' => $eid, 'registered_by' => $actor->id ?? null, 'created_at' => now_str(), 'updated_at' => now_str()]);
+                + ['role' => $kind, 'ses_id' => $sesId, 'engineer_id' => $eid, 'registered_by' => $actor->id ?? null, 'created_at' => now_str(), 'updated_at' => now_str()] + W::roleCodes((string) $kind));
         });
         if ($linked) return ['ok' => true, 'user_id' => (int) $linked->id, 'engineer_id' => $eid, 'linked' => $linked];
 
@@ -599,8 +599,8 @@ class Registration
         if ($why = self::emailInUse($email)) return ['type' => 'bad', 'msg' => $why];
         $uid = (int) DB::transaction(function () use ($sesId, $sei, $mei, $email, $actor) {
             $uid = (int) DB::table('users')->insertGetId(['email' => $email] + W::nameCols(join_name($sei, $mei), $sei, $mei)
-                + ['role' => 'ses', 'ses_id' => $sesId, 'registered_by' => $actor->id ?? null, 'created_at' => now_str(), 'updated_at' => now_str()]);
-            DB::table('ses_companies')->where('id', $sesId)->update(['next_rep_user_id' => $uid, 'updated_at' => now_str()]);
+                + ['role' => 'ses', 'ses_id' => $sesId, 'registered_by' => $actor->id ?? null, 'created_at' => now_str(), 'updated_at' => now_str()] + W::roleCodes('ses'));
+            DB::table('ses_companies')->where('id', $sesId)->update(['next_rep_user_id' => $uid,'updated_at' => now_str()]);
             return $uid;
         });
         self::sendLink(DB::table('users')->find($uid), $actor); // 次の SESなので、SES の本登録の画面になる

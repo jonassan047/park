@@ -15,6 +15,7 @@
 @if(!$isRepRow && $state !== '退会済')<x-post :action="$base.'/delete'" label="退会" cls="danger small" :fields="$back" :confirm="$u->name.' さんを退会済にします。ログインできなくなり、元に戻せません（記録は残ります）。よろしいですか？'" />@endif
 </x-slot:actions>
 <dl class="dl">
+<dt>ID</dt><dd><x-code :v="$u->staff_code" /></dd>
 <dt>状態</dt><dd>{{ $state }}@if((int) $u->id === (int) $s->rep_user_id)（SES）@elseif((int) $u->id === (int) $s->next_rep_user_id)（次の SES）@endif</dd>
 <dt>SES</dt><dd>{{ $s->name }}</dd>
 <dt>氏名</dt><dd>{{ $u->name }}</dd>

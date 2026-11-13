@@ -67,6 +67,7 @@
   @elseif($u->role === 'ses')SES（{{ DB::table('ses_companies')->where('id', $u->ses_id)->value('name') }}）{{ \App\Support\Requirements::isRep($u) ? '' : 'のご担当者' }}としてログインしています
   @else エンジニアとしてログインしています
   @endif
+  <form method="get" action="{{ url('/find') }}" class="findbar"><input type="text" name="code" placeholder="ID で探す（例：C-12）" aria-label="ID で探す" maxlength="30"><button type="submit">探す</button></form>
   @if($dual)
     @if($dualBoth)<span class="muted">（{{ $u->role === 'eg' ? $otherName[base_role()] : 'エンジニア' }}も兼任。立場を変えるときは、ログアウトして入り直してください）</span>@endif
     @if($otherUnread)<a href="{{ url('/notifications') }}">{{ $otherName[$u->role === 'eg' ? base_role() : 'eg'] }}あてのお知らせが {{ $otherUnread }} 件あります</a>@endif

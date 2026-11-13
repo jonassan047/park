@@ -5,7 +5,7 @@
 @if($u->role === 'admin' && $inv->status === 'draft')<x-post :action="'/admin/invoices/'.$inv->id.'/issue'" label="発行して SES に知らせる" cls="small" />@endif
 @if($u->role === 'admin' && $inv->status === 'issued')<x-post :action="'/admin/invoices/'.$inv->id.'/paid'" label="入金を記録" cls="small" />@endif
 {{ badge('invoiceStatus', $inv->status) }}</div>
-<article class="sheet invoice"><header><h1>ご請求書</h1><div>{{ $inv->period }} 分　発行日 {{ $inv->issued_at ? fmt_date($inv->issued_at) : today_str() }}</div></header>
+<article class="sheet invoice"><header><h1>ご請求書</h1><div>請求書番号 @if($inv->code){{ $inv->code }}@else<span class="muted">（発行時に付けます）</span>@endif　{{ $inv->period }} 分　発行日 {{ $inv->issued_at ? fmt_date($inv->issued_at) : today_str() }}</div></header>
 <p class="to">{{ $inv->ses_name }} 御中</p><p>下記のとおりご請求申し上げます。</p>
 <p class="total">ご請求金額　{{ yen($inv->total) }}（税込）</p>
 <table class="grid"><thead><tr><th>内容</th><th>基準額</th><th>率</th><th>金額</th></tr></thead><tbody>

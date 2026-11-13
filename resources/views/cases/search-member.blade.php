@@ -5,7 +5,7 @@
 <x-card :title="$row['name']">
 <x-slot:actions><a class="btn ghost small" href="{{ url('/searches/'.$s->id) }}">一覧に戻る</a></x-slot:actions>
 <p>案件：<a href="{{ url('/cases/'.$c->id) }}">{{ $c->title }}</a></p>
-<p class="muted">{{ lbl('engStatus', $e->status) }}・{{ $row['score'] }}点@if($row['own'] || $u->role === 'admin')　<a href="{{ url('/engineers/'.$e->id) }}">エンジニアの画面を開く</a>@endif</p>
+<p class="muted">{{ lbl('engStatus', $e->status) }}・{{ $row['score'] }}点@if($row['own'] || $u->role === 'admin')　<x-code :v="$e->code" />　<a href="{{ url('/engineers/'.$e->id) }}">エンジニアの画面を開く</a>@endif</p>
 @if($row['sent'] !== null)<p class="note">この案件の案内は送信済みです。</p>@endif
 @foreach(['req' => '必須', 'pref' => '尚可'] as $side => $label)
 <h3>{{ $label }}　{{ $side === 'req' ? $j['h'].'/'.$j['n'] : $j['k'].'/'.$j['m'] }}</h3>

@@ -122,7 +122,7 @@ class EngineerController extends Controller
             'skills' => SkillChecks::lines($id),
             'projects' => DB::table('engineer_projects')->where('engineer_id', $id)->orderByDesc('period_from')->get(),
             'check' => Qa::sheetCheck($id),
-            'apps' => DB::table('applications as a')->join('cases as c', 'c.id', '=', 'a.case_id')->where('a.engineer_id', $id)->select('a.*', 'c.title')->orderByDesc('a.id')->get(),
+            'apps' => DB::table('applications as a')->join('cases as c', 'c.id', '=', 'a.case_id')->where('a.engineer_id', $id)->select('a.*', 'c.title', 'c.code as case_code')->orderByDesc('a.id')->get(),
             // ログインの欄：兼任の人も engineer_id で探す（role は問わない）。本人の行（role=eg）があればそれを優先
             'eu' => DB::table('users')->where('engineer_id', $id)->orderByRaw("case when role = 'eg' then 0 else 1 end")->first(),
             // 停止の確認の文の材料：稼働中の契約の有無と、選考中の応募の数

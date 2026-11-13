@@ -15,6 +15,7 @@
 <a class="btn small" href="{{ url('/engineers/'.$e->id.'/edit') }}">編集</a>
 </x-slot:actions>
 <dl class="dl">
+<dt>ID</dt><dd><x-code :v="$e->code" /></dd>
 <dt>氏名</dt><dd>{{ $e->name }} <span class="muted">{{ $e->kana }}（{{ $e->initials ?: '—' }}）</span></dd>
 <dt>所属 SES</dt><dd>{{ $e->ses_name }}</dd><dt>状態</dt><dd>{{ badge('engStatus', $e->status) }}@if($e->suspended_at) <span class="badge mute">停止中</span>@endif</dd>
 <dt>年齢</dt><dd>{{ age_text($e->birth_year) ?: '—' }}</dd><dt>最寄り駅</dt><dd>{{ trim($e->nearest_line.' '.$e->nearest_station) ?: '—' }}{{ $e->walk_minutes ? '（徒歩'.$e->walk_minutes.'分）' : '' }}</dd>
@@ -90,8 +91,8 @@
 <p><a class="btn" href="{{ url('/engineers/'.$e->id.'/sheet') }}">スキルシートを見る</a> <a class="btn ghost" href="{{ url('/engineers/'.$e->id.'/sheet?anon=1') }}">名前を伏せた版</a></p>
 @if($u->role !== 'ses')<p><a href="{{ url('/engineers/'.$e->id.'/messages') }}">管理者とのやり取り（スキルシートの相談）</a></p>@endif
 </x-card>
-<x-card title="応募・選考"><x-table :head="['案件', '状態', '']" :count="$apps->count()">
-@foreach($apps as $a)<tr><td>{{ $a->title }}</td><td>{{ badge('appStatus', $a->status) }}</td><td><a class="btn small" href="{{ url('/applications/'.$a->id) }}">詳細</a></td></tr>@endforeach
+<x-card title="応募・選考"><x-table :head="['ID', '案件', '状態', '']" :count="$apps->count()">
+@foreach($apps as $a)<tr><td><x-code :v="$a->code" /></td><td>{{ $a->title }} <x-code :v="$a->case_code" /></td><td>{{ badge('appStatus', $a->status) }}</td><td><a class="btn small" href="{{ url('/applications/'.$a->id) }}">詳細</a></td></tr>@endforeach
 </x-table></x-card>
 </div></div>
 @endsection

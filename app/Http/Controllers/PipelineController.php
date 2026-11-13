@@ -125,7 +125,7 @@ class PipelineController extends Controller
     private function contractRow(Request $r, int $id)
     {
         $k = DB::table('contracts as k')->join('cases as c', 'c.id', '=', 'k.case_id')->join('engineers as e', 'e.id', '=', 'k.engineer_id')
-            ->join('ses_companies as s', 's.id', '=', 'k.ses_id')->where('k.id', $id)->select('k.*', 'c.title', 'e.name as eg_name', 's.name as ses_name')->first();
+            ->join('ses_companies as s', 's.id', '=', 'k.ses_id')->where('k.id', $id)->select('k.*', 'c.title', 'c.code as case_code', 'e.name as eg_name', 'e.code as eg_code', 'e.ses_id as eg_ses_id', 's.name as ses_name')->first();
         abort_unless($k, 404);
         abort_unless(Perms::app($r->user(), $k), 403);
         return $k;
@@ -158,7 +158,7 @@ class PipelineController extends Controller
         $mood = int_or_null($r->input('mood'));
         DB::table('follow_ups')->insert(['contract_id' => $id, 'at' => now_str(), 'mood' => $mood, 'troubles' => str_in($r->input('troubles')), 'note' => str_in($r->input('note')), 'by_user' => $r->user()->id]);
         if (($mood !== null && $mood <= 2) || str_in($r->input('troubles'))) {
-            N::toAdmins('フォロー：困りごとがあります', "{$k->eg_name}（{$k->title}）：".(str_in($r->input('troubles')) ?? '調子が良くない'), "/contracts/$id", true, 'followup');
+            N::toAdmins('フォロー：困りごとがあります'.\App\Services\Ids::tag($k->code),"{$k->eg_name}（{$k->title}）：".(str_in($r->input('troubles')) ?? '調子が良くない'), "/contracts/$id", true, 'followup');
         }
         return $this->go("/contracts/$id", '記録しました。');
     }

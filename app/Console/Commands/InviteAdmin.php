@@ -38,7 +38,7 @@ class InviteAdmin extends Command
             DB::table('users')->where('id', $id)->update(Workflow::nameCols(join_name($sei, $mei), $sei, $mei) + ($company !== null ? ['company_name' => $company] : []) + ['updated_at' => now_str()]);
         } else {
             $id = (int) DB::table('users')->insertGetId(['email' => $email] + Workflow::nameCols(join_name($sei, $mei), $sei, $mei)
-                + ['role' => 'admin', 'company_name' => $company, 'created_at' => now_str(), 'updated_at' => now_str()]);
+                + ['role' => 'admin', 'company_name' => $company, 'created_at' => now_str(), 'updated_at' => now_str()] + Workflow::roleCodes('admin'));
         }
         $token = Registration::issueToken($id);
         DB::table('users')->where('id', $id)->update(['reg_declined_at' => null]);

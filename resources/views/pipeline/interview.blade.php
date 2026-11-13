@@ -3,7 +3,7 @@
 @section('content')
 <div class="cols"><div>
 <x-card title="面談"><dl class="dl">
-<dt>案件</dt><dd><a href="{{ url('/cases/'.$a->case_id) }}">{{ $a->title }}</a></dd><dt>エンジニア</dt><dd>{{ $a->eg_name }}</dd>
+<dt>応募 ID</dt><dd><x-code :v="$a->code" /></dd><dt>案件</dt><dd><a href="{{ url('/cases/'.$a->case_id) }}">{{ $a->title }}</a> <x-code :v="$a->case_code" /></dd><dt>エンジニア</dt><dd>{{ $a->eg_name }} <x-code :v="($u->role !== 'ses' || (int) $a->eg_ses_id === (int) $u->ses_id) ? $a->eg_code : null" /></dd>
 <dt>日時</dt><dd>{{ fmt_dt($iv->scheduled_at) }}</dd><dt>場所</dt><dd>{{ $iv->place ?: '—' }}</dd>
 @if($iv->request_note)<dt>依頼の内容</dt><dd>{!! nl2br(e($iv->request_note)) !!}</dd>@endif
 <dt>結果</dt><dd>{{ badge('ivResult', $iv->result) }}</dd><dt>感想・フィードバック</dt><dd>{!! nl2br(e($iv->feedback)) ?: '—' !!}</dd>

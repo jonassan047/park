@@ -84,7 +84,7 @@ class SesController extends Controller
     public function applications(Request $r)
     {
         $list = DB::table('applications as a')->join('cases as c', 'c.id', '=', 'a.case_id')->join('engineers as e', 'e.id', '=', 'a.engineer_id')
-            ->where('a.ses_id', $r->user()->ses_id)->select('a.*', 'c.title', 'e.name as eg_name')->orderByDesc('a.updated_at')->get();
+            ->where('a.ses_id', $r->user()->ses_id)->select('a.*', 'c.title', 'c.code as case_code', 'e.name as eg_name')->orderByDesc('a.updated_at')->get();
         return view('ses.applications', ['list' => $list, 'funnel' => AdminController::funnel($r->user()->ses_id)]);
     }
 
