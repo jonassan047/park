@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\Ids;
 use App\Services\Notifier as N;
 use App\Services\Workflow as W;
 use Illuminate\Http\Request;
@@ -23,7 +24,7 @@ class ProviderController extends Controller
     {
         $in = $this->input($r);
         if (isset($in['bad'])) return back()->withInput()->with('flash', ['msg' => $in['bad'], 'type' => 'bad']);
-        $id = DB::table('providers')->insertGetId($in['ok'] + ['created_at' => now_str(), 'updated_at' => now_str()]);
+        $id = DB::table('providers')->insertGetId($in['ok'] + ['code' => Ids::next('PV'), 'created_at' => now_str(), 'updated_at' => now_str()]);
         N::audit($r->user()->id, 'provider-add', $in['ok']['name']);
         return $this->go("/admin/providers/$id", 'プロバイダーを登録しました。');
     }

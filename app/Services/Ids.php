@@ -19,10 +19,11 @@ class Ids
         'AP' => ['applications', 'code'],        // 応募
         'CT' => ['contracts', 'code'],           // 契約
         'IV' => ['invoices', 'code'],            // 請求書（発行のときに付ける）
+        'PV' => ['providers', 'code'],           // プロバイダー
     ];
 
     // 種類 => 画面に出す接頭辞（アルファベット2文字。v0.9.1）。数え表 id_counters の kind は、種類の文字のまま
-    const PREFIX = ['A' => 'AD', 'T' => 'ST', 'S' => 'SE', 'E' => 'EG', 'C' => 'CA', 'AP' => 'AP', 'CT' => 'CT', 'IV' => 'IV'];
+    const PREFIX = ['A' => 'AD', 'T' => 'ST', 'S' => 'SE', 'E' => 'EG', 'C' => 'CA', 'AP' => 'AP', 'CT' => 'CT', 'IV' => 'IV', 'PV' => 'PV'];
 
     const DIGITS = 6;
 
@@ -81,7 +82,7 @@ class Ids
         $s = str_replace(['－', '−', '‐', '―', 'ー', '–', '—'], '-', $s);
         $s = strtoupper(preg_replace('/\s+/u', '', $s));
         // 新しい接頭辞（AD・ST・SE・EG・CA・AP・CT・IV）と、v0.9.0 の旧い1文字（A・T・S・E・C）の両方を受ける（送信済みメールに旧形式が残るため）
-        if (!preg_match('/^(AP|AD|CA|CT|IV|SE|ST|EG|A|C|E|S|T)-?(\d{1,12})$/', $s, $m)) return null;
+        if (!preg_match('/^(AP|AD|CA|CT|IV|SE|ST|EG|PV|A|C|E|S|T)-?(\d{1,12})$/', $s, $m)) return null;
         $n = (int) ltrim($m[2], '0');
         if ($n < 1) return null;
         return self::format(self::kindOfPrefix($m[1]), $n);
@@ -108,8 +109,15 @@ class Ids
     public static function missingCounts(): array
     {
         $out = [];
-        foreach (array_keys(self::KINDS) as $kind) $out[$kind] = self::missingQuery($kind)->count();
+        foreach (array_keys(self::KINDS) as $kind) $out[$kind] = self::ready($kind) ? self::missingQuery($kind)->count() : 0;
         return $out;
+    }
+
+    // その種類の表と列が、もうあるか（古い migration を新しい種類より先に流すとき用）
+    private static function ready(string $kind): bool
+    {
+        [$table, $col] = self::KINDS[$kind];
+        return \Illuminate\Support\Facades\Schema::hasColumn($table, $col);
     }
 
     // 数え表を「今の値と、付いている最大の番号の大きいほう」にそろえる
@@ -130,6 +138,7 @@ class Ids
         $out = [];
         foreach (array_keys(self::KINDS) as $kind) {
             [$table, $col] = self::KINDS[$kind];
+            if (!self::ready($kind)) { $out[$kind] = 0; continue; } // 表・列がまだ無い（あとの migration で作る）種類は飛ばす
             $ids = self::missingQuery($kind)->pluck('id');
             $out[$kind] = $ids->count();
             if (!$apply) continue;

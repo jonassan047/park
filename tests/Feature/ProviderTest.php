@@ -40,6 +40,12 @@ class ProviderTest extends TestCase
         $p = DB::table('providers')->first();
         $this->assertSame('prov1@example.test', $p->email);
         $this->assertSame('123-4567', $p->postal_code);
+        $this->assertSame('PV-000001', $p->code);
+        $this->as('admin@park.example')->post('/admin/providers', $this->in(['email' => 'prov2@example.test']));
+        $this->assertSame('PV-000002', DB::table('providers')->orderByDesc('id')->value('code'));
+        DB::table('providers')->where('code', 'PV-000002')->delete();
+        $this->as('admin@park.example')->get('/find?code=pv1')->assertRedirect(url('/admin/providers/'.$p->id));
+        $this->as('ses1@park.example')->get('/find?code=PV-000001')->assertRedirect(); // 開けない（探しても見つからない）
         $this->as('admin@park.example')->get('/admin/providers')->assertSee('架空プロバイダー株式会社');
         $this->as('admin@park.example')->get("/admin/providers/{$p->id}")->assertOk();
         $this->as('admin@park.example')->get("/admin/providers/{$p->id}/edit")->assertOk();

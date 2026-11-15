@@ -113,7 +113,7 @@ class V090DisplayIdTest extends TestCase
         $this->assertSame('CA-1234567', Ids::format('C', 1234567));
         $this->assertSame('AP-000005', Ids::format('AP', 5));
         // 接頭辞は、アルファベット2文字（v0.9.1）
-        $this->assertSame(['AD', 'ST', 'SE', 'EG', 'CA', 'AP', 'CT', 'IV'], array_values(Ids::PREFIX));
+        $this->assertSame(['AD', 'ST', 'SE', 'EG', 'CA', 'AP', 'CT', 'IV', 'PV'], array_values(Ids::PREFIX));
     }
 
     // T3：入力のゆれ（全角・小文字・前後の空白・ゼロ埋めやハイフンの省略）
@@ -226,7 +226,7 @@ class V090DisplayIdTest extends TestCase
         $m->up();
         $m->up();
         $this->assertSame($before, DB::table('engineers')->orderBy('id')->pluck('code')->all());
-        $this->assertSame(8, DB::table('id_counters')->count());
+        $this->assertSame(9, DB::table('id_counters')->count()); // 種類は9つ（PV を足した）
         // 数え表が付いている最大の番号より小さいときは、大きいほうにそろえる
         DB::table('id_counters')->where('kind', 'E')->update(['last_no' => 0]);
         Ids::fillMissing(true);
