@@ -8,35 +8,38 @@ use App\Services\Workflow as W;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
-// プロバイダー（案件を SES に提供してくれる上位者）：管理者だけの登録・一覧・編集・削除。エンジニア・SES には出さない
+// プロバイダー（案件を SES に提供してくれる上位者）：管理者は登録・一覧・編集・削除。SES は一覧・詳細・登録だけ（編集・削除・メモは管理者だけ）。エンジニアには出さない
 class ProviderController extends Controller
 {
-    public function index()
+    private function base(Request $r): string { return $r->user()->role === 'admin' ? '/admin/providers' : '/ses/providers'; }
+
+    public function index(Request $r)
     {
         $list = DB::table('providers')->orderBy('name')->orderBy('id')->get();
         [$list, $pager] = page_slice($list);
-        return view('admin.providers-index', compact('list', 'pager'));
+        return view('admin.providers-index', ['list' => $list, 'pager' => $pager, 'base' => $this->base($r)]);
     }
 
-    public function create() { return view('admin.providers-form', ['p' => null]); }
+    public function create(Request $r) { return view('admin.providers-form', ['p' => null, 'base' => $this->base($r)]); }
 
     public function store(Request $r)
     {
         $in = $this->input($r);
         if (isset($in['bad'])) return back()->withInput()->with('flash', ['msg' => $in['bad'], 'type' => 'bad']);
+        if ($r->user()->role !== 'admin') $in['ok']['notes'] = null; // メモは管理者だけ
         $id = DB::table('providers')->insertGetId($in['ok'] + ['code' => Ids::next('PV'), 'created_at' => now_str(), 'updated_at' => now_str()]);
         N::audit($r->user()->id, 'provider-add', $in['ok']['name']);
-        return $this->go("/admin/providers/$id", 'プロバイダーを登録しました。');
+        return $this->go($this->base($r)."/$id", 'プロバイダーを登録しました。'.($r->user()->role === 'admin' ? '' : ' 案件の登録で選べます。'));
     }
 
-    public function show(int $id)
+    public function show(Request $r, int $id)
     {
-        return view('admin.providers-show', ['p' => $this->find($id)]);
+        return view('admin.providers-show', ['p' => $this->find($id), 'base' => $this->base($r)]);
     }
 
-    public function edit(int $id)
+    public function edit(Request $r, int $id)
     {
-        return view('admin.providers-form', ['p' => $this->find($id)]);
+        return view('admin.providers-form', ['p' => $this->find($id), 'base' => $this->base($r)]);
     }
 
     public function update(Request $r, int $id)

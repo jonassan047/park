@@ -10,6 +10,20 @@ abstract class TestCase extends BaseTestCase
     // テストは見本データで動かす（各テストの $seed = true で入る）
     protected $seeder = \Database\Seeders\SampleSeeder::class;
 
+    // 案件の登録・編集（POST /cases, /cases/{id}）は、プロバイダーの選択が必須（v0.11.0）。
+    // 既存のテストは案件の中身を確かめるのが目的なので、指定が無ければ見本のプロバイダーを足して送る。必須の確かめは $autoProvider = false で行う
+    protected bool $autoProvider = true;
+
+    public function post($uri, array $data = [], array $headers = [])
+    {
+        if ($this->autoProvider && is_string($uri) && preg_match('#^/cases(/\d+)?$#', parse_url($uri, PHP_URL_PATH) ?? '') && !array_key_exists('provider_id', $data)) {
+            $pid = DB::table('providers')->where('email', 'test-provider@example.test')->value('id')
+                ?: DB::table('providers')->insertGetId(['name' => 'テスト提供元', 'sei' => 'テスト', 'email' => 'test-provider@example.test', 'created_at' => now_str(), 'updated_at' => now_str()]);
+            $data['provider_id'] = $pid;
+        }
+        return parent::post($uri, $data, $headers);
+    }
+
     // テストで作った人（W::createUser など）が、足りない項目の画面で止まらないよう、必須項目と同意を入れて本登録済みの形にする。
     // $userId は users の id。SES の人は担当者として入れる（会社の項目は触らない）
     protected function completeProfile(int $userId, array $extra = []): void

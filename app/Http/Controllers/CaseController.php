@@ -26,9 +26,25 @@ class CaseController extends Controller
         return $r->user()->role === 'admin' ? DB::table('ses_companies')->where('kind', 'ses')->where('status', 'active')->orderBy('name')->pluck('name', 'id')->all() : [];
     }
 
+    // プロバイダーの選び肢（ID 企業名）。案件の登録・編集の先頭で必須
+    private function providerList(): array
+    {
+        $o = [];
+        foreach (DB::table('providers')->orderBy('name')->orderBy('id')->get(['id', 'code', 'name']) as $p) $o[$p->id] = trim(($p->code ? $p->code.' ' : '').$p->name);
+        return $o;
+    }
+
+    // 選ばれたプロバイダーが実在するか。問題があれば文を返す
+    private function providerError(Request $r): ?string
+    {
+        $pid = int_or_null($r->input('provider_id'));
+        if (!$pid) return 'プロバイダーを選んでください。';
+        return DB::table('providers')->where('id', $pid)->exists() ? null : '選んだプロバイダーが見つかりません。選び直してください。';
+    }
+
     public function create(Request $r)
     {
-        return view('cases.form', ['c' => (object) [], 'action' => '/cases', 'submit' => '登録する', 'sesList' => $this->sesList($r), 'import' => true]);
+        return view('cases.form', ['c' => (object) [], 'action' => '/cases', 'submit' => '登録する', 'sesList' => $this->sesList($r), 'providers' => $this->providerList(), 'import' => true]);
     }
 
     public function import(Request $r)
@@ -41,11 +57,12 @@ class CaseController extends Controller
         session()->now('flash', ['msg' => '取り込みました。内容を確かめて、足りないところを直してから登録してください。'.($found ? '本文から見つかった技術：'.implode('、', $found).'（必須に無いものは尚可に入れました）。' : '')
             .($expText ? '本文の必須・尚可から見つかった業務：'.implode('、', $expText).'。' : '')
             .(CaseAi::blocked((object) ['raw_text' => $r->input('raw_text')]) === null ? '登録すると、手元の AI が必須・尚可を読み直します（1件 1分ほど）。結果は案件の画面に出ます。' : ''), 'type' => 'ok']);
-        return view('cases.form', ['c' => $c, 'action' => '/cases', 'submit' => '登録する', 'sesList' => $this->sesList($r), 'import' => false]);
+        return view('cases.form', ['c' => $c, 'action' => '/cases', 'submit' => '登録する', 'sesList' => $this->sesList($r), 'providers' => $this->providerList(), 'import' => false]);
     }
 
     public function store(Request $r)
     {
+        if ($e = $this->providerError($r)) return back()->withInput()->with('flash', ['msg' => $e, 'type' => 'bad']);
         if (!str_in($r->input('title'))) return $this->go('/cases/new', '案件名を入れてください。', 'bad');
         $id = W::saveCase($r->all(), $r->user());
         $queued = CaseAi::queue($id, $r->user(), true); // 本文があれば、手元の AI に必須・尚可を読み直してもらう（入れられなくても登録は成功）
@@ -59,13 +76,14 @@ class CaseController extends Controller
     {
         $c = $this->load($id);
         abort_unless(Perms::caseEdit($r->user(), $c), 403);
-        return view('cases.form', ['c' => $c, 'action' => "/cases/$id", 'submit' => '保存する', 'sesList' => $this->sesList($r), 'import' => false]);
+        return view('cases.form', ['c' => $c, 'action' => "/cases/$id", 'submit' => '保存する', 'sesList' => $this->sesList($r), 'providers' => $this->providerList(), 'import' => false]);
     }
 
     public function update(Request $r, int $id)
     {
         $c = $this->load($id);
         abort_unless(Perms::caseEdit($r->user(), $c), 403);
+        if ($e = $this->providerError($r)) return back()->withInput()->with('flash', ['msg' => $e, 'type' => 'bad']);
         W::saveCase($r->all(), $r->user(), $id);
         $new = (string) DB::table('cases')->where('id', $id)->value('raw_text');
         if ($new !== (string) $c->raw_text) CaseAi::queue($id, $r->user(), true); // 本文を変えたときだけ、読み直しを入れ直す

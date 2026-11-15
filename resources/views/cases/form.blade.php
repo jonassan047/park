@@ -8,6 +8,7 @@
 @endif
 <x-card title="案件票"><form method="post" action="{{ url($action) }}">@csrf
 <div class="grid2">
+<x-field label="プロバイダー" name="provider_id" type="select" :options="$providers" blank="（選んでください）" :value="$c->provider_id ?? null" required cls="span2" hint="案件を提供してくれた上位者です。見つからないときは、先に「プロバイダー」から登録してください。" />
 <x-field label="案件名" name="title" :value="$c->title ?? null" required cls="span2" />
 <x-field label="元請け（伏せ字でよい）" name="client_label" :value="$c->client_label ?? null" placeholder="例：SH-A 社" hint="元請けの名前は外に出しません。伏せ字で構いません。" />
 @if($sesList)<x-field label="案件を持ち込んだ SES" name="source_ses_id" type="select" :options="$sesList" blank="（管理者が直接）" :value="$c->source_ses_id ?? null" />@else<div></div>@endif

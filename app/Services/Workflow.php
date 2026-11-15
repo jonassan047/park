@@ -800,6 +800,7 @@ class Workflow
             elseif (in_array($f, ['price', 'min_years'])) $v[$f] = num_or_null($d[$f] ?? null);
             else $v[$f] = str_in($d[$f] ?? '');
         }
+        $v['provider_id'] = int_or_null($d['provider_id'] ?? null); // 画面側で必須を確かめる（見本・AI など画面を通らない保存は空のままでよい）
         $v['work_style'] = $v['work_style'] ?: 'any';
         $v['status'] = $v['status'] ?: 'open';
         $v = self::normalizeCaseSkills($v, $v['title']);

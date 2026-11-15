@@ -15,6 +15,8 @@ class ProviderTest extends TestCase
 
     protected $seed = true;
 
+    protected bool $autoProvider = false; // 必須の確かめをするので、勝手に足さない
+
     private function as(string $email): static
     {
         $this->flushSession();
@@ -66,17 +68,44 @@ class ProviderTest extends TestCase
         $this->as('admin@park.example')->post('/admin/providers', ['name' => '最小', 'sei' => '最小', 'email' => 'min@example.test'])->assertSessionHas('flash.type', 'ok');
     }
 
-    public function test_ses_and_engineer_cannot_see_it(): void
+    public function test_ses_can_view_and_register_but_not_edit_or_delete(): void
     {
         $id = DB::table('providers')->insertGetId(['name' => 'P', 'sei' => 'P', 'email' => 'p@example.test', 'created_at' => now(), 'updated_at' => now()]);
-        foreach (['ses1@park.example', 'eg1@park.example'] as $email) {
-            $this->as($email)->get('/admin/providers')->assertForbidden();
-            $this->as($email)->get("/admin/providers/$id")->assertForbidden();
-            $this->as($email)->post('/admin/providers', $this->in())->assertForbidden();
-            $this->as($email)->post("/admin/providers/$id/delete")->assertForbidden();
-        }
-        $this->assertSame(1, DB::table('providers')->count());
+        $this->as('ses1@park.example')->get('/ses/providers')->assertOk()->assertSee('P');
+        $this->as('ses1@park.example')->get("/ses/providers/$id")->assertOk()->assertDontSee('メモ');
+        $this->as('ses1@park.example')->post('/ses/providers', $this->in(['notes' => '秘密のメモ']))->assertSessionHas('flash.type', 'ok');
+        $this->assertNull(DB::table('providers')->orderByDesc('id')->value('notes')); // メモは管理者だけ
+        $this->as('ses1@park.example')->get('/ses')->assertSee('プロバイダー');
+        // 管理者の画面・編集・削除は入れない
+        $this->as('ses1@park.example')->get('/admin/providers')->assertForbidden();
+        $this->as('ses1@park.example')->get("/admin/providers/$id/edit")->assertForbidden();
+        $this->as('ses1@park.example')->post("/admin/providers/$id/delete")->assertForbidden();
+        $this->assertSame(2, DB::table('providers')->count());
+    }
+
+    public function test_engineer_cannot_see_it(): void
+    {
+        $id = DB::table('providers')->insertGetId(['name' => 'P', 'sei' => 'P', 'email' => 'p@example.test', 'created_at' => now(), 'updated_at' => now()]);
+        $this->as('eg1@park.example')->get('/admin/providers')->assertForbidden();
+        $this->as('eg1@park.example')->get('/ses/providers')->assertForbidden();
+        $this->as('eg1@park.example')->post('/ses/providers', $this->in())->assertForbidden();
         $this->as('eg1@park.example')->get('/eg')->assertDontSee('プロバイダー');
-        $this->as('ses1@park.example')->get('/ses')->assertDontSee('プロバイダー');
+    }
+
+    public function test_case_form_requires_provider_on_create_and_edit(): void
+    {
+        $pid = DB::table('providers')->insertGetId(['name' => '提供元', 'sei' => 'P', 'email' => 'p@example.test', 'created_at' => now(), 'updated_at' => now()]);
+        foreach (['admin@park.example', 'ses1@park.example'] as $email) {
+            $this->as($email)->get('/cases/new')->assertOk()->assertSeeInOrder(['プロバイダー', '案件名']);
+            $this->as($email)->post('/cases', ['title' => '無しの案件'])->assertSessionHas('flash.type', 'bad');
+            $this->as($email)->post('/cases', ['title' => '無効の案件', 'provider_id' => '999999'])->assertSessionHas('flash.type', 'bad');
+        }
+        $this->assertSame(0, DB::table('cases')->where('title', 'like', '%の案件')->count());
+        $this->as('ses1@park.example')->post('/cases', ['title' => '提供元つき案件', 'provider_id' => $pid])->assertSessionHas('flash.type', 'ok');
+        $c = DB::table('cases')->where('title', '提供元つき案件')->first();
+        $this->assertSame($pid, (int) $c->provider_id);
+        // 編集でも必須
+        $this->as('ses1@park.example')->post("/cases/{$c->id}", ['title' => '提供元つき案件'])->assertSessionHas('flash.type', 'bad');
+        $this->as('ses1@park.example')->post("/cases/{$c->id}", ['title' => '改題', 'provider_id' => $pid])->assertSessionHas('flash.type', 'ok');
     }
 }

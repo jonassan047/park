@@ -251,6 +251,11 @@ Route::middleware('role:admin')->group(function () {
 
 // ---------- SES ----------
 Route::middleware('role:ses')->prefix('ses')->group(function () {
+    // プロバイダー：見る・登録するだけ（編集・削除は管理者）
+    Route::get('/providers', [Prov::class, 'index']);
+    Route::get('/providers/new', [Prov::class, 'create']);
+    Route::post('/providers', [Prov::class, 'store']);
+    Route::get('/providers/{id}', [Prov::class, 'show'])->whereNumber('id');
     Route::get('/', [Ses::class, 'dashboard']);
     Route::get('/engineers', [Ses::class, 'engineers']);
     Route::get('/cases', [Ses::class, 'cases']);

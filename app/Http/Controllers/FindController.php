@@ -48,8 +48,8 @@ class FindController extends Controller
                 return Perms::caseView($u, $row) ? "/cases/{$row->id}" : null;
             case 'AP':
                 return Perms::app($u, $row) ? "/applications/{$row->id}" : null;
-            case 'PV': // プロバイダーは管理者だけ
-                return $role === 'admin' ? "/admin/providers/{$row->id}" : null;
+            case 'PV': // プロバイダーは管理者と SES
+                return $role === 'admin' ? "/admin/providers/{$row->id}" : ($role === 'ses' ? "/ses/providers/{$row->id}" : null);
             case 'CT':
                 return Perms::app($u, $row) ? "/contracts/{$row->id}" : null;
             case 'IV': // 請求書は、管理者と自社の SES

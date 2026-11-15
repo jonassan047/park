@@ -3,7 +3,7 @@
     $nav = [
         'admin' => [['/admin', 'ダッシュボード'], ['/admin/admins', '管理者'], ['/admin/ses', 'SES'], ['/admin/engineers', 'エンジニア'], ['/admin/providers', 'プロバイダー'], ['/admin/cases', '案件'], ['/admin/applications', '応募・選考'],
             ['/admin/contracts', '契約'], ['/admin/invoices', '請求'], ['/threads', '案件のやり取り'], ['/admin/messages', 'EG とのやり取り'], ['/mails', '連絡メール'], ['/admin/mail', 'メール'], ['/admin/reports', '分析'], ['/admin/ai', 'AI'], ['/admin/settings', '設定'], ['/manual', '使い方']],
-        'ses' => [['/ses', 'ダッシュボード'], ['/ses/company', 'SES'], ['/ses/engineers', 'エンジニア'], ['/ses/cases', '案件'], ['/ses/applications', '応募・選考'], ['/ses/contracts', '契約'], ['/ses/invoices', '請求'], ['/threads', '案件のやり取り'], ['/mails', '連絡メール'], ['/manual', '使い方']],
+        'ses' => [['/ses', 'ダッシュボード'], ['/ses/company', 'SES'], ['/ses/engineers', 'エンジニア'], ['/ses/providers', 'プロバイダー'], ['/ses/cases', '案件'], ['/ses/applications', '応募・選考'], ['/ses/contracts', '契約'], ['/ses/invoices', '請求'], ['/threads', '案件のやり取り'], ['/mails', '連絡メール'], ['/manual', '使い方']],
         'eg' => [['/eg', 'ホーム'], ['/eg/offers', '届いた案件'], ['/eg/applications', '応募・面談'], ['/eg/profile', 'プロフィール'], ['/eg/sheet', 'スキルシート'], ['/eg/messages', '管理者とのやり取り'], ['/mails', '連絡メール'], ['/manual', '使い方']],
     ][$u->role ?? ''] ?? [];
     // 2要素認証が済むまでは、メニューを出さない
