@@ -90,13 +90,12 @@ class Requirements
         $isRep ??= self::isRep((object) array_merge((array) $u, ['role' => $role]));
         $kind = self::kind($role, $isRep);
         $out = [];
-        $company = $u->ses_id ? DB::table('ses_companies')->find($u->ses_id) : null;
+        // 会社は、SES・担当者の立場のときだけ読む（担当者を兼ねる管理者が、管理者の立場のときは見ない）
+        $company = $u->ses_id && $role === 'ses' ? DB::table('ses_companies')->find($u->ses_id) : null;
         $eng = $kind === 'eg' && $u->engineer_id ? DB::table('engineers')->find($u->engineer_id) : null;
         foreach (self::fields($role, $isRep) as $key => $def) {
             $out[$key] = match (true) {
                 $key === 'ses_name' => $company->name ?? null,
-                // 管理者の直属は会社ではないので、企業名を出さない（user_label と同じ）
-                $key === 'company_name' && $def['store'] === 'company' => ($company->kind ?? '') === 'direct' ? null : ($company->name ?? null),
                 $def['store'] === 'company' => $company->$key ?? null,
                 $def['store'] === 'engineer' => $eng->$key ?? null,
                 $kind === 'eg' && in_array($key, ['name_sei', 'name_mei', 'kana_sei', 'kana_mei'], true) => ($eng->$key ?? null) ?: ($u->$key ?? null),

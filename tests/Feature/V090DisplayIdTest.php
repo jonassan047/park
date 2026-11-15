@@ -355,7 +355,7 @@ class V090DisplayIdTest extends TestCase
         W::createUser('v090-real-admin@example.com', '実在 管理', 'admin', 'abcd1234');
         DB::table('users')->where('email', 'v090-real-admin@example.com')->update(['profile_completed_at' => now_str(), 'company_name' => '実在運営']);
         \App\Support\SkillCatalog::sync();
-        $code = Artisan::call('park:seed-dummy', ['--ses' => 5, '--staff' => 8, '--eg' => 12, '--direct' => 5, '--seed' => 1, '--yes' => true]);
+        $code = Artisan::call('park:seed-dummy', ['--ses' => 5, '--staff' => 8, '--eg' => 12, '--seed' => 1, '--yes' => true]);
         $this->assertSame(0, $code, Artisan::output());
         $this->assertSame(0, array_sum(Ids::missingCounts()));
         Artisan::call('park:status', ['--json' => true]);
@@ -431,15 +431,17 @@ class V090DisplayIdTest extends TestCase
         $this->get("/searches/$sid/members/".$this->engId(self::EG2))->assertOk()->assertDontSee($other);
     }
 
-    // 直属の S- を管理者が探すと、直属のエンジニアの一覧へ（SES の詳細は無い）。SES には開けない
-    public function test_find_direct_company(): void
+    // 会社の S- を管理者が探すと、SES の詳細へ。古い直属の行（kind=direct。消さずに残してある）は、詳細が無いので見つからない扱い（v0.11.0）
+    public function test_find_company_and_old_direct_row(): void
     {
-        $direct = W::directSesId();
-        $code = $this->code('ses_companies', $direct);
+        $ses = $this->sesId(self::SES1);
+        $code = $this->code('ses_companies', $ses);
         $this->assertMatchesRegularExpression('/^SE-\d{6}$/', (string) $code);
-        $this->as(self::ADMIN)->get('/find?code='.urlencode($code))->assertRedirect(url('/admin/engineers?ses=direct'));
-        $this->get('/admin/engineers?ses=direct')->assertOk();
-        $this->notFound(self::SES1, $code);
+        $this->as(self::ADMIN)->get('/find?code='.urlencode($code))->assertRedirect(url('/admin/ses/'.$ses));
+        $direct = (int) DB::table('ses_companies')->insertGetId(['name' => '古い直属', 'kind' => 'direct', 'status' => 'active', 'code' => Ids::next('S'),
+            'self_confirmed_at' => now_str(), 'joined_at' => today_str(), 'created_at' => now_str(), 'updated_at' => now_str()]);
+        $this->notFound(self::ADMIN, (string) $this->code('ses_companies', $direct));
+        $this->notFound(self::SES1, (string) $this->code('ses_companies', $direct));
     }
 
     // code が配列でも 500 にならない
@@ -604,7 +606,7 @@ class V090DisplayIdTest extends TestCase
     // T26：版
     public function test_t26_version(): void
     {
-        $this->assertSame('v0.10.1', config('park.version'));
-        $this->get('/login')->assertOk()->assertSee('v0.10.1');
+        $this->assertSame('v0.11.0', config('park.version'));
+        $this->get('/login')->assertOk()->assertSee('v0.11.0');
     }
 }

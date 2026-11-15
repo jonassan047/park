@@ -205,6 +205,9 @@ Route::middleware('role:admin')->group(function () {
         Route::post('/ses/{id}/resume', [Adm::class, 'sesResume']);
         Route::post('/ses/{id}/users', [Adm::class, 'sesUsers'])->middleware('throttle:20,1');
         Route::post('/ses/{id}/rep', [Adm::class, 'changeRep']);
+        // 管理者が、1つの会社の担当者を兼ねる・やめる（自分のことだけ。v0.11.0）
+        Route::post('/ses/{id}/staff-dual', [Adm::class, 'staffDual']);
+        Route::post('/ses/{id}/staff-dual/stop', [Adm::class, 'staffDualStop']);
         Route::get('/engineers', [Adm::class, 'engineers']);
         Route::post('/engineers/operator', [Adm::class, 'operator']);
         Route::get('/providers', [Prov::class, 'index']);

@@ -38,7 +38,7 @@ class PublicController extends Controller
         }
         $u = Auth::user();
         // 会社が使えない SES 担当者は断る。ただし、エンジニアを兼ねていてエンジニアが使えるなら断らない（選ぶ画面でエンジニアだけになる）
-        if ($u->role === 'ses' && (DB::table('ses_companies')->where('id', $u->ses_id)->value('status') !== 'active' || W::isDirect($u->ses_id))) {
+        if ($u->role === 'ses' && (DB::table('ses_companies')->where('id', $u->ses_id)->value('status') !== 'active')) {
             $row = DB::table('users')->find($u->id);
             if (!(W::isDual($row) && in_array('eg', W::usableRoles($row), true))) {
                 Auth::logout();

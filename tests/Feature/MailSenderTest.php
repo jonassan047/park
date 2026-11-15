@@ -100,9 +100,10 @@ class MailSenderTest extends TestCase
         $this->assertNotNull($s);
         $this->assertNull($s->from_name);
         $this->assertSame('PARK 管理者', $this->signature($s));
-        // 管理者が送る案内メール（まだ送っていない相手 = エンジニア 2）
-        $this->as('admin@park.example')->post("/cases/$cid/mail/preview", $tpl + ['engineer_id' => [2]])->assertOk()->assertSee('送り主：'.self::CO.' 管理者 太郎');
-        $this->post("/cases/$cid/mail/send", ['mode' => 'same', 'to' => [2 => ['send' => 1, 'subject' => '件名', 'body' => '送り主：'.self::CO.' 管理者 太郎']]])->assertRedirect();
+        // 管理者は案内メールを送れない（v0.11.0。画面の入口は 403）。差出人の決まり（処理）は今のまま確かめる（まだ送っていない相手 = エンジニア 2）
+        $this->as('admin@park.example')->post("/cases/$cid/mail/preview", $tpl + ['engineer_id' => [2]])->assertForbidden();
+        $this->post("/cases/$cid/mail/send", ['mode' => 'same', 'to' => [2 => ['send' => 1, 'subject' => '件名', 'body' => '送り主：'.self::CO.' 管理者 太郎']]])->assertForbidden();
+        \App\Services\CaseMail::send(User::where('email', 'admin@park.example')->first(), DB::table('cases')->find($cid), [2 => ['subject' => '件名', 'body' => '送り主：'.self::CO.' 管理者 太郎']], 'same');
         $m = $this->last('case-mail');
         $this->assertNotSame($s->id, $m->id);
         $this->assertSame(self::CO, $m->from_name);

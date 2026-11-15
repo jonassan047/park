@@ -248,7 +248,10 @@ class UiUnifyTest extends TestCase
     {
         // V1-3：SES の一覧に「管理者の直属」の行は出ない。今いる直属の人がいても同じ
         $this->admin()->get('/admin/ses')->assertOk()->assertDontSee('管理者の直属')->assertDontSee('ses=direct');
-        W::createEngineer(W::directSesId(), ['name' => '直属 一郎', 'email' => 'ui-direct@park.example'], User::where('email', 'admin@park.example')->first());
+        // 古い直属の行（kind=direct。消さずに残してある）があっても同じ
+        $direct = (int) DB::table('ses_companies')->insertGetId(['name' => '管理者の直属', 'kind' => 'direct', 'status' => 'active', 'code' => \App\Services\Ids::next('S'),
+            'self_confirmed_at' => now_str(), 'joined_at' => today_str(), 'created_at' => now_str(), 'updated_at' => now_str()]);
+        W::createEngineer($direct, ['name' => '直属 一郎', 'email' => 'ui-direct@park.example'], User::where('email', 'admin@park.example')->first());
         $before = $this->get('/admin')->viewData('counts')['ses'];
         $this->get('/admin/ses')->assertOk()->assertDontSee('管理者の直属')->assertDontSee('ses=direct');
         $this->assertSame($before, $this->get('/admin')->viewData('counts')['ses']);

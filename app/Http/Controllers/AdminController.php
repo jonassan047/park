@@ -50,7 +50,7 @@ class AdminController extends Controller
             $state = user_state($u); $until = null;
             if ($state === '仮登録') $until = date('n/j', strtotime($u->token_expires));
             $isAdmin = $u->role === 'admin';
-            $rows[] = ['role' => lbl('role', $u->role).(W::isDual($u) ? '（エンジニア兼任）' : ''), 'name' => $u->name, 'org' => $isAdmin ? $u->company_name : ($sesNames[$u->ses_id] ?? null),
+            $rows[] = ['role' => lbl('role', $u->role).($u->engineer_id && W::isDual($u) ? '（エンジニア兼任）' : '').($u->role === 'admin' && $u->ses_id ? '（SES 担当者兼任）' : ''), 'name' => $u->name, 'org' => $isAdmin ? $u->company_name : ($sesNames[$u->ses_id] ?? null),
                 'state' => $state, 'until' => $until, 'mail' => account_mail($u), 'last_login' => $u->last_login,
                 'resend' => is_provisional_state($state) ? $u->id : null, 'open' => $isAdmin ? null : $u->ses_id];
         }
@@ -134,7 +134,7 @@ class AdminController extends Controller
         return $this->go("/admin/ses/{$res['ses_id']}", '仮登録し、SES に仮登録のご案内を送りました。');
     }
 
-    // SES の画面で扱ってよい会社だけ返す（管理者の直属の入れ物は 404）
+    // SES の画面で扱ってよい会社（kind が ses で、参加中などの会社）だけ返す。それ以外の行は 404
     private function sesOrFail(int $id): object
     {
         $s = DB::table('ses_companies')->where('kind', 'ses')->where('id', $id)->first();
@@ -145,7 +145,10 @@ class AdminController extends Controller
     public function sesShow(int $id)
     {
         $s = $this->sesOrFail($id);
+        // 担当者の数え・SES の交代の候補は、role=ses の人だけ（担当者を兼ねる管理者は混ぜない。K8）
         $users = DB::table('users')->where('ses_id', $id)->where('role', 'ses')->get();
+        // この会社の担当者を兼ねている管理者（表に「管理者（兼任）」で出す。止めるボタンは出さない）
+        $dualAdmins = DB::table('users')->where('ses_id', $id)->where('role', 'admin')->orderBy('id')->get();
         // 会社が参加中なのに、使える担当者がいないとき注意を出す。止めている人がいれば「再開」、いなければ「登録」を勧める
         $usable = $users->where('active', 1)->count();
         $noUsable = $s->status === 'active' && $usable === 0 && $users->count() > 0 ? ($users->whereNull('left_at')->count() > 0 ? 'stopped' : 'left') : null;
@@ -159,7 +162,8 @@ class AdminController extends Controller
         return view('admin.ses-show', [
             's' => $s, 'repName' => Registration::repName($s)[0],
             'engs' => $engs, 'repCandidates' => $repCandidates,
-            'users' => $users, 'noUsable' => $noUsable,
+            'users' => $users, 'noUsable' => $noUsable, 'dualAdmins' => $dualAdmins,
+            'me' => DB::table('users')->find(auth()->id()),
             // 停止の確認の文に添える、稼働中の契約と選考中の応募（エンジニアごとに問い合わせず、まとめて取る）
             'working' => DB::table('contracts')->whereIn('engineer_id', $egIds)->where('status', 'active')->pluck('engineer_id')->flip(),
             'inSel' => DB::table('applications')->whereIn('engineer_id', $egIds)->whereIn('status', PipelineController::OPEN)->get(['engineer_id'])->groupBy('engineer_id')->map->count(),
@@ -303,6 +307,21 @@ class AdminController extends Controller
         return $this->go("/admin/ses/$id", '担当者を仮登録し、仮登録のご案内を送りました。');
     }
 
+    // 管理者が、この会社の担当者を兼ねる・やめる。できるのは自分のことだけ（送られた別の id は使わない）
+    public function staffDual(Request $r, int $id)
+    {
+        $res = W::startStaffDual($id, $r->user());
+        abort_unless($res, 404);
+        return $this->go("/admin/ses/$id", $res['msg'], $res['type']);
+    }
+
+    public function staffDualStop(Request $r, int $id)
+    {
+        $res = W::stopStaffDual($id, $r->user());
+        abort_unless($res, 404);
+        return $this->go("/admin/ses/$id", $res['msg'], $res['type']);
+    }
+
     // SES の交代：本登録済みの担当者を選ぶ（user_id）。担当者がいない会社は、次の SES を仮登録する（sei・mei・email）
     public function changeRep(Request $r, int $id)
     {
@@ -358,21 +377,17 @@ class AdminController extends Controller
     public function engineers(Request $r)
     {
         $q = trim((string) $r->query('q')); $st = (string) $r->query('status');
-        $list = DB::table('engineers as e')->join('ses_companies as s', 's.id', '=', 'e.ses_id')->select('e.*', 's.name as ses_name', 's.kind as ses_kind')
+        $list = DB::table('engineers as e')->join('ses_companies as s', 's.id', '=', 'e.ses_id')->select('e.*', 's.name as ses_name')
             ->selectSub(DB::table('engineer_projects')->whereColumn('engineer_id', 'e.id')->selectRaw('count(*)'), 'projs')->orderByDesc('e.updated_at')->get();
         $skills = \App\Services\SkillChecks::summaryMany($list->pluck('id')->all()); // 同じ技術は1回だけ
         $egUsers = DB::table('users')->whereIn('engineer_id', $list->pluck('id'))->orderByRaw("case when role = 'eg' then 1 else 0 end")->get()->keyBy('engineer_id');
         foreach ($list as $e) { $e->skills = $skills[$e->id] ?? ''; $e->account = engineer_state($e, $egUsers[$e->id] ?? null); $e->mail = account_mail($egUsers[$e->id] ?? null); $e->login_id = SesController::provisionalLoginId($egUsers[$e->id] ?? null); }
         if ($st) $list = $list->where('status', $st);
-        $direct = $r->query('ses') === 'direct';
-        if ($direct) $list = $list->where('ses_kind', 'direct');
         if ($q !== '') $list = $list->filter(fn ($e) => str_contains(mb_strtolower(implode(' ', [$e->name, $e->kana, $e->skills, $e->ses_name, $e->strengths, $e->code])), mb_strtolower($q)));
-        // 直属のエンジニアが今いるときだけ、「直属だけ」のボタンを出す（新しく直属を作る入口はない）
-        $hasDirect = DB::table('engineers as e')->join('ses_companies as s', 's.id', '=', 'e.ses_id')->where('s.kind', 'direct')->exists();
         [$list, $pager] = page_slice(sort_kana($list)); // あいうえお順・1ページ 20 件
         $egIds = $list->pluck('id');
         return view('admin.engineers', [
-            'list' => $list, 'pager' => $pager, 'q' => $q, 'st' => $st, 'direct' => $direct, 'hasDirect' => $hasDirect,
+            'list' => $list, 'pager' => $pager, 'q' => $q, 'st' => $st,
             // 連絡メールを送れる人（行にチェックを出す）。判定は DirectMail の1か所
             'mailable' => \App\Services\DirectMail::engineerTargets($r->user(), $egIds->all())['ok'],
             // 停止の確認の文に添える、稼働中の契約と選考中の応募（エンジニアごとに問い合わせず、まとめて取る）

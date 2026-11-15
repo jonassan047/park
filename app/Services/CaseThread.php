@@ -6,9 +6,9 @@ use App\Services\Notifier as N;
 use Illuminate\Support\Facades\DB;
 
 // 案件のやり取り（v0.10.0）：案件×エンジニア×会社ごとの1本（case_threads）と、その中の発言（case_thread_posts）。
-// v0.10.1：書ける相手（partner_ses_id）は「案件を持ち込んだ会社」（持ち込み元が無い・所属と同じ・直属のエンジニアなら、所属の会社。直属なら管理者）。
+// v0.10.1：書ける相手（partner_ses_id）は「案件を持ち込んだ会社」（持ち込み元が無い・所属と同じなら、所属の会社）。
 // エンジニアの所属の会社（ses_id）は、その1本を全部読めるが、相手が別の会社のときは読むだけ。
-// 管理者は、すべてを読める。書けるのは、直属のエンジニアとのやり取りだけ。画面（コントローラー・ビュー）は、ここを呼ぶ。
+// v0.11.0：管理者は、すべてを読むだけで、書けない。画面（コントローラー・ビュー）は、ここを呼ぶ。
 class CaseThread
 {
     const KIND = 'case-thread';     // お知らせ・メール・記録の種類
@@ -23,12 +23,12 @@ class CaseThread
         return (int) $e->ses_id;
     }
 
-    // 相手（書ける会社）を決める（R1）：案件を持ち込んだ会社。ただし、持ち込み元が無い・所属と同じ・SES ではない・エンジニアが直属のときは、所属の会社
+    // 相手（書ける会社）を決める（R1）：案件を持ち込んだ会社。ただし、持ち込み元が無い・所属と同じ・SES ではないときは、所属の会社
     public static function partnerFor(object $c, object $e): int
     {
         $own = (int) $e->ses_id;
         $s = (int) ($c->source_ses_id ?? 0);
-        if ($s && $s !== $own && !Workflow::isDirect($own) && DB::table('ses_companies')->where('id', $s)->value('kind') === 'ses') return $s;
+        if ($s && $s !== $own && DB::table('ses_companies')->where('id', $s)->value('kind') === 'ses') return $s;
         return $own;
     }
 
@@ -43,12 +43,6 @@ class CaseThread
     {
         $t = DB::table('case_threads')->where('case_id', $c->id)->where('engineer_id', $e->id)->where('ses_id', $e->ses_id)->first();
         return $t ? self::partnerOf($t) : self::partnerFor($c, $e);
-    }
-
-    // 相手が管理者（直属）か
-    public static function isDirectThread(object $t): bool
-    {
-        return Workflow::isDirect(self::partnerOf($t));
     }
 
     // 案件を持ち込んだ会社の担当者が、まだ1本が無い相手に書き始められるか（R9）：相手が自社で、案内メールの記録がある人だけ
@@ -88,17 +82,15 @@ class CaseThread
         return !$u || $u->role !== 'ses' || (int) $t->ses_id === (int) $u->ses_id;
     }
 
-    // その人が、この1本の相手の側か（未読を数え、書ける側）。行は partner_id（listQuery）を持つこと
+    // その人が、この1本の相手の側か（未読を数え、書ける側）。行は partner_id（listQuery）を持つこと。管理者は読むだけなので、いつも偽
     public static function isMine($u, object $row): bool
     {
-        if ($u->role === 'ses') return (int) $row->partner_id === (int) $u->ses_id;
-        return $u->role === 'admin' && $row->partner_kind === 'direct';
+        return $u->role === 'ses' && (int) $row->partner_id === (int) $u->ses_id;
     }
 
     // 相手の呼び名（エンジニアの画面に出す）
     public static function partnerName(int $sesId): string
     {
-        if (Workflow::isDirect($sesId)) return (string) setting('operator_name');
         return (string) DB::table('ses_companies')->where('id', $sesId)->value('name');
     }
 
@@ -153,6 +145,7 @@ class CaseThread
     public static function canPost($u, object $c, object $e): ?string
     {
         if (!$u) return '書けません。';
+        if ($u->role === 'admin') return '管理者は、やり取りを読むだけです。';
         $partner = self::currentPartner($c, $e); // 書ける会社（案件を持ち込んだ会社。R1）
         if ($u->role === 'eg') {
             if ((int) $u->engineer_id !== (int) $e->id) return 'このやり取りには書けません。';
@@ -164,7 +157,7 @@ class CaseThread
                 if (DB::table('case_threads')->where('case_id', $c->id)->where('engineer_id', $e->id)->where('ses_id', $u->ses_id)->exists()) return 'このエンジニアは、いま貴社の所属ではないので、読むだけです。';
                 return 'このやり取りの相手は、今は貴社ではないので、読むだけです。';
             }
-        } elseif ($u->role !== 'admin') {
+        } else {
             return '書けません。';
         }
         // 兼任の人が、担当者・管理者の立場で、自分自身のやり取りに書くことはできない
@@ -180,8 +173,6 @@ class CaseThread
             && !DB::table('applications')->where('case_id', $c->id)->where('engineer_id', $e->id)->whereIn('status', Affiliation::IN_SELECTION)->exists()) {
             return '募集を終えた案件なので、読むだけです。';
         }
-        // 管理者は、各社と EG のやり取りは読むだけ（TEZZO 2026-11-14）。直属の EG とのやり取りだけ、管理者が相手なので書ける
-        if ($u->role === 'admin' && !Workflow::isDirect($partner)) return '会社と EG のやり取りは、管理者は読むだけです。';
         return null;
     }
 
@@ -241,7 +232,7 @@ class CaseThread
         return ['type' => 'ok', 'msg' => '送りました。'];
     }
 
-    // お知らせとメール（R8）。EG → 相手の担当者（直属は管理者）／担当者・管理者 → EG。$partnerId は相手の会社。所属の会社には、発言ごとの知らせは出さない
+    // お知らせとメール（R8）。EG → 相手の担当者／担当者 → EG（管理者は書けない）。$partnerId は相手の会社。所属の会社には、発言ごとの知らせは出さない
     private static function notify($u, object $c, object $e, int $partnerId, string $body): void
     {
         $sesId = $partnerId;
@@ -255,23 +246,20 @@ class CaseThread
             $text = "{$who} さんが、案件「{$c->title}」について書きました。\n\n{$preview}";
             // 兼任の人が自分の発言で自分に知らせないよう、書いた人（$u->id）は除く
             N::toSes($sesId, "エンジニアから案件の質問が届きました：{$c->title}".$tag, $text, $threadLink, true, self::KIND, (int) $u->id);
-            // 会社に使える担当者が1人もいないときは、管理者にも知らせる（直属は toSes が管理者に届けている）
-            if (!Workflow::isDirect($sesId) && N::sesUsers($sesId)->isEmpty()) N::toAdmins("エンジニアから案件の質問が届きました：{$c->title}".$tag, $text, $threadLink, true, self::KIND, (int) $u->id);
+            // 会社に使える担当者が1人もいないときは、管理者にも知らせる
+            if (N::sesUsers($sesId)->isEmpty()) N::toAdmins("エンジニアから案件の質問が届きました：{$c->title}".$tag, $text, $threadLink, true, self::KIND, (int) $u->id);
         } elseif ($u->role === 'ses') {
             N::toEg($e->id, "担当者から案件の返事が届きました：{$c->title}".$tag, "案件「{$c->title}」について、担当者から書き込みがありました。\n\n{$preview}", $egLink, true, self::KIND, (int) $u->id);
-        } else {
-            // 管理者が書けるのは直属のエンジニアとのやり取りだけなので、会社への知らせは要らない
-            N::toEg($e->id, "管理者から案件の返事が届きました：{$c->title}".$tag, "案件「{$c->title}」について、管理者から書き込みがありました。\n\n{$preview}", $egLink, true, self::KIND, (int) $u->id);
         }
     }
 
-    // 開いた人の分の既読をつける（D7）。EG は相手側の発言を、担当者は EG の発言を既読にする。管理者は、直属の1本だけ（会社の1本は既読にしない）
+    // 開いた人の分の既読をつける（D7）。EG は相手側の発言を、担当者は EG の発言を既読にする。管理者は読むだけなので、既読にしない
     public static function markRead($u, object $t): void
     {
         if (!self::visible($u, $t)) return;
         if ($u->role === 'eg') {
             DB::table('case_thread_posts')->where('thread_id', $t->id)->where('from_side', '!=', 'eg')->where('read_by_eg', false)->update(['read_by_eg' => true]);
-        } elseif (($u->role === 'ses' && self::partnerOf($t) === (int) $u->ses_id) || ($u->role === 'admin' && self::isDirectThread($t))) {
+        } elseif ($u->role === 'ses' && self::partnerOf($t) === (int) $u->ses_id) {
             DB::table('case_thread_posts')->where('thread_id', $t->id)->where('from_side', 'eg')->where('read_by_side', false)->update(['read_by_side' => true]);
         }
     }
@@ -300,14 +288,6 @@ class CaseThread
         return $q->get();
     }
 
-    // 管理者あて：直属のエンジニアの未読の発言がある1本（会社の1本は出さない）。$exceptEngineerId は、本人（兼任）の分を除く
-    public static function unreadDirect(?int $exceptEngineerId = null)
-    {
-        $q = self::unreadRows(true)->whereRaw("coalesce(t.partner_ses_id, t.ses_id) in (select id from ses_companies where kind = 'direct')");
-        if ($exceptEngineerId) $q->where('t.engineer_id', '!=', $exceptEngineerId);
-        return $q->get();
-    }
-
     // park:status 用：v0.10.1 より前の形で続く1本の数（相手が所属の会社のままで、今の決め方なら案件を持ち込んだ別の会社になる、発言のある1本）
     public static function legacyCount(): int
     {
@@ -315,7 +295,7 @@ class CaseThread
             ->whereRaw('coalesce(t.partner_ses_id, t.ses_id) = t.ses_id')
             ->whereNotNull('c.source_ses_id')->whereColumn('c.source_ses_id', '!=', 't.ses_id')
             ->whereExists(fn ($q) => $q->select(DB::raw(1))->from('ses_companies as sc')->whereColumn('sc.id', 'c.source_ses_id')->where('sc.kind', 'ses'))
-            ->whereExists(fn ($q) => $q->select(DB::raw(1))->from('ses_companies as sb')->whereColumn('sb.id', 't.ses_id')->where('sb.kind', '!=', 'direct'))
+            ->whereExists(fn ($q) => $q->select(DB::raw(1))->from('ses_companies as sb')->whereColumn('sb.id', 't.ses_id')->where('sb.kind', 'ses'))
             ->whereExists(fn ($q) => $q->select(DB::raw(1))->from('case_thread_posts as p')->whereColumn('p.thread_id', 't.id'))
             ->count();
     }

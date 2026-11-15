@@ -41,7 +41,6 @@ class Billing
     // 下書きの請求書を作る・作り直す（発行済みは変えない）
     public static function build(int $sesId, string $period): ?object
     {
-        if (Workflow::isDirect($sesId)) return null; // 管理者の直属には請求しない（PARK 自身の契約）
         if (in_array(DB::table('ses_companies')->where('id', $sesId)->value('status'), ['pending', 'provisional'], true)) return null; // 申込中・仮登録の会社には請求しない
         $ex = DB::table('invoices')->where('ses_id', $sesId)->where('period', $period)->first();
         if ($ex && $ex->status !== 'draft') return $ex;

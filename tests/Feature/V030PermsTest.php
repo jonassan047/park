@@ -120,8 +120,8 @@ class V030PermsTest extends TestCase
         $this->assertTrue($this->changed($kind, $eid));
         $this->assertFalse($this->confirmed($eid), '上位が直したら、本人の確認はやり直し');
 
-        // 管理者の直属の EG
-        $direct = (int) DB::table('engineers')->insertGetId(['ses_id' => W::directSesId(), 'name' => '直属 一郎', 'registered_at' => now_str(), 'self_confirmed_at' => now_str(),
+        // ほかの会社の EG（直属は無くなった。管理者は、どの会社の EG も直せる）
+        $direct = (int) DB::table('engineers')->insertGetId(['ses_id' => (int) DB::table('users')->where('email', self::SES2)->value('ses_id'), 'name' => '別会社 一郎', 'registered_at' => now_str(), 'self_confirmed_at' => now_str(),
             'created_at' => now_str(), 'updated_at' => now_str()]);
         $this->as(self::ADMIN);
         $this->edit($kind, $direct)->assertRedirect();

@@ -349,7 +349,9 @@ class SesDetailButtonsTest extends TestCase
         $this->admin()->get("/admin/ses/$s1/users/999999")->assertNotFound();
         $this->admin()->get("/admin/ses/999999/users/$u1")->assertNotFound();
 
-        $direct = W::directSesId();
+        // 古い直属の行（kind=direct。消さずに残してある）は、SES の画面で開けない
+        $direct = (int) DB::table('ses_companies')->insertGetId(['name' => '管理者の直属', 'kind' => 'direct', 'status' => 'active', 'code' => \App\Services\Ids::next('S'),
+            'self_confirmed_at' => now_str(), 'joined_at' => today_str(), 'created_at' => now_str(), 'updated_at' => now_str()]);
         $this->admin()->get("/admin/ses/$direct/users/$u1")->assertNotFound();
     }
 

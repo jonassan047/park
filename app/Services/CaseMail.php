@@ -15,10 +15,11 @@ class CaseMail
     const MODES = ['same' => '同じ内容', 'each' => '個別', 'search' => 'エンジニア検索'];
     const PLACEHOLDERS = ['{呼び名}', '{案件名}', '{単価}', '{開始}', '{場所}', '{働き方}', '{必須}', '{合う点}', '{送り主}', '{案件ID}'];
 
-    // 誰が案内できるか：管理者と、案件を持ち込んだ SES
+    // 誰が案内できるか：案件を持ち込んだ SES の担当者だけ（v0.11.0 から、管理者は案内できない。
+    // 管理者が担当者を兼ねているときは、担当者の立場でだけ案内できる）
     public static function canSend($u, $c): bool
     {
-        return $u->role === 'admin' || ($u->role === 'ses' && (int) $c->source_ses_id === (int) $u->ses_id);
+        return $u->role === 'ses' && !empty($c->source_ses_id) && (int) $c->source_ses_id === (int) $u->ses_id;
     }
 
     // 候補：own＝自社のエンジニア（名前が見える。SES から直接送る）、group＝グループのほかの SES の人（名前は伏せる。PARK から送る）
@@ -122,8 +123,7 @@ class CaseMail
             // PARK のお知らせ（ベル）にも出す。メールは案内メールが行くので、お知らせからは送らない（v0.10.0）
             N::toEg($e->id, "案件のご案内が届きました：{$c->title}".Ids::tag($c->code ?? null), "案件「{$c->title}」のご案内が届きました。案件の詳細から、担当者への質問や応募ができます。", "/cases/{$c->id}", false, 'offer');
             if (!$own) {
-                if (Workflow::isDirect((int) $e->ses_id)) N::toSes($e->ses_id, "グループの案件が、直属のエンジニアに届きました：{$c->title}".Ids::tag($c->code), "直属の{$e->name} さんに、グループの案件「{$c->title}」のご案内が届きました。", "/cases/{$c->id}", true, 'offer-ses');
-                else N::toSes($e->ses_id, "グループの案件が、貴社のエンジニアに届きました：{$c->title}".Ids::tag($c->code), "{$e->name} さんに、グループの案件「{$c->title}」のご案内が届きました。", "/cases/{$c->id}", true, 'offer-ses');
+                N::toSes($e->ses_id, "グループの案件が、貴社のエンジニアに届きました：{$c->title}".Ids::tag($c->code), "{$e->name} さんに、グループの案件「{$c->title}」のご案内が届きました。", "/cases/{$c->id}", true, 'offer-ses');
             }
             $n++;
         }

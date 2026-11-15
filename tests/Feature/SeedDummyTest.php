@@ -21,7 +21,7 @@ class SeedDummyTest extends TestCase
     private array $backupsBefore = [];
     private int $adminId;
 
-    private const SMALL = ['--ses' => 5, '--staff' => 8, '--eg' => 12, '--direct' => 5, '--seed' => 1];
+    private const SMALL = ['--ses' => 5, '--staff' => 8, '--eg' => 12, '--seed' => 1];
 
     protected function setUp(): void
     {
@@ -94,8 +94,9 @@ class SeedDummyTest extends TestCase
         // 担当者は、指定の15人に、仮登録の会社の SES（1社に1人）を足した数
         $this->assertSame(1, DB::table('ses_companies')->where('email', 'like', 'ses-d%@park.example')->where('status', 'provisional')->count());
         $this->assertSame(['ses' => 8, 'staff' => 15 + 1, 'eg' => 80, 'egu' => 80], $this->dummyCounts());
-        $direct = DB::table('ses_companies')->where('kind', 'direct')->value('id');
-        $this->assertSame(8, DB::table('engineers')->where('email', 'like', 'eg-d%@park.example')->where('ses_id', $direct)->count());
+        // 直属は無くなった：全員が SES の所属で、直属の行は作られない
+        $this->assertSame(0, DB::table('ses_companies')->where('kind', 'direct')->count());
+        $this->assertSame(80, DB::table('engineers')->where('email', 'like', 'eg-d%@park.example')->whereIn('ses_id', DB::table('ses_companies')->where('kind', 'ses')->select('id'))->count());
         foreach (DB::table('engineers')->where('email', 'like', 'eg-d%@park.example')->get() as $e) {
             $this->assertSame(1, DB::table('users')->where('role', 'eg')->where('email', $e->email)->where('engineer_id', $e->id)->count());
             // 3つ選んだ中に HTML と CSS があると、1つの項目（HTML/CSS）にまとまるので、2つ以上
@@ -239,7 +240,7 @@ class SeedDummyTest extends TestCase
     public function test_t10_validation(): void
     {
         $before = $this->counts();
-        foreach ([['--ses' => 0], ['--eg' => 501], ['--ses' => 51], ['--staff' => 201], ['--ses' => 8, '--staff' => 3], ['--eg' => 5, '--direct' => 6], ['--eg' => 'abc']] as $o) {
+        foreach ([['--ses' => 0], ['--eg' => 501], ['--ses' => 51], ['--staff' => 201], ['--ses' => 8, '--staff' => 3], ['--eg' => 'abc']] as $o) {
             foreach ([false, true] as $yes) {
                 [$c] = $this->go($o, $yes);
                 $this->assertSame(1, $c, json_encode($o).' yes='.(int) $yes);
@@ -267,7 +268,7 @@ class SeedDummyTest extends TestCase
 
     public function test_regress_printed_seed_matches_audit_seed_when_omitted(): void
     {
-        [$c, $out] = $this->go(['--ses' => 5, '--staff' => 8, '--eg' => 12, '--direct' => 5]);
+        [$c, $out] = $this->go(['--ses' => 5, '--staff' => 8, '--eg' => 12]);
         $this->assertSame(0, $c, $out);
         $this->assertSame(1, preg_match('/seed：(\d+)/u', $out, $m), $out);
         $row = DB::table('audit_log')->where('action', 'seed-dummy')->first();
@@ -279,12 +280,14 @@ class SeedDummyTest extends TestCase
     public function test_regress_real_admin_engineer_create_audit_survives(): void
     {
         $admin = User::find($this->adminId);
-        W::createEngineer(W::directSesId(), ['name_sei' => '実在', 'name_mei' => '太郎', 'kana_sei' => 'じつざい', 'kana_mei' => 'たろう', 'email' => 'real-eng@example.com'], $admin, false);
+        $realSes = (int) DB::table('ses_companies')->insertGetId(['name' => '実在 会社', 'kind' => 'ses', 'status' => 'active', 'code' => \App\Services\Ids::next('S'), 'email' => 'real-company@example.com',
+            'agreed_at' => now_str(), 'self_confirmed_at' => now_str(), 'joined_at' => today_str(), 'created_at' => now_str(), 'updated_at' => now_str()]);
+        W::createEngineer($realSes, ['name_sei' => '実在', 'name_mei' => '太郎', 'kana_sei' => 'じつざい', 'kana_mei' => 'たろう', 'email' => 'real-eng@example.com'], $admin, false);
         $this->go();
         $sesId = DB::table('ses_companies')->where('email', 'ses-d01@park.example')->value('id');
         W::createEngineer($sesId, ['name_sei' => '実在', 'name_mei' => '花子', 'kana_sei' => 'じつざい', 'kana_mei' => 'はなこ', 'email' => 'real-eng2@example.com'], $admin, false);
         $this->assertSame(2, DB::table('audit_log')->where('action', 'engineer-create')->where('user_id', $this->adminId)->count());
-        // 本物の記録がある状態で、もう一度ダミーを入れても（同じ直属の入れ物・同じ SES を使っても）消えない
+        // 本物の記録がある状態で、もう一度ダミーを入れても（同じ SES を使っても）消えない
         $this->go();
         $this->assertSame(2, DB::table('audit_log')->where('action', 'engineer-create')->where('user_id', $this->adminId)->count());
         // ダミーを入れたときの user_id が null の engineer-create は、ダミーの分は残っていない

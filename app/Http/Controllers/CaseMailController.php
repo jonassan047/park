@@ -23,7 +23,7 @@ class CaseMailController extends Controller
 
     private function scope(Request $r): string
     {
-        return $r->user()->role === 'admin' ? 'all' : ($r->input('scope') === 'group' ? 'group' : 'own');
+        return $r->input('scope') === 'group' ? 'group' : 'own';
     }
 
     // 2. 候補（DB の得意分野から提案。チェックで足す・外す）と、3. メールの中身
@@ -89,7 +89,7 @@ class CaseMailController extends Controller
         $m = DB::table('case_mails')->find($mid);
         abort_unless($m, 404);
         $c = $this->load($r, $m->case_id);
-        abort_unless($m->route === 'own' || $r->user()->role === 'admin', 403);
+        abort_unless($m->route === 'own', 403);
         try {
             $appId = \App\Services\Workflow::apply($c->id, $m->engineer_id, ['start_ok' => 1, 'price_ok' => 1, 'style_ok' => 1, 'condition_note' => $m->reply_note ?: 'SES が本人に確認のうえ応募'], $r->user());
             \App\Services\Workflow::setStatus($appId, 'submitted', $r->user(), '', '案件をくれた先へ書類を返した');

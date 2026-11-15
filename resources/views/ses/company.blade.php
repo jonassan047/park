@@ -20,12 +20,13 @@ $state = user_state($u);
 $base = '/admin/ses/'.$s->id.'/users/'.$u->id;
 $self = (int) $u->id === (int) auth()->id(); // ご自身の行には操作を出さない
 $isRepRow = (int) $u->id === (int) $repId || (int) $u->id === (int) $s->next_rep_user_id; // SES（次の SES）の行は、交代のあとでなければ止められない
-@endphp<tr><td><x-code :v="$u->staff_code" /></td><td>{{ $u->name }}@if((int) $u->id === (int) $repId) <span class="badge info">SES</span>@elseif((int) $u->id === (int) $s->next_rep_user_id) <span class="badge info">次の SES</span>@endif
+$isAdminRow = $u->role === 'admin'; // 担当者を兼ねている管理者。貴社からは止められない（やめるのは本人だけ）
+@endphp<tr><td><x-code :v="$u->staff_code" /></td><td>{{ $u->name }}@if($isAdminRow) <span class="badge warn">管理者（兼任）</span>@endif @if((int) $u->id === (int) $repId) <span class="badge info">SES</span>@elseif((int) $u->id === (int) $s->next_rep_user_id) <span class="badge info">次の SES</span>@endif
 @if($u->engineer_id) <a class="badge info" href="{{ url('/engineers/'.$u->engineer_id) }}">エンジニア兼任</a>@endif</td><td>{{ account_mail($u) }}</td><td>{{ $state }}</td>
-<td>{{ fmt_dt($u->last_login) }}</td><td>@if($isRep && !$isRepRow && is_provisional_state($state))<x-post :action="'/people/'.$u->id.'/resend'" label="送り直し" cls="ghost small" />
+<td>{{ fmt_dt($u->last_login) }}</td><td>@if($isRep && !$isAdminRow && !$isRepRow && is_provisional_state($state))<x-post :action="'/people/'.$u->id.'/resend'" label="送り直し" cls="ghost small" />
 <a class="btn ghost small" href="{{ url('/people/'.$u->id.'/edit') }}">仮登録の内容を直す</a>
 <x-post :action="'/people/'.$u->id.'/cancel'" label="取り消し" cls="danger small" confirm="この仮登録を取り消します。元に戻せません。よろしいですか？" />@endif
-@if($isRep && !$self && !$isRepRow && $state !== '退会済')@if($state === '停止')<x-post :action="$base.'/resume'" label="再開" cls="small" :confirm="$u->name.' さんを再開します。'" />
+@if($isRep && !$isAdminRow && !$self && !$isRepRow && $state !== '退会済')@if($state === '停止')<x-post :action="$base.'/resume'" label="再開" cls="small" :confirm="$u->name.' さんを再開します。'" />
 @else<x-post :action="$base.'/suspend'" label="停止" cls="ghost small" :confirm="$u->name.' さんを停止します。ログインできなくなります（再開できます）。'" />@endif
 <x-post :action="$base.'/delete'" label="退会" cls="danger small" :confirm="$u->name.' さんを退会済にします。ログインできなくなり、元に戻せません（記録は残ります）。よろしいですか？'" />@endif</td></tr>@endforeach
 </x-table></x-card>

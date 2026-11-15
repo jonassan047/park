@@ -25,10 +25,9 @@ class CaseSearch
         return CaseMail::canSend($u, $c);
     }
 
-    // 検索を開けるのは、管理者と、作った人と同じ会社の SES・担当者
+    // 検索を開けるのは、作った人と同じ会社の SES・担当者だけ（管理者は開けない。v0.11.0）
     public static function canOpen($u, object $s): bool
     {
-        if ($u->role === 'admin') return true;
         return $u->role === 'ses' && $s->ses_id !== null && (int) $s->ses_id === (int) $u->ses_id;
     }
 
@@ -110,18 +109,17 @@ class CaseSearch
     // ---------- 対象の人と判定 ----------
 
     // 対象：今の案内と同じ人（使える人・有効な SES・応募済みを除く・稼働中も入る・unavailable は除く）。
-    // own＝自社の人（SES・担当者は自分の会社。管理者は直属の会社）。sent＝この案件で案内を送った人の返事（無ければ null）
+    // own＝自社の人（SES・担当者は自分の会社）。sent＝この案件で案内を送った人の返事（無ければ null）
     public static function pool($u, object $c): array
     {
         $sent = DB::table('case_mails')->where('case_id', $c->id)->pluck('reply', 'engineer_id')->all();
         $mine = $u->role === 'ses' ? (int) $u->ses_id : null;
-        $direct = [];
         $out = [];
         foreach (Matcher::forCase($c->id, true) as $m) {
             $e = $m['engineer'];
             if ($e->status === 'unavailable') continue;
             $sid = (int) $e->ses_id;
-            $own = $mine === null ? ($direct[$sid] ??= Workflow::isDirect($sid)) : $sid === $mine;
+            $own = $mine !== null && $sid === $mine;
             $out[] = $m + ['own' => (bool) $own, 'sent' => $sent[$e->id] ?? null];
         }
         return $out;

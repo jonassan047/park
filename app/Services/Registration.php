@@ -84,18 +84,17 @@ class Registration
         if ($u->role === 'admin' || empty($u->ses_id)) return true;
         $s = DB::table('ses_companies')->find($u->ses_id);
         if (!$s) return false;
-        if ($s->kind === 'direct') return true;
         $isRep = $u->role === 'ses' && ((int) $s->rep_user_id === (int) $u->id || (int) $s->next_rep_user_id === (int) $u->id);
         return $isRep ? in_array($s->status, ['provisional', 'active'], true) : $s->status === 'active';
     }
 
     // ---------- 仮登録メール ----------
-    // 宛先の企業名（管理者は企業名、SES の人は SES 名。直属は空）
+    // 宛先の企業名（管理者は企業名、SES の人は SES 名）
     public static function companyOf(object $u): string
     {
         if ($u->role === 'admin') return (string) $u->company_name;
         $s = $u->ses_id ? DB::table('ses_companies')->find($u->ses_id) : null;
-        return $s && $s->kind !== 'direct' ? (string) $s->name : '';
+        return $s ? (string) $s->name : '';
     }
 
     // 登録した人の企業名（メールの「登録した人の企業名」）
@@ -371,8 +370,7 @@ class Registration
         $isRep = Requirements::isRep($target);
         $s = $target->ses_id ? DB::table('ses_companies')->find($target->ses_id) : null;
         if ($s && $s->kind === 'ses' && in_array($target->role, ['ses', 'eg'], true) && !$isRep && $s->rep_user_id) $add(DB::table('users')->find($s->rep_user_id));
-        // 管理者の直属のエンジニアは、SES がいないので、管理者全員に知らせる（S2-31）
-        if ($target->role === 'admin' || ($target->role === 'ses' && $isRep) || ($s && $s->kind === 'direct')) {
+        if ($target->role === 'admin' || ($target->role === 'ses' && $isRep)) {
             foreach (DB::table('users')->where('role', 'admin')->get() as $a) $add($a);
         }
         if (!$out) foreach (DB::table('users')->where('role', 'admin')->get() as $a) $add($a);

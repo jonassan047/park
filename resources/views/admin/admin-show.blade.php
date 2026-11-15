@@ -3,7 +3,7 @@
 @php
     $state = user_state($u);
     $base = '/admin/admins/'.$u->id;
-    $dual = \App\Services\Workflow::isDual($u);
+    $dual = !empty($u->engineer_id) && \App\Services\Workflow::isDual($u); // エンジニアを兼ねているか
     $canDo = $state !== '退会済' && (int) $u->id !== (int) auth()->id();
     // 仮登録の行：送り直しと取り消しは、権限のある人にだけ出す。本登録が済んだ行には出さない
     $provisional = is_provisional_state($state);

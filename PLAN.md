@@ -1,3 +1,277 @@
+# v0.11.0 TEZZO の答え（2026-11-15。これが本文の仮置きより優先）
+
+- Q1：**管理者と SES 担当者の兼任を作る**（コードを変える）。管理者が、MRSY など1つの会社の担当者を兼ねられるようにする。兼任の仕組み（今は EG＋担当者／EG＋管理者）に倣い、planner の判断で最小の形にする。兼任した管理者が、担当者として案件を発信できる（管理者としては発信できない）。
+- Q3：**元直属の契約も、すべて MRSY に請求する**。D9（fee_exempt の印）は採らない。移行した契約も、これからの契約と同じ請求の対象にする。
+- Q4：持ち込み元が空の案件も MRSY に付け替える（推奨どおり）。
+- Q5：管理者の連絡メール・一斉配信は残す（推奨どおり）。
+- Q6：kind='direct' の行は消さずに残す（推奨どおり）。
+- 公開版への反映は、W1〜W9 の警告を TEZZO に報告し、了承を取ってから（手元で作って試すのは進める）。
+
+---
+
+# PLAN：直属をやめ、管理者は案件を発信しない（v0.11.0。2026-11-15）
+
+> **これが今の計画**。前の計画（v0.10.1 以前）は、この節の下に続く（Leo が git の前の版から戻す）。
+> 依頼：TEZZO（Leo 経由。2026-11-15）「直属は廃止する。管理者が案件登録する場合、管理者であっても SES として登録し、SES として案件を発信する。管理者は案件発信をできない。現在直属となっているものは全て『合同会社MRSY』に付け替える。」
+> 作る順：段階1 → 段階2 → 段階3 → 段階4（段階ごとに commit。`php artisan test` を通してから次へ）→ park-reviewer → park-tester。commit・push は Leo。**公開版への反映は、7章の確認（W1〜W9・Q1〜Q6）に TEZZO さんが答えてから**（グループ単位の変更のため）。
+> プレーヤー：管理者・SES・担当者・EG の4つ（担当者＝`users.role=ses`。SES の代表者も担当者の1人。今回の権限は SES と担当者で同じ。**通知の届き先が変わるのは担当者**なので、担当者で必ず確かめる）。
+> 外部のライブラリは足さない。名前・メールはこのファイルにもテストにも書かない（テストは架空の会社・人）。会社名「合同会社MRSY」はマイグレーションの中にだけ書く。
+> **警告（グループ単位の変更）**：元直属のエンジニアの氏名・詳細・応募・契約・やり取りが、合同会社MRSY の SES・担当者に見えるようになり、請求書も MRSY あてになりうる。7章の W1〜W9 に載せ、完了報告でも警告する。
+
+## 0. コードで確かめた今の形
+
+- 直属＝`ses_companies.kind='direct'` の行（名前「管理者の直属」）。`Workflow::directSesId()`（無ければ作る）・`Workflow::isDirect()`。作られる道は `Affiliation::targets`（管理者が開くと作る）・`DummySeed`・`SamplePurge --move-kept-to-direct`。新しく直属のエンジニアを登録する入口は、もう無い。
+- 直属の分岐がある所（`grep -rn "直属\|isDirect\|directSesId\|'direct'\|kind.*direct" app resources routes database/seeders`。全 63 ファイル）：
+  - 処理：`helpers.php`（`user_label` 62）、`Support/Requirements.php` 98–99、`Affiliation` 11–30・95、`Billing` 44、`CaseMail` 125、`CaseSearch` 113–124、`CaseThread`（`partnerFor` 31・`isDirectThread`・`isMine` 95・`partnerName` 101・`canPost` 183–184・`notify` 258–263・`markRead` 268–274・`unreadDirect` 303–318）、`DirectMail` 13・79–132、`Notifier::toSes` 96–97、`Registration`（`companyAllows` 87・`companyOf` 93–98・374–375）、`SamplePurge`（29・40・117・128–145・162・178–180）、`DummySeed`（29・106・166–200・245・282・315）、`Todo` 105、`Workflow`（204・560–573・844・860・900・941–942・999）、`Status` 88、`Ids` 16（説明だけ）。
+  - コントローラー：`AdminController` 137（直属の会社は 404）・367–375（「直属だけ」）、`CaseThreadController` 10、`DirectMailController` 51、`EgController` 30–31（`sesDirect`）、`EngineerController` 33・100、`FindController` 42–43、`PeopleController` 35–36、`PublicController` 41、`Console/Commands/PurgeSamples` 14、`SeedDummy` 16–34。
+  - 画面：`admin/engineers`（「直属だけ」ボタン・「直属」の印）、`threads/index`・`threads/show`・`cases/show`（「相手：管理者」・「直属だけ書けます」）、`mails/index`、`partials/register-fields`（注釈）。
+  - マニュアル：`admin.md`（118・119・128・171・174・207・223–227・289）、`admin-steps.md`（60・100・112・130・147・164–167）、`ses.md`（91・151）、`ses-steps.md`（136）、`engineer.md`（101・130・133・158・185）、`engineer-steps.md`（9・116・120・144）。README 17 か所。
+- 案件の登録：`Workflow::saveCase` 828 `source_ses_id = ses なら自社、管理者は任意（空可）`。画面 `cases/form` 14 の選択肢は「（管理者が直接）」＋参加中の SES。編集では変わらない。
+- 案件の「発信」の入口（今は管理者に開いている）：
+  - `POST /cases/{id}/distribute`（`CaseController::distribute` → `Workflow::distribute`。画面のフォームは無いが道は残っている）
+  - 案内メール `GET /cases/{id}/mail`・`POST …/mail/preview`・`POST …/mail/send`（`CaseMailController::load` → `CaseMail::canSend`＝管理者か持ち込み元の SES）
+  - エンジニア検索 `GET/POST /cases/{id}/search`・`/searches/{sid}`・`…/add`・`…/send`・`…/members/{eid}`（`CaseSearch::canUse`＝`CaseMail::canSend`、`canOpen` は管理者なら全部）
+  - 案内メールの後始末 `POST /case-mails/{id}/reply`・`…/submitted`・`GET …/doc/{kind}`（同じ `load`）
+  - 画面：`cases/show` 101–106 管理者の「エンジニアに案内する」カード、64–83「案内メール」（`$canMail`）、`admin/dashboard` 28「マッチング」ボタン
+- 発信ではないもの（管理者に残す）：案件の登録・編集・状態の変更・AI の読み直し、応募のあとの選考（`/applications/*`）、連絡メール（`/mails`。案件ではない自由なメール）、一斉配信（`/admin/mail/broadcast`。お知らせ）、メッセージ（`/engineers/{id}/messages`）。
+- 合同会社MRSY：コード・seeder・`DummySeed` には無い。41_Park-Project の記録では、**手元と公開版の DB に `ses_companies` の行として既にある**（2026-10-16 に TEZZO さんのエンジニアの所属として使った）。id・コード・kind・status・担当者の数は、DB を開けないので確かめていない（段階1の手順 1 で確かめる）。
+- `ses_id` を持つ表：`users.ses_id`、`engineers.ses_id`、`applications.ses_id`、`contracts.ses_id`、`invoices.ses_id`（`unique(ses_id, period)`）、`cases.source_ses_id`、`case_mails.ses_id`、`case_searches.ses_id`、`direct_mails.from_ses_id`、`case_threads.ses_id`（`unique(case_id, engineer_id, ses_id)`）・`case_threads.partner_ses_id`。`app_notifications`・`audit_log`・`messages` は会社の id を持たない（本文の「直属」は過去の記録として残す）。
+
+## 1. 受け入れ条件
+
+| 番号 | 立場 | 条件 |
+|---|---|---|
+| AC1 | 管理者 | 案件の登録で「案件を持ち込んだ SES」が**必須**。選べるのは参加中の SES だけ（「管理者が直接」「管理者の直属」は無い）。空・選べない会社なら登録されず、入力は残り「案件を持ち込んだ SES を選んでください。」 |
+| AC2 | 管理者 | 登録した案件は `source_ses_id`＝選んだ会社、`registered_by`＝管理者。以後は、その会社が持ち込んだ案件と同じ扱い |
+| AC3 | 管理者 | 案件を発信できない：0章の発信の入口（distribute・案内メール・検索・案内メールの後始末）はすべて 403。案件の画面に「エンジニアに案内する」のボタンが無く、「案内は、案件を持ち込んだ {会社名} の担当者が行います。」と出る |
+| AC4 | 管理者 | 発信の記録は読める：案件の画面の「案内メール」（ボタン・記録する欄なし）と「配信済み」 |
+| AC5 | 管理者 | 案件のやり取りは**すべて読むだけ**（書けない、既読をつけない、「今やること」に出ない） |
+| AC6 | 管理者 | 「直属だけ」のボタン・「直属」の印・所属の変更先の「管理者の直属」が無い。どの画面を開いても `kind='direct'` の行が新しくできない |
+| AC7 | 管理者 | 発信以外の操作（登録・編集・状態・AI・選考・連絡メール・一斉配信）は今までどおり |
+| AC8 | SES・担当者 | 管理者が自社を選んで登録した案件で、自社が登録したのと同じことができる：編集・案内（検索→送信）・返事の記録・書類・やり取りの相手。登録したとき、担当者全員にお知らせ（とメール）が届き、「今やること」に「新しい案件」が出る |
+| AC9 | SES・担当者（MRSY） | 元直属のエンジニアが自社のエンジニアとして見える（一覧・詳細・応募・契約・やり取り）。これまで管理者に届いていた知らせ（応募・面談・成約・質問・連絡メール）が担当者に届く |
+| AC10 | SES・担当者（MRSY 以外） | 元直属のエンジニアは「合同会社MRSY」の所属として、他社のエンジニアと同じ扱い（イニシャル（合同会社MRSY）） |
+| AC11 | EG（元直属） | 所属に「合同会社MRSY」と出る。連絡メール・やり取りの相手は MRSY の担当者（「管理者」とは出ない）。所属が変わったことを画面のお知らせで知る |
+| AC12 | EG（ほか） | 変わらない。やり取りの相手の決め方から「直属」の例外が消えるだけ |
+| AC13 | データ | 直属を参照する行がすべて合同会社MRSY に付け替わる（`park:status` で「直属の参照」0）。付け替えは冪等で、戻せる（バックアップ） |
+| AC14 | 全員 | アプリ・マニュアル・README の画面の文から「直属」が消える（記録・過去のお知らせの本文は除く） |
+
+## 2. 決めたこと（Leo の推奨で仮置き。7章で TEZZO さんに確認）
+
+| 番号 | 決めたこと | 理由 |
+|---|---|---|
+| D1 | 管理者の案件登録で、持ち込みの SES は**必須**（AC1）。画面で確かめる（`CaseController::store`）。`Workflow::saveCase` は画面を通らない保存（見本・テスト）のため、今までどおり空でも通す（プロバイダーと同じ形） | 依頼「管理者であっても SES として登録」 |
+| D2 | 「SES として発信」＝**発信するのは、選んだ会社の担当者**。管理者が代わりに送る道は作らない（AC3）。管理者が登録したら、その会社の担当者にお知らせ＋メール「管理者が貴社の案件として登録しました：{案件名}」→ `/cases/{id}`（種類 `case`） | 依頼「管理者は案件発信をできない」 |
+| D3 | 管理者の発信を止める場所は、`CaseMail::canSend`（＝`CaseSearch::canUse`）から管理者を外す（案内メール・検索・後始末が一度に 403）＋ `CaseController::distribute` で管理者は 403。`CaseSearch::canOpen` の管理者も外す。`Workflow::distribute`・`CaseMail::send` の処理そのものは変えない（seeder・テストが直接呼ぶため） | 入口をまとめて閉じ、処理を壊さない |
+| D4 | 管理者は発信の記録を読める（AC4）。`CaseController::show` で `canSeeMails = canSend || admin` を分け、管理者には一覧だけ（「記録」「書類を返した」「書類」「エンジニアに案内する」は出さない） | 運営として状況は見たい |
+| D5 | **持ち込み元が空の今の案件**（管理者が直接登録したもの）も、直属と同じく合同会社MRSY に付け替える（データ移行で `source_ses_id = MRSY`） | 空のままだと誰も発信できない案件になる。「管理者が直接」は直属と同じ意味だったため |
+| D6 | 案件の編集では持ち込み元を変えない（今のまま）。ただし、移行のあとに持ち込み元が空の案件が残っていたら（見本の削除で空になったもの）、管理者だけ編集で一度だけ選べる | 案件が宙に浮かないように |
+| D7 | 案件のやり取り：**管理者はすべて読むだけ**。`isDirectThread`・`unreadDirect` を消し、`canPost` の管理者は「管理者は、やり取りを読むだけです。」。`isMine` の管理者は常に偽。`Todo::admin` のやり取りの行を消す。`partnerFor` の「EG が直属」の例外を消す。相手の会社に使える担当者がいないときに管理者へも知らせる決まり（`notify` 259）は残す | 直属が無いので、管理者が相手になる1本は無い |
+| D8 | 直属向けの分岐は全部消す：`Notifier::toSes` の管理者への振り替え、`Workflow` の知らせの除外（204・860・900・942・999）、`CaseMail` 125、`Registration`（87・98・375）、`PublicController` 41、`helpers` 62、`Requirements` 98、`DirectMail`（宛先は所属の担当者だけ）、`EgController` の `sesDirect`、`CaseSearch` の管理者の own、`FindController`・`PeopleController`。`Workflow::directSesId`・`isDirect` は**関数ごと消す** | 依頼「直属は廃止」。残すと、また作られる |
+| D9 | 請求：`Billing::build` の直属の除外を消す。**付け替えた契約（移行の時点で直属だったもの）は請求しない**：`contracts.fee_exempt`（boolean、既定 false）を足し、移行で true にし、`Billing::items` で飛ばす。契約の画面に「請求の対象外（元直属）」。移行のあとにできる契約は普通に請求 | 前の約束「直属は PARK 自身の契約なので請求しない」を、さかのぼって変えない（お金の件なので Q3 で確認） |
+| D10 | 「直属だけ」ボタン・`?ses=direct`・「直属」の印、`Affiliation::targets` の直属（と行を作る呼び出し）を消す。`AdminController` 137 は「`kind` が `ses` でない会社は 404」に一般化して残す | 消した行・古い行を SES の画面で開かせない |
+| D11 | `kind='direct'` の行は**消さない・変えない**（参照が0になるだけ）。消すのは TEZZO さんの了承のあと、別の作業で | 戻せるように。削除は了承が要る |
+| D12 | `SamplePurge` の `--move-kept-to-direct` を `--move-kept-to=<会社の表示 ID>`（参加中の SES だけ）に変える。中身（残す人を移す・やり取りの1本が重なるなら止める）は同じ | 直属の行を作らない |
+| D13 | `park:seed-dummy` の `--direct` と「エンジニア（直属）」の数を消す（全員 SES の所属） | 直属を作らない |
+| D14 | `park:status`：「エンジニア：管理者の直属」を、「直属の参照（表ごとの合計。0 のはず）」「持ち込み元の無い案件」「請求の対象外の契約（元直属）」に替える。移行の前に見るための「合同会社MRSY の候補（id・状態・使える担当者の数）」も出す | 前後の件数の確認 |
+| D15 | 元直属の EG と MRSY の担当者への知らせは、**画面のお知らせだけ**（メールなし）。EG：「所属の会社が「合同会社MRSY」になりました。連絡は合同会社MRSY のご担当者へ。」。MRSY の担当者：「管理者の直属だった {n} 名のエンジニアが、貴社の所属になりました。」→ `/ses/engineers` | メールの一斉送信は了承が要る |
+| D16 | 版は `v0.11.0`（管理者の権限が変わるため） | — |
+
+## 3. データ移行（マイグレーション1本＋サービス）
+
+処理は `app/Services/DirectMerge.php` に置き（`plan()`・`run()`・`restore()`）、マイグレーション `database/migrations/2026_11_15_000002_merge_direct_into_mrsy.php` から呼ぶ（テストからも呼べるように）。
+
+### 3-1. 付け替える先を探す
+
+- `ses_companies` で、`kind='ses'` かつ名前を正規化（NFKC・空白を除く）したものが `合同会社MRSY` の行。
+- 0件・2件以上・`status` が `active` でない → **何も変えずに止める**（例外。文：「合同会社MRSY が見つからない（または複数・参加中でない）ため、直属の付け替えを止めました。」）。ただし、下の「対象」が0件なら探さずに終わる（テストの DB・新しい DB）。
+- 見つからないときに**作らない**（担当者のいない会社を作ると、知らせが誰にも届かない。Q2）。
+
+### 3-2. 対象（D = `kind='direct'` の id の集合、M = 合同会社MRSY の id）
+
+| 表・列 | 条件 | 変え方 |
+|---|---|---|
+| `engineers.ses_id` | in D | M |
+| `users.ses_id` | in D かつ `role='eg'` | M |
+| `applications.ses_id` | in D | M |
+| `contracts.ses_id` | in D | M、`fee_exempt=1`（D9） |
+| `case_threads.ses_id`・`partner_ses_id` | in D | M（それぞれ） |
+| `cases.source_ses_id` | in D、または **null**（D5） | M |
+| `case_mails.ses_id`・`case_searches.ses_id`・`direct_mails.from_ses_id` | in D | M（null は管理者の記録なので変えない） |
+
+### 3-3. 止める条件（何か1つでも当たれば、何も変えずに止める）
+
+- `users` で `ses_id` in D かつ `role` が `eg` 以外（想定外）。
+- `invoices.ses_id` in D（直属には請求していないはず）。
+- `case_threads` で、付け替えると `unique(case_id, engineer_id, ses_id)` がぶつかる行（同じ案件×エンジニアで、D と M の1本が両方ある）。
+- 念のため：`information_schema.columns` で、今のデータベースの `%ses_id` の列のうち、上の表に無い列が D を参照していたら止める（表が増えたときの取りこぼし防止）。
+
+### 3-4. 流れ（`run()`）
+
+1. `plan()` で対象の行の id を表・列ごとに集める（件数も）。全部0なら何もせず終わる（**冪等**：2回目は対象が0）。
+2. 3-3 を確かめる。
+3. バックアップを `storage/app/backups/merge-direct-YYYYMMDD-HHMMSS.json` に書く（表・列ごとの id の一覧、元の値、D・M）。`SamplePurge::BACKUP_DIR` と同じ場所。
+4. トランザクションで 3-2 を更新。
+5. D15 のお知らせを `app_notifications` に入れる（メールなし）。
+6. `audit_log` に `direct-merge`（表ごとの件数とバックアップのファイル名。名前は書かない）。
+7. 行 D は残す（D11）。
+
+### 3-5. 戻し方（`down()` → `restore()`）
+
+- いちばん新しい `merge-direct-*.json` を読み、記録した id の行だけ元の値に戻す（`source_ses_id` は null に、`fee_exempt` は 0 に）。バックアップが無ければ何もしない。行 D を残しているので戻せる。お知らせは消さない。
+- コードは `git revert`。`fee_exempt` の列は `down()` で消す（`Schema::hasColumn` で囲む）。
+
+### 3-6. 前後の確かめ（Leo）
+
+- 反映の前：手元で `php artisan park:status` を新しいコードで動かし、「合同会社MRSY の候補」と「直属の参照」の件数を見る。公開版は `park-remote-status.sh`（反映の前は古い表示の「エンジニア：管理者の直属」だけ見える）。
+- 反映のあと：公開版の `park:status` で「直属の参照」0、「持ち込み元の無い案件」0、「請求の対象外の契約」が移行前の契約数と同じ。バックアップのファイルがサーバーにできたこと。
+
+## 4. 画面と操作（プレーヤーごと）
+
+| 立場 | どこで | 変わること |
+|---|---|---|
+| 管理者 | 案件の登録・取り込み `/cases/new` | 「案件を持ち込んだ SES（必須）」。空の選択肢は「選んでください」。登録したあとの文「登録しました。案内は {会社名} の担当者が行います（担当者にお知らせしました）。」 |
+| 管理者 | 案件の画面 `/cases/{id}` | 右の「エンジニアに案内する」のカードを、「案内は、案件を持ち込んだ {会社名} の担当者が行います。」に替える。「案内メール」は一覧だけ（D4）。「配信済み」は今のまま（読むだけ）。やり取りの一覧の「相手」は会社名だけ |
+| 管理者 | ホーム `/admin` の募集中の案件 | ボタン「マッチング」→「開く」 |
+| 管理者 | エンジニアの一覧 `/admin/engineers` | 「直属だけ」ボタンと「直属」の印が無い（所属の会社名を出す） |
+| 管理者 | エンジニアの「所属」カード | 変更先に「管理者の直属」が無い |
+| 管理者 | 案件のやり取り `/threads`・やり取りの画面 | 読むだけ。入力欄の代わりに「管理者は、やり取りを読むだけです。」 |
+| SES・担当者 | 管理者が自社を選んで登録した案件 | 自社の案件と同じ（編集・案内・返事・書類・やり取り）。ホームの「今やること」に「新しい案件」 |
+| SES・担当者（MRSY） | エンジニアの一覧・詳細・応募・契約・やり取り・連絡メール | 元直属の人が自社の人として出る。ホームに D15 のお知らせ |
+| SES・担当者（ほか） | 案内メール・検索・やり取り | 元直属の人は「イニシャル（合同会社MRSY）」 |
+| EG（元直属） | ホームの「担当者への連絡」・案件の「担当者とのやり取り」・連絡メール | 相手が「合同会社MRSY の担当者」。D15 のお知らせ |
+
+## 5. 境界の挙動
+
+| 場面 | 動き |
+|---|---|
+| 管理者が持ち込みの SES を空で登録／停止中の会社の id を送る | 登録されない。入力が残り、AC1 の文 |
+| 管理者が `/cases/{id}/mail`・`/search`・`/searches/{sid}`・distribute・`/case-mails/{id}/reply` などを開く・送る | 403。行（`case_mails`・`case_offers`・`case_searches`）は増えない |
+| 管理者が前に作った検索（`case_searches.ses_id` が空） | 管理者も SES も開けない（記録として残る） |
+| 持ち込み元の SES の担当者が0人 | 登録はできる。登録の知らせは管理者にも出す（「担当者がいないため、案内できる人がいません」） |
+| 持ち込み元の会社が停止中 | 今までどおり（案内できるのは参加中の会社の人だけ） |
+| 元直属のエンジニアが、他社が持ち込んだ案件で書く | 相手は持ち込み元（v0.10.1 の R1 どおり。直属の例外は無い） |
+| 移行の前にできた「管理者が相手」の1本 | 移行で相手が MRSY になる。続けて書くと MRSY の担当者が相手。管理者が書いた過去の発言は「PARK 管理者」のまま |
+| 移行の前の未読（管理者が読んでいない EG の発言） | MRSY の担当者の未読として出る（既読の印は変えない） |
+| `park:merge` 相当の2回目の migrate | 対象0で何もしない |
+| 合同会社MRSY が見つからない・参加中でない | migrate が止まる（3-1）。コードは新しくなっているので、Leo が TEZZO さんに上げる |
+| `kind='direct'` の行を URL（`/admin/ses/{id}`）や表示 ID で開く | 404（D10） |
+| 見本の削除で持ち込み元が空になった案件 | 管理者だけ、編集で一度だけ持ち込み元を選べる（D6）。それまでは誰も案内できない |
+| 兼任（EG＋管理者）の TEZZO さんが案件を登録 | 管理者として持ち込みの SES を選ぶ。案内は、その会社の担当者のログインで行う（Q1） |
+
+## 6. 作業の手順（implementer 向け）
+
+### 段階1：データ移行（コードの分岐はまだ消さない）
+
+1. 手元の DB で合同会社MRSY の行を確かめる（`php artisan tinker` などで `ses_companies` の id・kind・status、`users` の `role=ses` の人数。**名前・メールは PLAN・テストに書かない**）。違っていたら Leo に返す。
+2. `DirectMerge`（3章）と、マイグレーション（`contracts.fee_exempt` を足す＋ `DirectMerge::run()`、`down()` で `restore()` と列の削除）。
+3. `Billing::items` で `fee_exempt` の契約を飛ばす。契約の画面（`pipeline` の契約の詳細）に「請求の対象外（元直属）」。
+4. `Status.php`（D14）。
+5. テスト M1〜M8（8章）。`php artisan test`。
+
+### 段階2：直属をコードから消す
+
+1. 0章の一覧を上から直す（D7・D8・D10・D12・D13）。`Workflow::directSesId`・`isDirect` を消し、`grep -rn "isDirect\|directSesId\|kind.*direct\|'direct'\|直属" app resources/views routes database/seeders` が、マイグレーションと `AdminController` の一般化した 404 以外で0件になるまで。
+2. `CaseThread`：`partnerFor` の例外・`isDirectThread`・`unreadDirect`・`isMine` の管理者・`partnerName` の管理者・`canPost` の管理者・`markRead` の管理者・`notify` の直属の枝。`Todo::admin` のやり取りの行。ビュー `threads/index`・`threads/show`・`cases/show` 89（相手は `partner_name`）。
+3. `DirectMail`：EG の宛先は所属の担当者だけ（直属なら管理者、の枝を消す）。`mails/index` の文。`EgController`・EG のホームのカードの文。
+4. `Affiliation::targets`：管理者も参加中の SES だけ。`move` の知らせのリンクは `/ses/engineers` に統一。
+5. `SamplePurge`・`PurgeSamples`（D12）、`DummySeed`・`SeedDummy`（D13）。
+6. 既存テストを直す（8章の「直す」）。`php artisan test`。
+
+### 段階3：管理者は発信しない・登録は SES として
+
+1. `CaseMail::canSend`：`ses` かつ持ち込み元＝自社だけ。`CaseSearch::canOpen`：管理者を外す。`CaseController::distribute`：管理者は 403（SES は今のまま）。`CaseMailController::submitted` の `|| admin` を消す。
+2. `CaseController`：`sesList` の空の選択肢をやめる（`cases/form` の `blank` を「選んでください」、ラベル「案件を持ち込んだ SES（必須）」）。`store` で管理者は必須と参加中の SES かを確かめる（D1）。`edit`・`update` は D6（持ち込み元が空のときだけ、管理者が選べる）。
+3. `Workflow::saveCase`：管理者が登録したら、持ち込み元の担当者に D2 のお知らせ＋メール（担当者0人なら管理者に出す）。SES の登録のときの管理者あての本文を「内容を確かめてください。案内は {会社名} の担当者が行います。」に（「マッチングして配信」をやめる）。`store` の完了の文（4章）。
+4. `CaseController::show`：`canSeeMails`（D4）と `cases/show` の出し分け（管理者のカードの差し替え、案内メールの一覧のボタンを `canMail` のときだけ）。`admin/dashboard` のボタン名。
+5. テスト N1〜N10。`php artisan test`。
+
+### 段階4：マニュアル・README・版
+
+1. マニュアル（9章）と README（「直属」17 か所、案件の発信・`CaseMail::canSend` の説明 115 行、版の行）。
+2. `config/park.php` を `v0.11.0`。版を見ているテストを直す（grep `v0.10.1`）。
+3. 全体を `php artisan test`。終わったら Leo に、直したファイルと、確かめていないこと（公開版の MRSY の行）を返す。
+
+## 7. TEZZO さんへの確認（推奨で仮置きして作る。違えば直す）
+
+### 警告：グループ単位の変更（合同会社MRSY に見える・届くようになるもの）
+
+- **W1**：元直属のエンジニア全員の氏名・連絡先・プロフィール・スキル・書類（履歴書・業務経歴書）が、合同会社MRSY の SES・担当者全員に「自社のエンジニア」として見え、編集・停止・所属の変更もできるようになる。
+- **W2**：元直属のエンジニアの応募・選考・面談・契約の記録（`applications`・`contracts` の会社が MRSY になる）が、MRSY の SES・担当者に見え、選考を進められる。
+- **W3**：元直属のエンジニアの契約は、D9 の推奨なら請求しない（「対象外」の印付きで MRSY の画面に出る）。推奨を採らなければ、**MRSY あての請求書に初期費用・月額費用として載る**。
+- **W4**：管理者と元直属のエンジニアのやり取り（案件の質問と管理者の答え）が、MRSY の担当者に読め、続きを書けるようになる。管理者が読んでいない発言は、MRSY の未読として出る。
+- **W5**：管理者が直接登録した案件（持ち込み元が空）が全部 MRSY の案件になる（D5）。MRSY が編集・状態の変更・案内でき、その案件で**管理者が送った案内メールの記録と返事**が見える（他社のエンジニアはイニシャル（会社名）、MRSY のエンジニアは氏名）。他社からの推薦の知らせ、他社のエンジニアからの質問（やり取りの相手）も MRSY に届く。
+- **W6**：これまで管理者に届いていた元直属のエンジニアについての知らせ（応募・取り下げ・面談・成約・停止・連絡メール・質問）が、これからは MRSY の担当者全員にお知らせとメールで届く。
+- **W7**：他社の SES・担当者からは、元直属のエンジニアが「イニシャル（合同会社MRSY）」に見えるようになる（今は会社名が付かない）。他社に、MRSY が多くのエンジニアを抱えているように見える。
+- **W8**：元直属のエンジニアの連絡メールの宛先が、管理者から MRSY の担当者に変わる。過去に管理者へ送った連絡メールは、受け取った人（管理者）にだけ見えるまま（implementer が `DirectMail` で確かめる）。
+- **W9**：管理者が今後登録する案件は、選んだ会社（MRSY でも他社でも）の担当者に「管理者が貴社の案件として登録しました」と届き、その会社が案内する。
+
+### 確認事項
+
+- **Q1（いちばん大事）**：管理者は発信できなくなる。TEZZO さんが MRSY として案内するには、**MRSY の担当者のログイン**が要る。今の兼任は「EG＋担当者」か「EG＋管理者」だけで、**管理者と担当者は兼ねられない**。推奨：TEZZO さん用に、別のメールアドレスで MRSY の担当者を1人仮登録する（コードの変更なし）。管理者と担当者の兼任を作るなら、別の計画にする。
+- **Q2**：合同会社MRSY に、本登録が済んだ担当者は何人いるか（0人だと W6 の知らせが誰にも届かず、案件も案内できない）。見つからないときは移行を止める（会社を勝手に作らない）。推奨：このまま。Leo が手元と公開版で段階1の手順1を確かめて報告する。
+- **Q3（お金）**：元直属の契約を請求するか。推奨：移行の時点の契約は請求しない（D9。前の約束どおり）、これからの契約は MRSY に請求する。
+- **Q4**：持ち込み元が空の案件（管理者が直接登録したもの）も MRSY に付け替えるか（D5・W5）。推奨：付け替える（空のままだと誰も案内できない）。
+- **Q5**：管理者の連絡メール（案件ではない自由なメール）と一斉配信は残すか。推奨：残す（案件の発信ではないため）。案件のことを連絡メールで送るのは、運用で控える。
+- **Q6**：`kind='direct'` の行（「管理者の直属」）を、移行のあとに消すか。推奨：今回は残す（戻せるように）。参照が0になって1週間ほどたったら、了承を取って消す。
+
+## 8. テスト
+
+土台（架空）：会社 A・B（参加中の SES、担当者各2人）、MRSY 役の会社（名前「合同会社MRSY」、参加中、担当者2人）、直属の行（テストの中で `kind='direct'` を直接入れる）、直属の EG D1・D2、A 所属の EG F、管理者。
+
+### 新しい（`tests/Feature/V0110NoDirectTest.php`）
+
+| 番号 | 受け入れ条件 | 手順（誰が・どこで・何を） | 確かめること |
+|---|---|---|---|
+| M1 | AC13 付け替え | 直属に D1・D2（`users` も）、D1 の応募・契約・やり取り（相手＝直属）・連絡メール、持ち込み元が空の案件を入れ、`DirectMerge::run()` | 3-2 の全列が MRSY。契約は `fee_exempt=1`。行 D は残る |
+| M2 | 冪等 | M1 のあと、もう一度 `run()` | 何も変わらない。バックアップが増えない |
+| M3 | 戻せる | M1 のあと `restore()` | すべて元の値（空の持ち込み元は空に戻る） |
+| M4 | 止める（MRSY なし・複数・停止中） | MRSY 役を消す／2つにする／停止にして `run()` | 例外。1行も変わらない |
+| M5 | 止める（1本が重なる） | 同じ案件×D1 で、直属と MRSY の1本を両方作って `run()` | 例外。1行も変わらない |
+| M6 | 対象0なら何もしない | 直属も空の持ち込み元も無い DB で `run()` | 変わらない。MRSY が無くても例外にならない |
+| M7 | D15 のお知らせ | M1 のあと | D1・D2 に1件ずつ、MRSY の担当者に1件ずつ。`mail_outbox` は増えない |
+| M8 | 請求 | M1 のあと `Billing::build(MRSY, その月)` | 付け替えた契約が載らない。移行後に MRSY で作った契約は載る |
+| N1 | AC1 | 管理者が `POST /cases`（持ち込みの SES なし／停止中の会社／A） | 前の2つは登録されず AC1 の文、A は登録される（`source_ses_id = A`） |
+| N2 | AC2・AC8・D2 | N1 の A の案件 | A の担当者2人にお知らせ＋メール、A の担当者の `/ses` に「新しい案件」 |
+| N3 | AC3 | 管理者が A の案件で `GET /cases/{id}/mail`・`POST …/mail/send`・`GET/POST …/search`・`POST …/distribute`・`POST /case-mails/{id}/reply`・`/searches/{sid}` | すべて 403。`case_mails`・`case_offers`・`case_searches` が増えない |
+| N4 | AC3・AC4 | 管理者が `/cases/{id}`（A の担当者が案内を送ったあと） | 「エンジニアに案内する」のボタンが無く、「案内は、案件を持ち込んだ A の担当者が行います。」。「案内メール」の一覧は出るが「記録」のボタンが無い |
+| N5 | AC8 | A の担当者が、管理者の登録した案件で検索 → 送信、返事の記録 | 送れる。`case_mails.ses_id = A` |
+| N6 | AC5 | 管理者が `POST /cases/{id}/threads/{eid}`（どの1本でも） | 断り「管理者は、やり取りを読むだけです。」。開いても既読が変わらない。`/admin` の今やることに出ない |
+| N7 | AC6 | 管理者が `/admin/engineers`・エンジニアの所属カード・`/admin/engineers?ses=direct` | 「直属」の文字が無い。変更先に直属が無い。`ses_companies` で `kind='direct'` の行が増えない |
+| N8 | AC9・AC11 | M1 のあと、D1 が案件で質問を書く／連絡メールを送る／応募する | MRSY の担当者に届き、管理者には届かない（担当者が0人の会社のときの決まりは今のまま） |
+| N9 | AC10 | M1 のあと、A の担当者が A の案件の案内メールの候補・検索で D1 を見る | 「イニシャル（合同会社MRSY）」。氏名・EG- が出ない |
+| N10 | D6 | 持ち込み元が空の案件を作り、管理者が編集で A を選ぶ → もう一度編集 | 1回目は A になる。2回目は選ぶ欄が無い |
+
+### 直す（既存。`grep -ln "直属\|isDirect\|directSesId\|'direct'" tests` と、管理者で案内・検索している所 `grep -n "/mail\|/search\|distribute" tests`）
+
+| ファイル | 直し方 |
+|---|---|
+| `ProfileAndDirectTest` | 直属の部分（直属の登録・知らせ・一覧）を消し、プロフィールの部分は残す。「直属が無い」ことは N7 で見る |
+| `V080DirectMailTest` | 直属の EG → 管理者の宛先のテストを消す。EG の宛先は所属の担当者だけ |
+| `V081AffiliationTest` | 管理者の変更先に直属が出る・移せるテストを、「出ない」に替える |
+| `V0100CaseThreadTest`・`V0101CaseThreadPartnerTest` | 直属の1本（管理者が書ける・既読・今やること）を、「管理者は読むだけ」に替える。N4（直属は管理者）を消す |
+| `V030PermsTest`・`V070SearchTest`・`EmptyStateTest`・`UiUnifyTest`・`V090DisplayIdTest` | 管理者が案内メール・検索を使っている所を、持ち込み元の担当者に替え、管理者は 403 を確かめる |
+| `PurgeSamplesTest` | `--move-kept-to-direct` を `--move-kept-to=<表示 ID>` に |
+| `SeedDummyTest` | `--direct` と直属の数を消す |
+| `Step1ReviewFixesTest`・`AdminToPeopleRegistrationTest`・`PostalAddressTest`・`NameSplitTest`・`EngineerDetailTest`・`DualRoleTest`・`SesDetailButtonsTest` | 直属の会社を使っている所は、参加中の SES に替える。直属だけの決まりを確かめる部分は消す |
+| 版を見ているテスト | `v0.11.0` |
+
+`Workflow::distribute($id, …, $admin)` を直接呼ぶテストは、処理を変えないので直さない（D3）。
+
+## 9. マニュアル（`resources/manuals/`。直したら Leo が 41_Park-Project の `04_Manuals` の各フォルダの `マニュアル.md`・`操作手順書.md` に写し直す）
+
+- `admin.md`・`admin-steps.md`：「直属」の段落を全部消す（0章の行）。案件の登録は「持ち込みの SES を必ず選ぶ」。**案内（エンジニア検索・案内メール）は持ち込み元の担当者が行い、管理者は送れない**（112 行・207 行の手順を、読むだけの説明に替える）。やり取りは読むだけ。所属の変更先。請求の「対象外（元直属）」。表示 ID の表の「会社（SES・直属）」→「会社」。
+- `ses.md`・`ses-steps.md`：管理者が貴社の案件として登録することがある（お知らせが届く。案内は貴社で）。「直属への移動」の文を消す。151 行の「直属なら管理者」を消す。
+- `engineer.md`・`engineer-steps.md`：「直属の方は管理者」の書き添えを全部消す（宛先は所属の会社の担当者）。管理者はやり取りを読むだけ。
+- README：「直属」17 か所、`CaseMail::canSend` の説明（115 行）、版。
+
+## 10. 了承が要ること
+
+- **公開版への反映**：コードの反映と migrate は常時了承の範囲だが、今回の migrate は**他社（MRSY）に見える範囲を変えるデータの書き換え**。7章の W1〜W9 と Q1〜Q4 に TEZZO さんが答えるまで、Leo は公開版に反映しない（手元で作って試すのは進めてよい）。
+- **データの削除**：しない。`kind='direct'` の行を消すのは Q6 の了承のあと、別の作業で。
+- **メールの送信**：移行のときのお知らせは画面だけ（D15）。元直属の EG・MRSY にメールで知らせるなら、文と宛先を TEZZO さんに見せて了承を取ってから Leo が送る。移行のあとの普段の知らせ（W6・W9）は、アプリの普段の動き。
+- **公開リポジトリ**：会社名「合同会社MRSY」がマイグレーションのコードに入る（41_Park-Project の CLAUDE.md で既に公開している名前）。人の名前・メールは書かない。
+- 戻し方：`php artisan migrate:rollback --step=1`（バックアップから戻す）→ `git revert`。公開版で戻すのは、TEZZO さんに知らせてから。
 # PLAN：案件のやり取りの相手を「案件を持ち込んだ SES」に変える（v0.10.1。2026-11-14）
 
 > **これが今の計画**。下の「v0.10.0」以降は前の計画で、消さずに残している（この章は Leo が PLAN.md の先頭に足す）。

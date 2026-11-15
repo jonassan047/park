@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Services\CaseThread;
+use App\Services\DirectMerge;
 use App\Services\Ids;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -85,7 +86,9 @@ class Status extends Command
             'AI：最後に取りに来た' => DB::table('ai_jobs')->max('picked_at') ?? 'まだ',
             'SES：承認待ち' => DB::table('ses_companies')->where('kind', 'ses')->where('status', 'pending')->count(),
             'エンジニア：本人の確認がまだ' => DB::table('engineers')->whereNull('self_confirmed_at')->count(),
-            'エンジニア：管理者の直属' => DB::table('engineers')->whereIn('ses_id', DB::table('ses_companies')->where('kind', 'direct')->select('id'))->count(),
+            '直属の参照（0 のはず）' => DirectMerge::references(),
+            '案件：持ち込み元の無い案件（0 のはず）' => DB::table('cases')->whereNull('source_ses_id')->count(),
+            '直属の付け替え先の候補（id・状態・使える担当者の数）' => collect(DirectMerge::candidates())->map(fn ($c) => "#{$c['id']} {$c['status']} {$c['staff']}人")->implode(' / ') ?: 'なし',
             '案内メール：返事なし（3日以上）' => DB::table('case_mails')->where('reply', 'none')->where('sent_at', '<', $ago('-3 days'))->count(),
             '案件のやり取り：返事のない EG の発言（'.CaseThread::STALE_DAYS.'日以上）' => $this->staleThreads(),
             '案件のやり取り：v0.10.1 より前の形で続く1本（持ち込み元と相手が違う）' => $this->legacyThreads(),
@@ -97,7 +100,8 @@ class Status extends Command
             '経歴の更新待ち（成約した案件）' => DB::table('contracts')->whereNull('history_updated_at')->count(),
             '技術マスタ：確かめ待ち' => DB::table('skill_terms')->where('reviewed', false)->count(),
             '兼任（SES 担当者）' => DB::table('users')->where('role', 'ses')->whereNotNull('ses_id')->whereNotNull('engineer_id')->count(),
-            '兼任（管理者）' => DB::table('users')->where('role', 'admin')->whereNotNull('engineer_id')->count(),
+            '兼任（管理者＋エンジニア）' => DB::table('users')->where('role', 'admin')->whereNotNull('engineer_id')->count(),
+            '兼任（管理者＋SES 担当者）' => DB::table('users')->where('role', 'admin')->whereNotNull('ses_id')->count(),
             self::ID_KEY => $this->missingIds(),
             '見本データ（@park.example）' => DB::table('users')->where('email', 'like', '%@park.example')->count(),
         ] + $this->registrationCounts();

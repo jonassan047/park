@@ -26,7 +26,6 @@ class DummySeed
     const DUMMY_PHONE = '03-0000-0000';
     const DUMMY_POSTAL = '100-0001';
     const DUMMY_ADDRESS = '東京都千代田区（ダミー）';
-    const DIRECT_RATE = 0.1;       // 直属の既定の割合（エンジニアの人数に対して）
     const UNAVAILABLE_RATE = 15;   // 本登録済みのエンジニアのうち、休止中にする割合（%）
     const MIN_SKILLS = 3;
     const MAX_SKILLS = 7;
@@ -89,7 +88,7 @@ class DummySeed
     ];
 
     // ---------- 予定を作る（DB は読むだけ） ----------
-    // $opt：ses・staff・eg・direct・seed（文字・数字・null）。戻り値：errors（あれば止める）、seed、env、counts、ranges、spec（run が使う中身）
+    // $opt：ses・staff・eg・seed（文字・数字・null）。戻り値：errors（あれば止める）、seed、env、counts、ranges、spec（run が使う中身）
     public static function plan(array $opt): array
     {
         $env = app()->environment();
@@ -103,7 +102,6 @@ class DummySeed
         $ses = $int($opt['ses'] ?? 8, 1, 50, '--ses', $errors);
         $staff = $int($opt['staff'] ?? 15, 0, 200, '--staff', $errors);
         $eg = $int($opt['eg'] ?? 80, 0, 500, '--eg', $errors);
-        $direct = $eg === null ? null : $int($opt['direct'] ?? null, 0, $eg, '--direct', $errors, (int) round($eg * self::DIRECT_RATE));
         $seed = $int($opt['seed'] ?? null, 0, 2147483647, '--seed', $errors, 0);
         if ($errors) return ['errors' => $errors, 'env' => $env];
         if (($opt['seed'] ?? null) === null || $opt['seed'] === '') $seed = random_int(1, 2147483647);
@@ -163,16 +161,14 @@ class DummySeed
             $people[] = $c['rep'] + ['ci' => $ci, 'state' => 'C', 'days' => 1, 'expired' => 1, 'first' => true, 'email' => sprintf('ses-d%02d', $c['no']).self::SUFFIX];
         }
 
-        // エンジニア：直属 $direct 人、残りは申込中ではない SES に（会社ごとの重み 1〜3）
+        // エンジニア：申込中ではない SES に（会社ごとの重み 1〜3）
         $pool = [];
         foreach ($open as $ci) for ($w = $rng->getInt(1, 3); $w > 0; $w--) $pool[] = $ci;
-        $dStates = self::stateList($rng, $direct);
-        $sStates = self::stateList($rng, $eg - $direct);
+        $sStates = self::stateList($rng, $eg);
         $year = (int) date('Y');
         $engineers = [];
         for ($j = 0; $j < $eg; $j++) {
-            $isDirect = $j < $direct;
-            $state = $isDirect ? $dStates[$j] : $sStates[$j - $direct];
+            $state = $sStates[$j];
             $p = $person();
             $birth = $rng->getInt(1965, 2002);
             $years = $rng->getInt(1, max(1, min(30, $year - $birth - 22)));
@@ -183,7 +179,7 @@ class DummySeed
             foreach (array_slice($cand, 0, min(count($cand), $rng->getInt(self::MIN_SKILLS, self::MAX_SKILLS))) as $name) {
                 $skills[] = [$name, $rng->getInt(1, max(1, $years)), $rng->getInt(2, 5)];
             }
-            $engineers[] = $p + ['no' => $e0 + $j, 'email' => sprintf('eg-d%03d', $e0 + $j).self::SUFFIX, 'direct' => $isDirect, 'ci' => $isDirect ? null : $pick($pool), 'state' => $state,
+            $engineers[] = $p + ['no' => $e0 + $j, 'email' => sprintf('eg-d%03d', $e0 + $j).self::SUFFIX, 'ci' => $pick($pool), 'state' => $state,
                 'unavailable' => $state === 'A' && $rng->getInt(1, 100) <= self::UNAVAILABLE_RATE,
                 'birth_year' => $birth, 'years_exp' => $years, 'desired_price' => $desired, 'min_price' => $desired - $rng->getInt(0, 10),
                 'station' => $pick(self::STATIONS), 'avail_month' => $rng->getInt(0, 3), 'work_style' => $pick(self::WORK_STYLES),
@@ -194,10 +190,10 @@ class DummySeed
 
         // 件数の表
         $zero = array_fill_keys(array_keys(self::STATE_LABEL), 0);
-        $counts = ['ses' => array_fill_keys(array_keys(self::SES_LABEL), 0), 'staff' => $zero, 'eg_ses' => $zero, 'eg_direct' => $zero];
+        $counts = ['ses' => array_fill_keys(array_keys(self::SES_LABEL), 0), 'staff' => $zero, 'eg_ses' => $zero];
         foreach ($companies as $c) $counts['ses'][$c['status']]++;
         foreach ($people as $p) $counts['staff'][$p['state']]++;
-        foreach ($engineers as $e) $counts[$e['direct'] ? 'eg_direct' : 'eg_ses'][$e['state']]++;
+        foreach ($engineers as $e) $counts['eg_ses'][$e['state']]++;
         $ranges = [
             'ses' => sprintf('ses-d%02d〜ses-d%02d', $s0, $s0 + $ses - 1),
             'eg' => $eg > 0 ? sprintf('eg-d%03d〜eg-d%03d', $e0, $e0 + $eg - 1) : '（なし）',
@@ -242,7 +238,6 @@ class DummySeed
             $maxAudit = (int) DB::table('audit_log')->max('id');
             $mails = DB::table('mail_outbox')->count();
             if (DB::table('skill_terms')->count() === 0) SkillCatalog::sync(); else SkillCatalog::forget();
-            $directId = $spec['engineers'] && collect($spec['engineers'])->contains('direct', true) ? W::directSesId() : null;
 
             // SES の会社
             $sesIds = [];
@@ -279,7 +274,7 @@ class DummySeed
             // エンジニア（アカウントつき）
             $engIds = [];
             foreach ($spec['engineers'] as $e) {
-                $sesId = $e['direct'] ? $directId : $sesIds[$e['ci']];
+                $sesId = $sesIds[$e['ci']];
                 $done = in_array($e['state'], ['A', 'E']); // 本登録済み・停止中は、必須項目がそろっている
                 $d = ['name_sei' => $e['sei'], 'name_mei' => $e['mei'], 'kana_sei' => $e['kana_sei'], 'kana_mei' => $e['kana_mei'], 'email' => $e['email'],
                     'phone' => $done ? self::DUMMY_PHONE : null, 'postal_code' => $done ? self::DUMMY_POSTAL : null, 'address' => $done ? self::DUMMY_ADDRESS : null,
@@ -312,10 +307,10 @@ class DummySeed
                 DB::table('app_notifications')->where('id', '>', $maxNotice)->where('title', 'エンジニアが登録されました')
                     ->whereIn('link', array_map(fn ($i) => "/engineers/$i", $chunk))->delete();
             }
-            // 記録の詳細は「氏名（SES 番号）」で終わる。今回の SES・直属の番号のものだけを消す
+            // 記録の詳細は「氏名（SES 番号）」で終わる。今回の SES の番号のものだけを消す
             $audit = DB::table('audit_log')->where('id', '>', $maxAudit)->where('action', 'engineer-create')->whereNull('user_id')
-                ->where(function ($q) use ($sesIds, $directId) {
-                    foreach (array_filter([...$sesIds, $directId]) as $sid) $q->orWhere('detail', 'like', "%（SES {$sid}）");
+                ->where(function ($q) use ($sesIds) {
+                    foreach (array_filter($sesIds) as $sid) $q->orWhere('detail', 'like', "%（SES {$sid}）");
                 });
             $audit->delete();
             N::audit(null, 'seed-dummy', json_encode($plan['total'] + ['seed' => $plan['seed']]));

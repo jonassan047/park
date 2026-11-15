@@ -91,17 +91,24 @@ class V081AffiliationTest extends TestCase
         return (int) DB::table('users')->where('engineer_id', $eid)->where('role', 'eg')->value('ses_id');
     }
 
-    // T1：管理者はどの会社のエンジニアも、参加中の SES か直属へ。直属のエンジニアも A へ
+    // 古い kind='direct' の行（消さずに残してある）を、テストの中で作る。変更先には選べない
+    private function directRow(): int
+    {
+        return (int) DB::table('ses_companies')->insertGetId(['name' => self::DIRECT, 'kind' => 'direct', 'status' => 'active', 'code' => \App\Services\Ids::next('S'),
+            'self_confirmed_at' => now_str(), 'joined_at' => today_str(), 'created_at' => now_str(), 'updated_at' => now_str()]);
+    }
+
+    // T1：管理者はどの会社のエンジニアも、参加中の SES へ（直属は無くなった。残っている行にも移せない）
     public function test_t1_admin_moves(): void
     {
         $eg1 = $this->engId(self::EG1);
-        $a = $this->sesId(self::SES1); $b = $this->sesId(self::SES2); $direct = W::directSesId();
+        $a = $this->sesId(self::SES1); $b = $this->sesId(self::SES2);
 
         $this->move(self::ADMIN, $eg1, $b)->assertRedirect("/engineers/$eg1")->assertSessionHas('flash.msg', '所属を「'.self::B.'」に変えました。');
         $this->assertSame([$b, $b], [$this->engSes($eg1), $this->egUserSes($eg1)]);
 
-        $this->move(self::ADMIN, $eg1, $direct)->assertRedirect("/engineers/$eg1");
-        $this->assertSame([$direct, $direct], [$this->engSes($eg1), $this->egUserSes($eg1)]);
+        $this->move(self::ADMIN, $eg1, $this->directRow())->assertSessionHas('flash.msg', '選べない会社です。');
+        $this->assertSame([$b, $b], [$this->engSes($eg1), $this->egUserSes($eg1)]);
 
         $this->move(self::ADMIN, $eg1, $a)->assertRedirect("/engineers/$eg1");
         $this->assertSame([$a, $a], [$this->engSes($eg1), $this->egUserSes($eg1)]);
@@ -126,7 +133,7 @@ class V081AffiliationTest extends TestCase
         DB::table('ses_companies')->where('name', self::C)->update(['status' => 'suspended']);
         $c = (int) DB::table('ses_companies')->where('name', self::C)->value('id');
 
-        foreach ([W::directSesId() => '選べない会社です。', $c => '選べない会社です。', 999999 => '選べない会社です。', 'abc' => '選べない会社です。',
+        foreach ([$this->directRow() => '選べない会社です。', $c => '選べない会社です。', 999999 => '選べない会社です。', 'abc' => '選べない会社です。',
                   '' => '変更先を選んでください。'] as $to => $msg) {
             $this->move(self::SES1, $eg1, (string) $to)->assertSessionHas('flash.msg', $msg);
             $this->assertSame([$a, $a], [$this->engSes($eg1), $this->egUserSes($eg1)]);
@@ -135,15 +142,16 @@ class V081AffiliationTest extends TestCase
         $this->assertSame($a, $this->engSes($eg1));
     }
 
-    // T4：SES は、他社・直属のエンジニアを動かせない（自社へ引き入れることもできない）
+    // T4：SES は、他社のエンジニアを動かせない（自社へ引き入れることもできない）
     public function test_t4_other_company_forbidden(): void
     {
         $eg2 = $this->engId(self::EG2);
-        $dEg = $this->mkEgIn(W::directSesId(), '直属 一郎', 'direct-eg@example.test');
-        $a = $this->sesId(self::SES1); $b = $this->sesId(self::SES2); $direct = W::directSesId();
+        $c = (int) DB::table('ses_companies')->where('name', self::C)->value('id');
+        $dEg = $this->mkEgIn($c, '別会社 一郎', 'other-eg@example.test');
+        $a = $this->sesId(self::SES1); $b = $this->sesId(self::SES2);
         $this->move(self::SES1, $eg2, $a)->assertForbidden();
         $this->move(self::SES1, $dEg, $a)->assertForbidden();
-        $this->assertSame([$b, $direct], [$this->engSes($eg2), $this->engSes($dEg)]);
+        $this->assertSame([$b, $c], [$this->engSes($eg2), $this->engSes($dEg)]);
     }
 
     // T5：本人は変えられない。編集の保存に ses_id を混ぜても、だれが送っても所属は変わらない
@@ -269,11 +277,6 @@ class V081AffiliationTest extends TestCase
         $this->move(self::SES2, $eg1, $this->sesId(self::SES1));
         $this->assertCount(1, $n(self::ADMIN));
         $this->assertSame(2, DB::table('mail_outbox')->where('kind', 'engineer-move')->count()); // 本人あての2通だけ
-
-        // 直属 → A：管理者あては1人1件だけ
-        $dEg = $this->mkEgIn(W::directSesId(), '直属 一郎', 'direct-eg@example.test');
-        $this->move(self::ADMIN, $dEg, $this->sesId(self::SES1));
-        $this->assertSame(1, DB::table('app_notifications')->where('user_id', $this->user(self::ADMIN)->id)->where('title', '直属 一郎 さんの所属が変わりました')->count());
     }
 
     // T11：同じ変更を2回送っても、記録・お知らせ・メールは1回分
@@ -326,10 +329,11 @@ class V081AffiliationTest extends TestCase
     {
         $eg1 = $this->engId(self::EG1);
         DB::table('ses_companies')->where('name', self::C)->update(['status' => 'suspended']);
-        W::directSesId();
+        $this->directRow(); // 古い直属の行が残っていても、変更先には出ない
 
         $page = $this->as(self::ADMIN)->get("/engineers/$eg1/edit")->assertOk()->assertSee('/engineers/'.$eg1.'/affiliation', false)->assertSee('今の所属：'.self::A);
-        $page->assertSeeInOrder([self::DIRECT, self::B], false);
+        $page->assertSee(self::B);
+        $page->assertDontSee(self::DIRECT);
         $page->assertDontSee(self::C);
 
         $this->as(self::SES1)->get("/engineers/$eg1/edit")->assertOk()->assertSee('/engineers/'.$eg1.'/affiliation', false)
@@ -362,7 +366,7 @@ class V081AffiliationTest extends TestCase
     // T19：版
     public function test_t19_version(): void
     {
-        $this->assertSame('v0.10.1', config('park.version'));
-        $this->get('/login')->assertOk()->assertSee('v0.10.1');
+        $this->assertSame('v0.11.0', config('park.version'));
+        $this->get('/login')->assertOk()->assertSee('v0.11.0');
     }
 }

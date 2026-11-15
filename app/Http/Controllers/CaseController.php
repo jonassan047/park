@@ -64,9 +64,16 @@ class CaseController extends Controller
     {
         if ($e = $this->providerError($r)) return back()->withInput()->with('flash', ['msg' => $e, 'type' => 'bad']);
         if (!str_in($r->input('title'))) return $this->go('/cases/new', '案件名を入れてください。', 'bad');
+        // 管理者は、案件を持ち込んだ SES を必ず選ぶ（参加中の SES だけ。管理者が自分で発信する道は無い）
+        $own = null;
+        if ($r->user()->role === 'admin') {
+            $sid = int_or_null($r->input('source_ses_id'));
+            $own = $sid ? DB::table('ses_companies')->where('id', $sid)->where('kind', 'ses')->where('status', 'active')->first(['id', 'name']) : null;
+            if (!$own) return back()->withInput()->with('flash', ['msg' => '案件を持ち込んだ SES を選んでください。', 'type' => 'bad']);
+        }
         $id = W::saveCase($r->all(), $r->user());
         $queued = CaseAi::queue($id, $r->user(), true); // 本文があれば、手元の AI に必須・尚可を読み直してもらう（入れられなくても登録は成功）
-        return $this->go("/cases/$id", ($r->user()->role === 'admin' ? '登録しました。マッチングで、合うエンジニアに配信してください。' : '登録しました。続けて「エンジニアに案内する」で、合うエンジニアにメールで案内できます。')
+        return $this->go("/cases/$id", ($own ? "登録しました。案内は {$own->name} の担当者が行います（担当者にお知らせしました）。" : '登録しました。続けて「エンジニアに案内する」で、合うエンジニアにメールで案内できます。')
             .($queued ? ' 手元の AI が必須・尚可を読み直しています。' : ''));
     }
 
@@ -111,8 +118,10 @@ class CaseController extends Controller
             ->where('a.case_id', $id)->select('a.*', 'e.name as eg_name', 'e.code as eg_code', 'e.ses_id as eg_ses_id', 's.name as ses_name')->orderBy('a.id');
         if ($u->role === 'ses') $apps->where('a.ses_id', $u->ses_id);
         if ($u->role === 'eg') $apps->where('a.engineer_id', $u->engineer_id);
+        // 案内メールの記録：持ち込み元の担当者は操作もでき、管理者は読むだけ（v0.11.0）
         $data = ['c' => $c, 'apps' => $apps->get(), 'canMail' => CM::canSend($u, $c)];
-        if ($data['canMail']) {
+        $data['canSeeMails'] = $data['canMail'] || $u->role === 'admin';
+        if ($data['canSeeMails']) {
             $q = DB::table('case_mails as m')->join('engineers as e', 'e.id', '=', 'm.engineer_id')->join('ses_companies as s', 's.id', '=', 'e.ses_id')
                 ->where('m.case_id', $id)->select('m.*', 'e.name', 'e.initials', 'e.code as eg_code', 's.name as ses_name')->orderByDesc('m.id');
             $q->addSelect('e.ses_id as eg_ses_id');
@@ -187,6 +196,7 @@ class CaseController extends Controller
 
     public function distribute(Request $r, int $id)
     {
+        abort_if($r->user()->role === 'admin', 403); // 管理者は案件を発信できない（v0.11.0）
         $c = $this->load($id);
         if ($c->status !== 'open') return $this->go("/cases/$id", '募集中の案件だけ配信できます。', 'bad');
         $ids = array_map('intval', (array) $r->input('engineer_id', []));

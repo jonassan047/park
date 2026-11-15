@@ -14,8 +14,18 @@ abstract class TestCase extends BaseTestCase
     // 既存のテストは案件の中身を確かめるのが目的なので、指定が無ければ見本のプロバイダーを足して送る。必須の確かめは $autoProvider = false で行う
     protected bool $autoProvider = true;
 
+    // 管理者が案件を登録するときは、案件を持ち込んだ SES の選択が必須（v0.11.0）。
+    // 既存のテストは案件の中身を確かめるのが目的なので、管理者の登録で指定が無ければ、参加中の SES を1つ足して送る。必須の確かめは $autoSource = false で行う
+    protected bool $autoSource = true;
+
     public function post($uri, array $data = [], array $headers = [])
     {
+        if ($this->autoSource && is_string($uri) && parse_url($uri, PHP_URL_PATH) === '/cases' && !array_key_exists('source_ses_id', $data) && auth()->user()?->role === 'admin') {
+            $sid = DB::table('ses_companies')->where('kind', 'ses')->where('status', 'active')->orderBy('id')->value('id')
+                ?: DB::table('ses_companies')->insertGetId(['name' => 'テスト持ち込み SES', 'kind' => 'ses', 'status' => 'active', 'code' => \App\Services\Ids::next('S'),
+                    'agreed_at' => now_str(), 'self_confirmed_at' => now_str(), 'joined_at' => today_str(), 'created_at' => now_str(), 'updated_at' => now_str()]);
+            $data['source_ses_id'] = $sid;
+        }
         if ($this->autoProvider && is_string($uri) && preg_match('#^/cases(/\d+)?$#', parse_url($uri, PHP_URL_PATH) ?? '') && !array_key_exists('provider_id', $data)) {
             $pid = DB::table('providers')->where('email', 'test-provider@example.test')->value('id')
                 ?: DB::table('providers')->insertGetId(['name' => 'テスト提供元', 'sei' => 'テスト', 'email' => 'test-provider@example.test', 'created_at' => now_str(), 'updated_at' => now_str()]);

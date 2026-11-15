@@ -13,12 +13,12 @@ use RuntimeException;
 // 消すときは php artisan park:purge-samples
 class SeedDummy extends Command
 {
-    protected $signature = 'park:seed-dummy {--ses=8 : SES の社数} {--staff=15 : SES の担当者の人数} {--eg=80 : エンジニアの人数} {--direct= : うち管理者の直属の人数（既定は eg の1割）} {--seed= : 乱数の種（同じなら同じ内容）} {--yes : 実際に入れる}';
+    protected $signature = 'park:seed-dummy {--ses=8 : SES の社数} {--staff=15 : SES の担当者の人数} {--eg=80 : エンジニアの人数} {--seed= : 乱数の種（同じなら同じ内容）} {--yes : 実際に入れる}';
     protected $description = 'テスト用のダミーデータを入れる（--yes が無ければ、予定を見るだけ）';
 
     public function handle(): int
     {
-        $opt = ['ses' => $this->option('ses'), 'staff' => $this->option('staff'), 'eg' => $this->option('eg'), 'direct' => $this->option('direct'), 'seed' => $this->option('seed')];
+        $opt = ['ses' => $this->option('ses'), 'staff' => $this->option('staff'), 'eg' => $this->option('eg'), 'seed' => $this->option('seed')];
         $plan = DummySeed::plan($opt);
         if ($plan['errors']) {
             foreach ($plan['errors'] as $e) $this->error($e);
@@ -31,7 +31,6 @@ class SeedDummy extends Command
         $this->row('SES', $c['ses'], DummySeed::SES_LABEL);
         $this->row('担当者', $c['staff'], DummySeed::STATE_LABEL);
         $this->row('エンジニア（SES 所属）', $c['eg_ses'], DummySeed::STATE_LABEL);
-        $this->row('エンジニア（直属）', $c['eg_direct'], DummySeed::STATE_LABEL);
         $this->newLine();
         $this->line('番号の範囲：SES '.$plan['ranges']['ses'].' ／ エンジニア '.$plan['ranges']['eg']);
         $this->line('seed：'.$plan['seed'].'　APP_ENV：'.$plan['env']);

@@ -7,7 +7,7 @@ use App\Support\Perms;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
-// 案件のやり取り（v0.10.0）：エンジニアと、所属の会社の担当者（直属なら管理者）が、案件について確かめ合う。
+// 案件のやり取り（v0.10.0）：エンジニアと、案件を持ち込んだ会社の担当者が、案件について確かめ合う（管理者は読むだけ）。
 // 見える範囲・書ける条件は CaseThread に集めている。ここでは「見られない人には 404」だけを確かめる。
 class CaseThreadController extends Controller
 {

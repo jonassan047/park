@@ -100,8 +100,7 @@ class V070SearchTest extends TestCase
         $working = $this->mkEng(self::SES1, '稼働 二郎', 'K.J', $this->sk('Java'), ['status' => 'working']);
         $gone = $this->mkEng(self::SES1, '休止 三郎', 'K.S', $this->sk('Java'), ['status' => 'unavailable']);
         $other = $this->mkEng(self::SES2, '他社 四郎', 'T.S', $this->sk('Java'));
-        $direct = $this->mkEng(self::SES3, '直属 五郎', 'C.G', $this->sk('Java'));
-        DB::table('ses_companies')->where('id', $this->sesId(self::SES3))->update(['kind' => 'direct']);
+        $direct = $this->mkEng(self::SES3, '別会社 五郎', 'C.G', $this->sk('Java'));
         $pendingSes = DB::table('ses_companies')->where('status', 'pending')->value('id');
         $stopped = $this->mkEng(self::SES1, '停止 六郎', 'T.R', $this->sk('Java'));
         DB::table('engineers')->where('id', $stopped)->update(['ses_id' => $pendingSes]);
@@ -111,10 +110,9 @@ class V070SearchTest extends TestCase
         $this->assertSame([true, true, false, false], [$ses[$own], $ses[$working], $ses[$other], $ses[$direct]]);
         $this->assertArrayNotHasKey($gone, $ses);
         $this->assertArrayNotHasKey($stopped, $ses);
+        // 管理者は、どの会社の人も「自社の人」ではない（直属は無くなった）
         $adm = $as(self::ADMIN);
-        $this->assertTrue($adm[$direct]);
-        $this->assertFalse($adm[$own]);
-        $this->assertFalse($adm[$other]);
+        foreach ([$own, $other, $direct] as $e) $this->assertFalse($adm[$e]);
     }
 
     public function test_t3_order_and_months(): void
@@ -130,11 +128,6 @@ class V070SearchTest extends TestCase
         $this->assertSame([$a1, $a2, $b1], $this->names($rows));
         $this->assertGreaterThan($rows[1]['j']['monthsSum'], $rows[0]['j']['monthsSum']);
         $this->assertGreaterThan(0, $rows[1]['j']['monthsSum']);
-        // 管理者：直属の会社の人が先
-        DB::table('ses_companies')->where('id', $this->sesId(self::SES2))->update(['kind' => 'direct']);
-        $adm = $this->user(self::ADMIN);
-        $sid2 = CS::run($adm, $c, CS::conditions($c, null));
-        $this->assertSame([$b1, $a1, $a2], $this->names(CS::rows($adm, DB::table('case_searches')->find($sid2))['rows']));
     }
 
     public function test_t4_project_only_skill_and_exp_hit(): void
@@ -157,12 +150,15 @@ class V070SearchTest extends TestCase
     public function test_t5_buttons_point_to_search_and_old_mail_remains(): void
     {
         $cid = $this->mkCase();
-        foreach ([self::ADMIN, self::SES1] as $email) {
-            $html = $this->as($email)->get("/cases/$cid")->assertOk()->getContent();
-            $this->assertStringContainsString("/cases/$cid/search", $html);
-            $this->assertStringNotContainsString("/cases/$cid/mail\"", $html);
-            $this->as($email)->get("/cases/$cid/mail")->assertOk();
-        }
+        $html = $this->as(self::SES1)->get("/cases/$cid")->assertOk()->getContent();
+        $this->assertStringContainsString("/cases/$cid/search", $html);
+        $this->assertStringNotContainsString("/cases/$cid/mail\"", $html);
+        $this->as(self::SES1)->get("/cases/$cid/mail")->assertOk();
+        // 管理者は案内できない（v0.11.0）。ボタンも出ず、入口は 403
+        $html = $this->as(self::ADMIN)->get("/cases/$cid")->assertOk()->getContent();
+        $this->assertStringNotContainsString("/cases/$cid/search", $html);
+        $this->as(self::ADMIN)->get("/cases/$cid/mail")->assertForbidden();
+        $this->as(self::ADMIN)->get("/cases/$cid/search")->assertForbidden();
     }
 
     public function test_t6_search_screen_shows_mail_or_description(): void
@@ -241,7 +237,7 @@ class V070SearchTest extends TestCase
         $this->mkEng(self::SES2, '他社 花子', 'X.Q', $this->sk('Java'));
         $sid = $this->search(self::SES1, $cid);
         $this->as(self::SES1)->get("/searches/$sid")->assertOk()->assertSee('自社 太郎')->assertSee('X.Q（あおぞらテック）')->assertDontSee('他社 花子');
-        $this->as(self::ADMIN)->get("/searches/$sid")->assertOk()->assertSee('他社 花子（あおぞらテック）');
+        $this->as(self::ADMIN)->get("/searches/$sid")->assertForbidden(); // 管理者は検索を開けない（v0.11.0）
         DB::table('cases')->where('id', $cid)->update(['status' => 'closed']);
         $this->as(self::SES1)->get("/searches/$sid")->assertRedirect(url("/cases/$cid"))->assertSessionHas('flash', fn ($f) => str_contains($f['msg'], '募集中の案件だけ'));
         $this->as(self::SES1)->get("/cases/$cid/search")->assertRedirect(url("/cases/$cid"));
@@ -396,7 +392,8 @@ class V070SearchTest extends TestCase
         $this->as(self::SES2)->get("/cases/$cid/search")->assertForbidden();
         $this->as(self::SES2)->get("/searches/$sid")->assertForbidden();
         $this->as(self::SES2)->post("/searches/$sid/send", ['pick' => [$full]])->assertForbidden();
-        $this->as(self::ADMIN)->get("/searches/$sid")->assertOk();
+        $this->as(self::ADMIN)->get("/searches/$sid")->assertForbidden(); // 管理者は案件を発信できない（v0.11.0）
+        $this->as(self::ADMIN)->get("/cases/$cid/search")->assertForbidden();
         $this->assertSame(0, DB::table('case_mails')->count());
     }
 
@@ -424,7 +421,7 @@ class V070SearchTest extends TestCase
 
     public function test_t23_version(): void
     {
-        $this->assertSame('v0.10.1', config('park.version'));
-        $this->get('/login')->assertOk()->assertSee('v0.10.1');
+        $this->assertSame('v0.11.0', config('park.version'));
+        $this->get('/login')->assertOk()->assertSee('v0.11.0');
     }
 }

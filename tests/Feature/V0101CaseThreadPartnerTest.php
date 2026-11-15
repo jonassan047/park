@@ -10,8 +10,8 @@ use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 // v0.10.1 案件のやり取りの相手を「案件を持ち込んだ会社」に変える（PLAN.md 8章 N1〜N16）。人・会社は見本データと、テストの中で作る架空のものだけ
-// 会社：A＝SES2（あおぞらテック。持ち込み元）、B＝SES1（みどり情報システム。EG F の所属）、C＝SES3（無関係）、直属＝管理者
-// EG：F＝B 所属（架空 花子。イニシャル K.H.）、G＝B 所属（案内していない別の人）、D＝直属
+// 会社：A＝SES2（あおぞらテック。持ち込み元）、B＝SES1（みどり情報システム。EG F の所属）、C＝SES3（無関係）、E＝ほか会社（担当者なし）。管理者は読むだけ（v0.11.0）
+// EG：F＝B 所属（架空 花子。イニシャル K.H.）、G＝B 所属（案内していない別の人）、D＝E 所属
 // 案件：X＝持ち込み元 A（F・D・G に届いている。A→F の案内メールあり）、Y＝持ち込み元なし、Z＝持ち込み元 B
 class V0101CaseThreadPartnerTest extends TestCase
 {
@@ -60,7 +60,10 @@ class V0101CaseThreadPartnerTest extends TestCase
         DB::table('engineers')->where('id', $this->f)->update(['initials' => 'K.H.']);
         $this->fCode = (string) DB::table('engineers')->where('id', $this->f)->value('code');
         $this->g = $this->mkEgIn($this->b, '別人 次郎', 'g-eg@example.test');
-        $this->d = $this->mkEgIn(W::directSesId(), '直属 三郎', 'd-eg@example.test');
+        // D：ほかの会社 E（担当者のいない参加中の SES）の人。直属は無くなった（v0.11.0）
+        $e = (int) DB::table('ses_companies')->insertGetId(['name' => 'ほか会社', 'kind' => 'ses', 'status' => 'active', 'code' => \App\Services\Ids::next('S'),
+            'agreed_at' => now_str(), 'self_confirmed_at' => now_str(), 'joined_at' => today_str(), 'created_at' => now_str(), 'updated_at' => now_str()]);
+        $this->d = $this->mkEgIn($e, '別会社 三郎', 'd-eg@example.test');
         $this->x = $this->mkCase($this->a, 'open', '架空の案件X');
         $this->y = $this->mkCase(null, 'open', '架空の案件Y');
         $this->z = $this->mkCase($this->b, 'open', '架空の案件Z');
@@ -243,23 +246,17 @@ class V0101CaseThreadPartnerTest extends TestCase
         $this->assertSame(1, $this->notes(self::SB, 'エンジニアから案件の質問が届きました%'));
     }
 
-    public function test_n4_direct_engineer_partner_is_admin(): void
+    // 直属はなくなった（v0.11.0）。ほかの会社の人が書くと、相手は持ち込み元の会社。管理者には届かず、管理者は読むだけ
+    public function test_n4_other_company_engineer_partner_is_source_not_admin(): void
     {
-        $this->send('d-eg@example.test', $this->x, $this->d, '直属からの質問')->assertSessionHas('flash.type', 'ok');
+        $this->send('d-eg@example.test', $this->x, $this->d, '別会社からの質問')->assertSessionHas('flash.type', 'ok');
         $t = $this->thread($this->x, $this->d);
-        $direct = W::directSesId();
-        $this->assertSame([$direct, $direct], [(int) $t->partner_ses_id, (int) $t->ses_id]);
-        $this->assertSame(1, $this->notes(self::ADMIN, 'エンジニアから案件の質問が届きました%'));
-        // 持ち込み元 A には届かず、開けず、書けない
-        foreach ([self::SA, self::A2] as $e) {
-            $this->assertSame(0, $this->anyThreadNotes($e), $e);
-            $this->as($e)->get("/cases/{$this->x}/threads/{$this->d}")->assertNotFound();
-            $this->post("/cases/{$this->x}/threads/{$this->d}", ['body' => '侵入'])->assertNotFound();
-            $this->get('/threads')->assertOk()->assertDontSee('直属からの質問')->assertDontSee('直属 三郎');
-        }
-        // 管理者は直属の1本には書ける（対照）
-        $this->send(self::ADMIN, $this->x, $this->d, '管理者の返事')->assertSessionHas('flash.type', 'ok');
-        $this->assertSame(2, DB::table('case_thread_posts')->where('thread_id', $t->id)->count());
+        $this->assertSame($this->a, (int) $t->partner_ses_id);
+        $this->assertSame(0, $this->notes(self::ADMIN, 'エンジニアから案件の質問が届きました%'));
+        $this->assertSame(1, $this->notes(self::SA, 'エンジニアから案件の質問が届きました%'));
+        // 管理者は読むだけ（書けない）
+        $this->bad($this->send(self::ADMIN, $this->x, $this->d, '管理者の返事'), '読むだけ');
+        $this->assertSame(1, DB::table('case_thread_posts')->where('thread_id', $t->id)->count());
     }
 
     // ---------- N5：A が返事を書ける・既読は相手側だけ ----------
@@ -350,7 +347,7 @@ class V0101CaseThreadPartnerTest extends TestCase
             $this->as($who)->get("/cases/{$this->x}/threads/{$this->g}")->assertNotFound();
             $this->post("/cases/{$this->x}/threads/{$this->g}", ['body' => '探る'])->assertNotFound();
         }
-        // 直属の D（case_offers だけ）も 404
+        // ほかの会社の D（case_offers だけ）も 404
         $this->as(self::SA)->get("/cases/{$this->x}/threads/{$this->d}")->assertNotFound();
         $this->post("/cases/{$this->x}/threads/{$this->d}", ['body' => '探る'])->assertNotFound();
         // 存在しない EG も 404（あるかどうかを分けない）
@@ -547,8 +544,10 @@ class V0101CaseThreadPartnerTest extends TestCase
         $aid = W::createUser('real-admin@example.com', '実在 管理', 'admin', 'abcd1234');
         $this->completeProfile($aid, ['company_name' => '実在運営']);
         $admin = User::find($aid);
-        $direct = W::directSesId();
-        $realEg = W::createEngineer($direct, ['name' => '実在 直属', 'email' => 'real-eg@example.com'], $admin);
+        // 実在の会社（見本ではない。メールは @park.example ではない）
+        $direct = (int) DB::table('ses_companies')->insertGetId(['name' => '実在 SES', 'kind' => 'ses', 'status' => 'active', 'code' => \App\Services\Ids::next('S'), 'email' => 'real-ses@example.com',
+            'agreed_at' => now_str(), 'self_confirmed_at' => now_str(), 'joined_at' => today_str(), 'created_at' => now_str(), 'updated_at' => now_str()]);
+        $realEg = W::createEngineer($direct, ['name' => '実在 一郎', 'email' => 'real-eg@example.com'], $admin);
         // setUp の架空の人は、見本ではない人が見本の会社に入っている形になり、消す前に止まる。メールを見本の形にして、見本として消えるようにする
         foreach ([self::A2, self::B2, self::C2, self::F_EMAIL, 'g-eg@example.test'] as $em) {
             DB::table('users')->where('email', $em)->update(['email' => str_replace('@example.test', '@park.example', $em)]);
@@ -558,7 +557,7 @@ class V0101CaseThreadPartnerTest extends TestCase
         DB::table('cases')->where('id', $realCase)->update(['source_ses_id' => $this->a]); // 見本の会社 A が持ち込んだ実在の案件
         $this->offer($realCase, $realEg);
         $tid = (int) DB::table('case_threads')->insertGetId(['case_id' => $realCase, 'engineer_id' => $realEg, 'ses_id' => $direct, 'partner_ses_id' => $this->a, 'last_post_at' => now_str(), 'created_at' => now_str()]);
-        DB::table('case_thread_posts')->insert(['thread_id' => $tid, 'from_user_id' => null, 'from_side' => 'eg', 'from_label' => '実在 直属', 'body' => '実在の質問', 'read_by_eg' => 1, 'read_by_side' => 0, 'created_at' => now_str()]);
+        DB::table('case_thread_posts')->insert(['thread_id' => $tid, 'from_user_id' => null, 'from_side' => 'eg', 'from_label' => '実在 一郎', 'body' => '実在の質問', 'read_by_eg' => 1, 'read_by_side' => 0, 'created_at' => now_str()]);
 
         $this->assertSame(0, Artisan::call('park:purge-samples', ['--yes' => true]), Artisan::output());
         $t = DB::table('case_threads')->find($tid);
@@ -655,6 +654,6 @@ class V0101CaseThreadPartnerTest extends TestCase
     // ---------- 版 ----------
     public function test_version(): void
     {
-        $this->assertSame('v0.10.1', config('park.version'));
+        $this->assertSame('v0.11.0', config('park.version'));
     }
 }

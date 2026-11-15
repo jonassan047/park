@@ -10,7 +10,11 @@
 {{-- 自分の ID。管理者は AD-、担当者は ST-（と会社の SE-）、エンジニア（兼任の人も）は EG- --}}
 <p>ID：@if($u->role === 'admin')<x-code :v="$u->admin_code" />@elseif($u->role === 'ses')<x-code :v="$u->staff_code" />　会社：<x-code :v="DB::table('ses_companies')->where('id', $u->ses_id)->value('code')" />@endif
 @if($u->engineer_id || $u->role === 'eg')@if($u->role !== 'eg')　@endif<x-code :v="DB::table('engineers')->where('id', $u->engineer_id)->value('code')" />@endif</p>
-@if(is_dual())<p class="muted">このアカウントの立場：{{ base_role() === 'admin' ? '管理者' : 'SES 担当者（'.DB::table('ses_companies')->where('id', $u->ses_id)->value('name').'）' }}・エンジニア</p>@endif
+@if(is_dual())@php
+    // 兼任の立場の名前（管理者・SES 担当者（会社名）・エンジニア の順）
+    $dualRow = DB::table('users')->find($u->id);
+    $dualNames = collect(\App\Services\Workflow::rolesOf($dualRow))->map(fn ($r) => $r === 'ses' ? 'SES 担当者（'.DB::table('ses_companies')->where('id', $dualRow->ses_id)->value('name').'）' : lbl('role', $r))->implode('・');
+@endphp<p class="muted">このアカウントの立場：{{ $dualNames }}</p>@endif
 <form method="post" action="{{ url('/account') }}">@csrf
 <div class="pair">
 <x-field label="氏名（姓）" name="name_sei" :value="$nameSei" />

@@ -2,8 +2,10 @@
 
 namespace App\Console\Commands;
 
+use App\Services\Ids;
 use App\Services\SamplePurge;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 // 見本データを消す。--yes が無ければ見るだけ（何も変えない）。名前・メールアドレスは出さず、数だけを出す。
@@ -11,13 +13,23 @@ use RuntimeException;
 //         php artisan park:purge-samples --yes      （バックアップを書き出してから消す）
 class PurgeSamples extends Command
 {
-    protected $signature = 'park:purge-samples {--yes : 実際に消す} {--move-kept-to-direct : 見本の SES に入っている見本ではない人を、管理者の直属へ移して続ける}';
+    protected $signature = 'park:purge-samples {--yes : 実際に消す} {--move-kept-to= : 見本の SES に入っている見本ではない人を、この会社（参加中の SES の表示 ID。例 SE-000012）へ移して続ける}';
     protected $description = '見本データを消す（--yes が無ければ、消す件数を見るだけ）';
 
     public function handle(): int
     {
-        $moveKept = (bool) $this->option('move-kept-to-direct');
-        $plan = SamplePurge::plan($moveKept);
+        // 移し先の会社（表示 ID から探す）。指定が無ければ null
+        $moveTo = null;
+        if (($to = $this->option('move-kept-to')) !== null && $to !== '') {
+            $code = Ids::normalize((string) $to);
+            $moveTo = $code && Ids::kindOf($code) === 'S' ? DB::table('ses_companies')->where('code', $code)->where('kind', 'ses')->where('status', 'active')->value('id') : null;
+            if (!$moveTo) {
+                $this->error('移し先の会社が見つかりません（参加中の SES の表示 ID を指定してください）。何も変えていません。');
+                return 1;
+            }
+            $moveTo = (int) $moveTo;
+        }
+        $plan = SamplePurge::plan($moveTo);
 
         $this->line('表                       消す   残す');
         foreach ($plan['counts'] as $t => [$del, $keep]) {
@@ -41,7 +53,7 @@ class PurgeSamples extends Command
         }
 
         try {
-            $r = SamplePurge::run($moveKept);
+            $r = SamplePurge::run($moveTo);
         } catch (RuntimeException $e) {
             $this->error($e->getMessage());
             return 1;

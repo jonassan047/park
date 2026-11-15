@@ -21,7 +21,7 @@
 <x-card title="担当者"><x-slot:actions>@if($s->status === 'active')<a class="btn small" href="{{ url('/admin/ses/'.$s->id.'/users/new') }}">担当者を登録</a>@endif</x-slot:actions>
 @if($noUsable === 'stopped')<p class="bad-text">使える担当者がいません。止めている担当者を再開するか、担当者を登録してください。</p>@endif
 @if($noUsable === 'left')<p class="bad-text">使える担当者がいません。担当者を登録してください。</p>@endif
-<x-table :head="['ID', '名前', 'メール', '状態', '最終ログイン', '']" :count="$users->count()">
+<x-table :head="['ID', '名前', 'メール', '状態', '最終ログイン', '']" :count="$users->count() + $dualAdmins->count()">
 @foreach($users as $u)@php
 $state = user_state($u);
 $base = '/admin/ses/'.$s->id.'/users/'.$u->id;
@@ -35,7 +35,17 @@ $isRepRow = (int) $u->id === (int) $s->rep_user_id || (int) $u->id === (int) $s-
 @elseif(!$isRepRow && $state !== '退会済')<x-post :action="$base.'/suspend'" label="停止" cls="ghost small" :confirm="$u->name.' さんを停止します。ログインできなくなります（再開できます）。'" />@endif
 @if(!$isRepRow && $state !== '退会済')<x-post :action="$base.'/delete'" label="退会" cls="danger small" :confirm="$u->name.' さんを退会済にします。ログインできなくなり、元に戻せません（記録は残ります）。よろしいですか？'" />@endif
 <a class="btn small" href="{{ url($base) }}">詳細</a></td></tr>@endforeach
+{{-- 担当者を兼ねている管理者。会社からは止められない（やめるのは本人だけ）ので、止めるボタンは出さない --}}
+@foreach($dualAdmins as $a)<tr><td><x-code :v="$a->staff_code" /></td><td>{{ $a->name }} <span class="badge warn">管理者（兼任）</span></td><td>{{ account_mail($a) }}</td><td>{{ user_state($a) }}</td>
+<td>{{ fmt_dt($a->last_login) }}</td><td><a class="btn small" href="{{ url('/admin/admins/'.$a->id) }}">詳細</a></td></tr>@endforeach
 </x-table>
+{{-- 自分がこの会社の担当者を兼ねる・やめる（自分のことだけ。K5） --}}
+@if((int) $me->ses_id === (int) $s->id)
+<p class="muted">あなたは、この会社の担当者を兼ねています。ログインのとき「SES 担当者（{{ $s->name }}）」を選ぶと、この会社の担当者として案件の案内などができます。</p>
+<x-post :action="'/admin/ses/'.$s->id.'/staff-dual/stop'" label="兼任をやめる" cls="ghost small" confirm="この会社の担当者を兼ねるのをやめます。この会社の担当者にお知らせが届きます。よろしいですか？" />
+@elseif($s->status === 'active')
+<x-post :action="'/admin/ses/'.$s->id.'/staff-dual'" label="この会社の担当者を兼ねる" cls="small" confirm="あなたが、この会社の担当者を兼ねます。この会社の SES・担当者に、お知らせとメールが届きます。兼ねられるのは1社だけです。よろしいですか？" />
+@endif
 </x-card>
 @if($s->status === 'active')
 <x-card title="SES の交代">

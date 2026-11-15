@@ -11,7 +11,7 @@
 @foreach($fields as $key => $def)
     @continue(in_array($key, ['name_mei', 'kana_mei'], true))
     @if($def['mode'] === 'view')
-        {{-- 企業名が空（管理者の直属）のときは出さない --}}
+        {{-- 企業名が空のときは出さない --}}
         @if($only === null && !($key === 'company_name' && ($v[$key] ?? '') === ''))<p class="muted">{{ $def['label'] }}：{{ $v[$key] ?? '' }}@if($key === 'email')（変えるときは、登録した方にご連絡ください）@else（変えるときは、上位にご連絡ください）@endif</p>@endif
     @elseif($key === 'name_sei')
         @if($show('name_sei') || $show('name_mei'))<div class="pair">

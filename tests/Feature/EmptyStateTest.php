@@ -51,6 +51,13 @@ class EmptyStateTest extends TestCase
         $this->as($admin)->post('/admin/ses', ['name' => $name, 'rep_sei' => '担当', 'rep_mei' => '者', 'email' => $email])->assertRedirect();
     }
 
+    // 参加中の SES を1つ作る（直属の入れ物の代わり。名前・メールは架空）
+    private function activeSes(string $name = 'テスト SES'): int
+    {
+        return (int) DB::table('ses_companies')->insertGetId(['name' => $name, 'kind' => 'ses', 'status' => 'active', 'code' => \App\Services\Ids::next('S'),
+            'agreed_at' => now_str(), 'self_confirmed_at' => now_str(), 'joined_at' => today_str(), 'created_at' => now_str(), 'updated_at' => now_str()]);
+    }
+
     private function as(User|string $u): static
     {
         $u = is_string($u) ? User::where('email', $u)->firstOrFail() : $u;
@@ -161,8 +168,7 @@ class EmptyStateTest extends TestCase
     public function test_p1_disappears_with_only_a_case_or_only_an_engineer(): void
     {
         $a = $this->admin();
-        // 直属は新しく登録できないので、今いる直属の人として直接作る
-        W::createEngineer(W::directSesId(), ['name_sei' => '直属', 'name_mei' => '一郎', 'email' => 'direct-one@example.com'], $a);
+        W::createEngineer($this->activeSes(), ['name_sei' => '所属', 'name_mei' => '一郎', 'email' => 'direct-one@example.com'], $a);
         $this->as($a)->get('/admin')->assertDontSee('PARK をはじめましょう');
         DB::table('engineers')->delete();
         $this->get('/admin')->assertSee('PARK をはじめましょう');
@@ -222,7 +228,10 @@ class EmptyStateTest extends TestCase
         $this->as($a)->post('/cases', ['title' => '実データの案件', 'price' => '70', 'required_skills' => 'PHP', 'status' => 'open'])->assertRedirect();
         $caseId = (int) DB::table('cases')->where('title', '実データの案件')->value('id');
         $this->get('/admin')->assertDontSee('PARK をはじめましょう');
-        $this->post("/cases/$caseId/distribute", ['engineer_id' => [$e->id], 'message' => 'どうぞ'])->assertRedirect();
+        // 管理者は案件を発信できない（画面の入口は 403）。案内は、持ち込んだ SES の担当者が行う（ここでは処理を直接呼ぶ）
+        $this->assertSame($sesId, (int) DB::table('cases')->where('id', $caseId)->value('source_ses_id'));
+        $this->post("/cases/$caseId/distribute", ['engineer_id' => [$e->id], 'message' => 'どうぞ'])->assertForbidden();
+        W::distribute($caseId, [$e->id], DB::table('users')->where('email', 'first@example.com')->first(), 'どうぞ');
         $this->assertSame(1, DB::table('case_offers')->where('case_id', $caseId)->where('engineer_id', $e->id)->count());
 
         // エンジニア本人が、ホームで案件を見て応募する
@@ -249,7 +258,7 @@ class EmptyStateTest extends TestCase
     public function test_p6_engineer_with_project_has_no_guide_card(): void
     {
         $a = $this->admin();
-        W::createEngineer(W::directSesId(), ['name_sei' => '経験', 'name_mei' => '有り', 'email' => 'exp@example.com'], $a);
+        W::createEngineer($this->activeSes(), ['name_sei' => '経験', 'name_mei' => '有り', 'email' => 'exp@example.com'], $a);
         $e = DB::table('engineers')->where('name', '経験 有り')->first();
         $uid = DB::table('users')->where('email', 'exp@example.com')->value('id');
         DB::table('users')->where('id', $uid)->update(['password' => bcrypt('abcd1234')]);

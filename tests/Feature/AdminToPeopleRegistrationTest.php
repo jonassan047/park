@@ -91,8 +91,9 @@ class AdminToPeopleRegistrationTest extends TestCase
         $this->assertSame(1, (int) $e->ses_id);
         $this->assertNull($e->registered_at);
 
-        // 直属・参加中でない SES は選べない
-        $direct = W::directSesId();
+        // 古い直属の行（kind=direct。消さずに残してある）・参加中でない SES は選べない
+        $direct = (int) DB::table('ses_companies')->insertGetId(['name' => '管理者の直属', 'kind' => 'direct', 'status' => 'active', 'code' => \App\Services\Ids::next('S'),
+            'self_confirmed_at' => now_str(), 'joined_at' => today_str(), 'created_at' => now_str(), 'updated_at' => now_str()]);
         $before = DB::table('engineers')->count();
         foreach ([(string) $direct, 'direct', '4', '99999'] as $bad) {
             $this->post('/engineers', ['ses_id' => $bad, 'name_sei' => '断り', 'name_mei' => '確認', 'email' => 'refuse6@example.com'])->assertSessionHas('flash.type', 'bad');
@@ -123,45 +124,5 @@ class AdminToPeopleRegistrationTest extends TestCase
         $this->assertContains((int) $u->engineer_id, array_map(fn ($r) => $r['engineer']->id, Matcher::forCase($caseId, true)));
     }
 
-    // ---------- S2-31：今いる管理者の直属のエンジニア ----------
-
-    public function test_s2_31_existing_direct_eg_goes_through_the_same_flow(): void
-    {
-        $second = W::createUser('admin2@example.com', '第二 管理', 'admin', 'park1234');
-        $this->completeProfile($second);
-        $admin = User::where('email', 'admin@park.example')->first();
-        $direct = W::directSesId();
-        W::createEngineer($direct, ['name' => '直属 一郎', 'email' => 'd31@example.com'], $admin); // 今ある形（仮登録のアカウントと、送ったリンク）
-        $u = DB::table('users')->where('email', 'd31@example.com')->first();
-        $this->assertNull($u->registered_at);
-
-        // 管理者の送り直し。メールにも本登録の画面にも、企業名（管理者の直属）は出ない
-        $this->as('admin@park.example')->post("/people/{$u->id}/resend")->assertRedirect('/admin/engineers');
-        $u = DB::table('users')->find($u->id);
-        $mail = DB::table('mail_outbox')->where('to_email', 'd31@example.com')->orderByDesc('id')->first();
-        $this->assertStringNotContainsString('管理者の直属', $mail->body);
-        $this->guest();
-        $this->get('/invite/'.$u->token)->assertOk()->assertDontSee('管理者の直属');
-
-        // 本登録を通すと参加中になり、知らせは管理者全員（SES がいないため）
-        $this->finish($u->token, $this->egPayload());
-        $this->assertSame('参加中', user_state(DB::table('users')->find($u->id)));
-        foreach ([$this->uid('admin@park.example'), $second] as $adminId) {
-            $this->assertSame(1, DB::table('app_notifications')->where('user_id', $adminId)->where('title', 'like', '本登録が完了しました%')->count());
-        }
-    }
-
-    public function test_s2_31_migrated_direct_eg_can_complete_missing_items(): void
-    {
-        $admin = User::where('email', 'admin@park.example')->first();
-        $direct = W::directSesId();
-        $eid = W::createEngineer($direct, ['name' => '直属 二郎', 'email' => 'd31b@example.com'], $admin, false);
-        DB::table('users')->insert(['email' => 'd31b@example.com', 'name' => '直属 二郎', 'name_sei' => '直属', 'name_mei' => '二郎', 'role' => 'eg', 'ses_id' => $direct, 'engineer_id' => $eid,
-            'password' => bcrypt('park1234'), 'registered_at' => now_str(), 'active' => 1, 'created_at' => now_str(), 'updated_at' => now_str()]);
-        $this->as('d31b@example.com')->get('/eg')->assertRedirect('/register/complete');
-        $this->get('/register/complete')->assertOk()->assertDontSee('管理者の直属');
-        $this->post('/register/complete', ['kana_sei' => 'ちょくぞく', 'kana_mei' => 'じろう', 'phone' => '090-2222-3333', 'postal_code' => '100-0001', 'address' => '東京都', 'consent' => '1'])->assertRedirect();
-        $this->get('/eg')->assertOk();
-        $this->assertNotNull(DB::table('engineers')->find($eid)->registered_at);
-    }
+    // 直属はなくなった（v0.11.0）。直属の人の本登録の流れ（S2-31）のテストは、同じ流れを通る SES 所属のエンジニアのテストで見ている
 }

@@ -113,7 +113,7 @@ class SesController extends Controller
         foreach ($engs as $e) { $e->account = engineer_state($e, $egUsers[$e->id] ?? null); $e->mail = account_mail($egUsers[$e->id] ?? null); $e->login_id = self::provisionalLoginId($egUsers[$e->id] ?? null); }
         return view('ses.company', [
             's' => $s, 'repName' => Registration::repName($s)[0], 'isRep' => Requirements::isRep($r->user()), 'repId' => $s->rep_user_id,
-            'users' => DB::table('users')->where('ses_id', $id)->where('role', 'ses')->get(),
+            'users' => DB::table('users')->where('ses_id', $id)->whereIn('role', ['ses', 'admin'])->orderByRaw("case when role = 'admin' then 1 else 0 end")->orderBy('id')->get(), // 担当者を兼ねる管理者は最後に
             'engs' => $engs,
             'working' => DB::table('contracts')->whereIn('engineer_id', $egIds)->where('status', 'active')->pluck('engineer_id')->flip(),
             'inSel' => DB::table('applications')->whereIn('engineer_id', $egIds)->whereIn('status', PipelineController::OPEN)->get(['engineer_id'])->groupBy('engineer_id')->map->count(),

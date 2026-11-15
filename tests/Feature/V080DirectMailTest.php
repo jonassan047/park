@@ -129,9 +129,12 @@ class V080DirectMailTest extends TestCase
         // 自社の代表が先、使える担当者が続く。停止中の人・他社の人は出ない
         $this->assertSame([$rep, $staff], array_keys(DM::staffTargets($this->user(self::EG1))));
 
-        // 直属は管理者
-        DB::table('ses_companies')->where('id', $this->sesId(self::SES3))->update(['kind' => 'direct']);
-        $this->assertSame([(int) $this->user(self::ADMIN)->id], array_keys(DM::staffTargets($this->user(self::EG3))));
+        // 管理者は、担当者を兼ねていなければ宛先に出ない（直属は無くなった）
+        $this->assertNotContains((int) $this->user(self::ADMIN)->id, array_keys(DM::staffTargets($this->user(self::EG3))));
+        // 担当者を兼ねている管理者（users.ses_id がこの会社）は、宛先に出る（v0.11.0）
+        DB::table('users')->where('email', self::ADMIN)->update(['ses_id' => $this->sesId(self::SES1)]);
+        $this->assertContains((int) $this->user(self::ADMIN)->id, array_keys(DM::staffTargets($this->user(self::EG1))));
+        DB::table('users')->where('email', self::ADMIN)->update(['ses_id' => null]);
 
         // 会社が停止中なら、その会社の人は出ない
         DB::table('ses_companies')->where('id', $this->sesId(self::SES2))->update(['status' => 'suspended']);
@@ -188,10 +191,6 @@ class V080DirectMailTest extends TestCase
         // 管理者 → エンジニア：返信先を付けない（個人のアドレスを見せない）
         $this->send(self::ADMIN, [$eg2]);
         $this->assertNull(DB::table('mail_outbox')->where('kind', 'direct-mail')->where('to_email', self::EG2)->value('reply_to'));
-        // 直属のエンジニア → 管理者：エンジニアのアドレス
-        DB::table('ses_companies')->where('id', $this->sesId(self::SES3))->update(['kind' => 'direct']);
-        $this->send(self::EG3, [(int) $this->user(self::ADMIN)->id]);
-        $this->assertSame(self::EG3, DB::table('mail_outbox')->where('kind', 'direct-mail')->where('to_email', self::ADMIN)->value('reply_to'));
 
         // 別の会社どうしは付けない。管理者が送るときも付けない。管理者あては付ける
         $a = (object) ['role' => 'ses', 'ses_id' => 1, 'engineer_id' => null];
@@ -352,7 +351,7 @@ class V080DirectMailTest extends TestCase
         $before = $this->counts();
         $post = fn (array $to) => $this->as(self::EG1)->post('/mails', ['to' => $to, 'subject' => '件名', 'body' => '本文', 'send_key' => Str::random(32)]);
         $post([(int) $this->user(self::SES2)->id])->assertForbidden();   // 他社の SES
-        $post([(int) $this->user(self::ADMIN)->id])->assertForbidden();  // 直属でないので、管理者には送れない
+        $post([(int) $this->user(self::ADMIN)->id])->assertForbidden();  // 担当者を兼ねていない管理者には送れない
         $post([(int) $this->user(self::EG2)->id])->assertForbidden();    // ほかのエンジニア
         $this->assertSame($before, $this->counts());
         // 自社の SES には送れる
@@ -421,9 +420,8 @@ class V080DirectMailTest extends TestCase
     {
         $this->as(self::EG1)->get('/eg')->assertOk()->assertSee('担当者にメールを送る');
         $this->as(self::EG1)->get('/mails/new')->assertOk()->assertSee('みどり情報システム 緑川 一郎')->assertSee('（代表）');
-        // 直属は管理者
-        DB::table('ses_companies')->where('id', $this->sesId(self::SES3))->update(['kind' => 'direct']);
-        $this->as(self::EG3)->get('/mails/new')->assertOk()->assertSee('（管理者）');
+        // 直属は無くなった：宛先に「管理者」は出ない
+        $this->as(self::EG3)->get('/mails/new')->assertOk()->assertDontSee('（管理者）');
         // 送れる相手がいない
         DB::table('users')->where('ses_id', $this->sesId(self::SES2))->where('role', 'ses')->update(['active' => 0]);
         $this->as(self::EG2)->get('/mails/new')->assertOk()->assertSee('今は送れる相手がいません');
@@ -448,8 +446,8 @@ class V080DirectMailTest extends TestCase
 
     public function test_t22_version(): void
     {
-        $this->assertSame('v0.10.1', config('park.version'));
-        $this->get('/login')->assertOk()->assertSee('v0.10.1');
+        $this->assertSame('v0.11.0', config('park.version'));
+        $this->get('/login')->assertOk()->assertSee('v0.11.0');
     }
 
     public function test_t23_existing_mail_flows_remain(): void

@@ -11,7 +11,7 @@ class Todo
     public static function for($u): array
     {
         return match ($u->role) {
-            'admin' => self::admin($u->engineer_id ? (int) $u->engineer_id : null),
+            'admin' => self::admin(),
             'ses' => self::ses((int) $u->ses_id, $u->engineer_id ? (int) $u->engineer_id : null),
             'eg' => self::eg((int) $u->engineer_id),
             default => [],
@@ -93,7 +93,7 @@ class Todo
         return $out;
     }
 
-    public static function admin(?int $ownEngineerId = null): array
+    public static function admin(): array
     {
         $out = [];
         foreach (DB::table('ses_companies')->where('kind', 'ses')->where('status', 'pending')->get() as $s) $out[] = self::item("参加の申し込み：{$s->name}", '内容を確かめて承認する', "/admin/ses/{$s->id}");
@@ -102,8 +102,6 @@ class Todo
         foreach ($passed as $a) $out[] = self::item("{$a->eg_name} さん「{$a->title}」：面談を通って2週間", '成約か、次の面談か、見送りかを SES に確かめる', "/applications/{$a->id}");
         $n = DB::table('messages')->where('read_by_admin', false)->distinct()->count('engineer_id');
         if ($n) $out[] = self::item("エンジニアからのメッセージ（{$n}人）", '読んで返事をする', '/admin/messages');
-        // 案件のやり取り：直属のエンジニアの未読の発言（会社の1本は出さない）
-        foreach (CaseThread::unreadDirect($ownEngineerId) as $t) $out[] = self::item("{$t->eg_name} さんから案件の質問：{$t->title}", '読んで返事をする', "/cases/{$t->case_id}/threads/{$t->engineer_id}");
         $n = DB::table('skill_terms')->where('reviewed', false)->count();
         if ($n) $out[] = self::item("技術マスタ：自動で足された技術（{$n}件）", '分類を確かめる', '/admin/skills');
         $n = DB::table('ai_jobs')->where('status', 'done')->count();

@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
-// 最初の情報登録・立場の帯・管理者の登録・SES の登録・管理者直属のエンジニア（PLAN 2026-10-17 の A〜E）
+// 最初の情報登録・立場の帯・管理者の登録・SES の登録（PLAN 2026-10-17 の A〜E）。管理者の直属は v0.11.0 でなくなった（古い行が残っても、どこにも出ない）
 class ProfileAndDirectTest extends TestCase
 {
     use RefreshDatabase;
@@ -29,17 +29,6 @@ class ProfileAndDirectTest extends TestCase
     {
         // 氏名・企業名が足りない（足りない項目の画面が出る）状態にする
         DB::table('users')->whereIn('email', $emails)->update(['profile_completed_at' => null, 'name_sei' => null, 'name_mei' => null, 'company_name' => null]);
-    }
-
-    // 管理者の直属のエンジニアを1人作って、その engineers.id を返す（管理者として操作する）。
-    // 直属は画面からは新しく登録できない（PLAN V1）ので、今いる直属の人と同じ形で直接作る
-    private function directEngineer(string $email = 'direct-eg@park.example', string $name = '直属 一郎'): int
-    {
-        $this->as('admin@park.example');
-        $id = W::createEngineer(W::directSesId(), ['name' => $name, 'email' => $email], User::where('email', 'admin@park.example')->first());
-        // 本登録が済んだエンジニアとして扱う（仮登録のままだと、候補・応募に出ないため）
-        DB::table('engineers')->where('id', $id)->update(['registered_at' => now_str()]);
-        return $id;
     }
 
     // ---------- A. 最初の情報登録 ----------
@@ -330,17 +319,15 @@ class ProfileAndDirectTest extends TestCase
 
     // ---------- E. 管理者に紐づくエンジニア ----------
 
-    public function test_e1_e2_direct_row(): void
+    // 直属は無くなった（v0.11.0）。直属の行を作る関数はもう無い（行は消さずに残してある）
+    public function test_e1_e2_no_direct_row_is_made(): void
     {
         $this->assertSame(0, DB::table('ses_companies')->where('kind', '!=', 'ses')->count());
-        $a = W::directSesId();
-        $this->assertSame($a, W::directSesId());
-        $this->assertSame(1, DB::table('ses_companies')->where('kind', 'direct')->count());
-        $row = DB::table('ses_companies')->find($a);
-        $this->assertSame('active', $row->status);
-        $this->assertNotNull($row->self_confirmed_at);
-        $this->assertTrue(W::isDirect($a));
-        $this->assertFalse(W::isDirect(1));
+        $this->assertFalse(method_exists(W::class, 'directSesId'));
+        $this->assertFalse(method_exists(W::class, 'isDirect'));
+        $this->as('admin@park.example');
+        foreach (['/admin', '/admin/ses', '/admin/engineers', '/cases/new', '/engineers/new?ses=1'] as $p) $this->get($p)->assertOk();
+        $this->assertSame(0, DB::table('ses_companies')->where('kind', 'direct')->count()); // どの画面を開いても、直属の行は作られない
     }
 
     public function test_e12_existing_engineers_unchanged(): void
@@ -354,22 +341,11 @@ class ProfileAndDirectTest extends TestCase
         $this->as('admin@park.example');
         // V1-1：直属を新しく登録する入口はない（SES を選んでから登録する）
         $this->get('/engineers/new?ses=direct')->assertRedirect(url('/admin/ses'))->assertSessionHas('flash.type', 'warn');
-        $this->get('/admin/engineers?ses=direct')->assertOk(); // 0件でも開ける
+        $this->get('/admin/engineers?ses=direct')->assertOk(); // 古い URL でも開ける（絞り込みは無い）
         $this->assertSame(0, DB::table('ses_companies')->where('kind', 'direct')->count()); // 開いただけでは作らない
-        $this->get('/admin/engineers')->assertOk()->assertDontSee('直属だけ'); // 直属の人がいないときはボタンが出ない
-        W::directSesId();
-        $this->get('/admin/engineers')->assertOk()->assertDontSee('直属だけ'); // 入れ物だけでは出ない（直属のエンジニアがいるときだけ）
+        $this->get('/admin/engineers')->assertOk()->assertDontSee('直属だけ'); // 「直属だけ」のボタンは無い
         $this->assertStringNotContainsString('<select name="ses_id"', $this->get('/engineers/new?ses=1')->getContent()); // 所属は選ばせない（読むだけ）
         $this->as('ses1@park.example')->get('/engineers/new')->assertOk()->assertDontSee('管理者の直属');
-    }
-
-    public function test_e4_register_direct_engineer(): void
-    {
-        $eid = $this->directEngineer();
-        $direct = (int) DB::table('ses_companies')->where('kind', 'direct')->value('id');
-        $this->assertSame($direct, (int) DB::table('engineers')->find($eid)->ses_id);
-        $this->assertDatabaseHas('users', ['email' => 'direct-eg@park.example', 'role' => 'eg', 'ses_id' => $direct, 'engineer_id' => $eid]);
-        $this->assertDatabaseHas('mail_outbox', ['to_email' => 'direct-eg@park.example', 'kind' => 'invite']);
     }
 
     public function test_e4_blank_or_bad_affiliation_is_refused(): void
@@ -394,37 +370,11 @@ class ProfileAndDirectTest extends TestCase
         $this->assertSame(0, DB::table('ses_companies')->where('kind', 'direct')->count());
     }
 
-    public function test_e5_e6_application_flow_and_ses_isolation(): void
+    // 古い直属の行（kind=direct。消さずに残してある）は、SES ではない：一覧・詳細・操作に出ない
+    public function test_e7_old_direct_row_is_not_ses(): void
     {
-        $eid = $this->directEngineer();
-        $direct = W::directSesId();
-        DB::table('engineers')->where('id', $eid)->update(['self_confirmed_at' => now()]);
-        $caseId = DB::table('cases')->where('status', 'open')->orderBy('id')->value('id');
-        $this->as('admin@park.example');
-        $this->post("/cases/$caseId/apply", ['engineer_id' => $eid, 'start_ok' => 1, 'price_ok' => 1, 'style_ok' => 1])->assertRedirect();
-        $app = DB::table('applications')->where('engineer_id', $eid)->first();
-        $this->assertSame($direct, (int) $app->ses_id);
-        $this->post("/applications/{$app->id}/status", ['status' => 'submitted'])->assertRedirect();
-        $this->assertSame('submitted', DB::table('applications')->find($app->id)->status);
-        $this->post("/applications/{$app->id}/interview", ['scheduled_at' => '2026-12-01T10:00', 'place' => 'オンライン'])->assertRedirect();
-        $this->post("/applications/{$app->id}/contract", ['price' => 70, 'start_date' => date('Y-m-01')])->assertRedirect();
-        $k = DB::table('contracts')->where('application_id', $app->id)->first();
-        $this->assertSame($direct, (int) $k->ses_id);
-        $this->assertSame('won', DB::table('applications')->find($app->id)->status);
-
-        // どの SES の担当者も見られない
-        $this->as('ses1@park.example');
-        $this->get("/engineers/$eid")->assertForbidden();
-        $this->get("/applications/{$app->id}")->assertForbidden();
-        $this->get("/contracts/{$k->id}")->assertForbidden();
-        $this->as('ses2@park.example');
-        $this->get("/engineers/$eid")->assertForbidden();
-        $this->get("/applications/{$app->id}")->assertForbidden();
-    }
-
-    public function test_e7_direct_is_not_ses(): void
-    {
-        $direct = W::directSesId();
+        $direct = (int) DB::table('ses_companies')->insertGetId(['name' => '管理者の直属', 'kind' => 'direct', 'status' => 'active', 'code' => \App\Services\Ids::next('S'),
+            'self_confirmed_at' => now_str(), 'joined_at' => today_str(), 'created_at' => now_str(), 'updated_at' => now_str()]);
         Artisan::call('park:status', ['--json' => true]);
         $s0 = json_decode(Artisan::output(), true);
         $this->as('admin@park.example');
@@ -448,77 +398,8 @@ class ProfileAndDirectTest extends TestCase
         $this->assertStringNotContainsString('管理者の直属', $this->get('/cases/new')->assertOk()->getContent());
         // park:status
         $this->assertSame(0, $s0['SES：承認待ち'] - 1); // 見本の保留 1 社だけ
-        // role=ses の人が直属の行に属しても、ログインできない
-        $ghost = W::createUser('ghost-ses@park.example', '幽霊 担当', 'ses', 'park1234', ['ses_id' => $direct]);
-        $this->completeProfile($ghost);
-        auth()->logout();
-        $this->flushSession();
-        $this->post('/login', ['email' => 'ghost-ses@park.example', 'password' => 'park1234'])->assertRedirect()->assertSessionHas('flash.type', 'bad');
-        $this->assertGuest();
-    }
-
-    public function test_e7_status_command_counts_direct_engineers_only_as_direct(): void
-    {
-        $this->directEngineer();
-        Artisan::call('park:status', ['--json' => true]);
-        $d = json_decode(Artisan::output(), true);
-        $this->assertSame(1, $d['エンジニア：管理者の直属']);
-    }
-
-    public function test_e8_no_invoice_for_direct(): void
-    {
-        $eid = $this->directEngineer();
-        $direct = W::directSesId();
-        $caseId = DB::table('cases')->where('status', 'open')->value('id');
-        DB::table('engineers')->where('id', $eid)->update(['self_confirmed_at' => now()]);
-        $appId = W::apply($caseId, $eid, ['start_ok' => 1], User::where('email', 'admin@park.example')->first());
-        $month = date('Y-m');
-        $kid = W::makeContract($appId, ['price' => 80, 'start_date' => date('Y-m-01')], User::where('email', 'admin@park.example')->first());
-        $this->assertNull(Billing::build($direct, $month));
-        $this->assertSame(0, DB::table('invoices')->where('ses_id', $direct)->count());
-        $with = Billing::monthTotal($month);
-        DB::table('contracts')->where('id', $kid)->delete();
-        $this->assertSame(Billing::monthTotal($month), $with); // 直属の契約の有無で変わらない
-        $this->as('admin@park.example')->post('/admin/invoices/build', ['period' => $month])->assertRedirect();
-        $this->assertSame(0, DB::table('invoices')->where('ses_id', $direct)->count());
-    }
-
-    public function test_e9_e10_notifications_and_greeting(): void
-    {
-        $eid = $this->directEngineer();
-        $direct = W::directSesId();
-        DB::table('engineers')->where('id', $eid)->update(['self_confirmed_at' => now()]);
-        $admin = User::where('email', 'admin@park.example')->first();
-        $caseId = DB::table('cases')->where('status', 'open')->value('id');
-        DB::table('users')->where('role', 'admin')->update(['mail_opt_in' => 1]);
-        $adminIds = DB::table('users')->where('role', 'admin')->where('active', 1)->pluck('id');
-
-        $kisha0 = DB::table('app_notifications')->where('title', 'like', '貴社のエンジニアが応募しました%')->count();
-        $apps0 = DB::table('app_notifications')->whereIn('user_id', $adminIds)->where('title', 'like', '応募がありました%')->count();
-        $appId = W::apply($caseId, $eid, ['start_ok' => 1], $admin);
-        // 応募の知らせは、管理者あてに1回分だけ（二重にしない）
-        $this->assertSame($apps0 + $adminIds->count(), DB::table('app_notifications')->whereIn('user_id', $adminIds)->where('title', 'like', '応募がありました%')->count());
-        $this->assertSame($kisha0, DB::table('app_notifications')->where('title', 'like', '貴社のエンジニアが応募しました%')->count());
-
-        // 書類通過 → 管理者に届く
-        $before = DB::table('app_notifications')->whereIn('user_id', $adminIds)->count();
-        W::setStatus($appId, 'doc_passed', $admin, '', '');
-        $this->assertGreaterThan($before, DB::table('app_notifications')->whereIn('user_id', $adminIds)->count());
-
-        // 成約の知らせに請求の一文が入らない（通知もメールも）。SES あての成約には入る
-        $mailMax = (int) DB::table('mail_outbox')->max('id');
-        W::makeContract($appId, ['price' => 70, 'start_date' => date('Y-m-01')], $admin);
-        $won = DB::table('app_notifications')->whereIn('user_id', $adminIds)->where('title', 'like', '成約しました%')->get();
-        $this->assertCount($adminIds->count(), $won);
-        foreach ($won as $n) $this->assertStringNotContainsString('請求', $n->body);
-        $mail = DB::table('mail_outbox')->where('id', '>', $mailMax)->where('subject', 'like', '%成約しました%')->get();
-        $this->assertNotEmpty($mail);
-        foreach ($mail as $m) $this->assertStringNotContainsString('請求', $m->body);
-
-        // 宛名
-        $invite = DB::table('mail_outbox')->where('to_email', 'direct-eg@park.example')->where('kind', 'invite')->first();
-        $this->assertStringStartsWith('直属 一郎 様', $invite->body);
-        $this->assertStringNotContainsString('管理者の直属', $invite->body);
+        // 付け替え前でも、直属の参照を数えられる（0 のはず。この行を指す行は無い）
+        $this->assertSame(0, $s0['直属の参照（0 のはず）']);
     }
 
     public function test_e9_ses_contract_still_mentions_billing(): void
@@ -530,26 +411,11 @@ class ProfileAndDirectTest extends TestCase
         $this->assertStringContainsString('請求', $n->body);
     }
 
-    public function test_e9_withdraw_by_direct_notifies_admins_once(): void
+    // 管理者の一覧に「直属」の絞り込み・印は無い。SES 所属のエンジニアは会社名で出る
+    public function test_e11_admin_list_has_no_direct_filter(): void
     {
-        $eid = $this->directEngineer();
-        DB::table('engineers')->where('id', $eid)->update(['self_confirmed_at' => now()]);
-        $admin = User::where('email', 'admin@park.example')->first();
-        $caseId = DB::table('cases')->where('status', 'open')->value('id');
-        $appId = W::apply($caseId, $eid, ['start_ok' => 1], $admin);
-        $adminIds = DB::table('users')->where('role', 'admin')->where('active', 1)->pluck('id');
-        $before = DB::table('app_notifications')->whereIn('user_id', $adminIds)->count();
-        W::setStatus($appId, 'withdrawn', $admin, '', '');
-        $after = DB::table('app_notifications')->whereIn('user_id', $adminIds)->count();
-        $this->assertSame($adminIds->count(), $after - $before);
-    }
-
-    public function test_e11_admin_filter(): void
-    {
-        $this->directEngineer();
         $this->as('admin@park.example');
-        $this->get('/admin/engineers?ses=direct')->assertOk()->assertSee('直属 一郎')->assertDontSee('山田 太郎');
-        $this->get('/admin/engineers')->assertOk()->assertSee('直属 一郎')->assertSee('山田 太郎')->assertSee('直属</span>', false);
+        $this->get('/admin/engineers')->assertOk()->assertSee('山田 太郎')->assertDontSee('直属だけ')->assertDontSee('直属</span>', false);
     }
 
     // ---------- H〜J. 企業名（管理者）・SES名（SES）（PLAN 2026-10-17） ----------
@@ -799,7 +665,8 @@ class ProfileAndDirectTest extends TestCase
 
     public function test_j4_direct_row_is_not_renamed(): void
     {
-        $direct = W::directSesId();
+        $direct = (int) DB::table('ses_companies')->insertGetId(['name' => '管理者の直属', 'kind' => 'direct', 'status' => 'active', 'code' => \App\Services\Ids::next('S'),
+            'self_confirmed_at' => now_str(), 'joined_at' => today_str(), 'created_at' => now_str(), 'updated_at' => now_str()]);
         $before = $this->sesName($direct);
         $admin = User::where('email', 'admin@park.example')->first();
         $this->assertNull(W::renameSes($direct, 'x', $admin));

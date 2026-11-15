@@ -68,22 +68,17 @@ class Step1ReviewFixesTest extends TestCase
         $this->get('/admin/ses/1/users/new')->assertRedirect('/admin/ses/1');
     }
 
-    // M3：直属のエンジニアの送り直し・取り消しは、404 になる SES の詳細ではなく、エンジニアの一覧へ戻る
-    public function test_m3_direct_engineer_people_actions_return_to_engineer_list(): void
+    // M3：エンジニアの仮登録の送り直し・取り消しは、そのエンジニアの会社（SES）の詳細へ戻る（直属は無くなった）
+    public function test_m3_engineer_people_actions_return_to_ses_detail(): void
     {
         $admin = $this->admin();
-        $direct = W::directSesId();
-        W::createEngineer($direct, ['name' => '直属 仮一', 'email' => 'm3-a@example.com'], $admin);
-        W::createEngineer($direct, ['name' => '直属 仮二', 'email' => 'm3-b@example.com'], $admin);
+        W::createEngineer(1, ['name' => '自社 仮一', 'email' => 'm3-a@example.com'], $admin);
+        W::createEngineer(1, ['name' => '自社 仮二', 'email' => 'm3-b@example.com'], $admin);
         $a = (int) DB::table('users')->where('email', 'm3-a@example.com')->value('id');
         $b = (int) DB::table('users')->where('email', 'm3-b@example.com')->value('id');
         $this->as('admin@park.example');
-        $this->post("/people/$a/resend")->assertRedirect('/admin/engineers');
-        $this->post("/people/$b/cancel")->assertRedirect('/admin/engineers');
-        // 直属でない SES のエンジニアは、今までどおり SES の詳細へ
-        W::createEngineer(1, ['name' => '自社 仮三', 'email' => 'm3-c@example.com'], $admin);
-        $c = (int) DB::table('users')->where('email', 'm3-c@example.com')->value('id');
-        $this->post("/people/$c/resend")->assertRedirect('/admin/ses/1');
+        $this->post("/people/$a/resend")->assertRedirect('/admin/ses/1');
+        $this->post("/people/$b/cancel")->assertRedirect('/admin/ses/1');
     }
 
     // M4：アカウントの保存で、送られなかったふりがな・所属／役職を空で上書きしない
@@ -99,8 +94,8 @@ class Step1ReviewFixesTest extends TestCase
         $this->assertSame([null, null, null], [$u->kana_sei, $u->kana_mei, $u->position]);
     }
 
-    // L10：配信は、所属の会社が参加中のエンジニアだけ。直属（入れ物は active）は今までどおり
-    public function test_l10_distribute_requires_active_company_and_keeps_direct(): void
+    // L10：配信は、所属の会社が参加中のエンジニアだけ
+    public function test_l10_distribute_requires_active_company(): void
     {
         $admin = $this->admin();
         $caseId = (int) DB::table('cases')->where('status', 'open')->orderBy('id')->value('id');
@@ -110,8 +105,5 @@ class Step1ReviewFixesTest extends TestCase
         $this->assertFalse(DB::table('case_offers')->where('case_id', $caseId)->where('engineer_id', $eg)->exists());
         DB::table('ses_companies')->where('id', 2)->update(['status' => 'active']);
         $this->assertSame(1, W::distribute($caseId, [$eg], $admin));
-        $d = W::createEngineer(W::directSesId(), ['name' => '直属 配信', 'email' => null], $admin, false);
-        DB::table('engineers')->where('id', $d)->update(['registered_at' => now_str()]);
-        $this->assertSame(1, W::distribute($caseId, [$d], $admin));
     }
 }

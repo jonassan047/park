@@ -5,7 +5,7 @@
 @foreach($admins as $u)@php
 $state = user_state($u);
 $base = '/admin/admins/'.$u->id;
-$dual = \App\Services\Workflow::isDual($u);
+$dual = !empty($u->engineer_id) && \App\Services\Workflow::isDual($u); // エンジニアを兼ねているか
 $back = ['back' => 'list', 'back_query' => request()->getQueryString()];
 $canDo = $state !== '退会済' && (int) $u->id !== (int) auth()->id();
 // 仮登録の行：送り直しと取り消しは、権限のある人（管理者）にだけ出す。本登録が済んだ行には出さない

@@ -32,8 +32,7 @@ class PeopleController extends Controller
                 return !$gone && url()->previous() === url("/admin/admins/{$t->id}") ? "/admin/admins/{$t->id}" : '/admin/admins';
             }
             if ($t->role === 'ses') return $sesDeleted ? '/admin/ses' : "/admin/ses/{$t->ses_id}";
-            // 直属の入れ物には SES の詳細が無い（404 になる）ので、エンジニアの一覧へ
-            return $t->ses_id && !W::isDirect((int) $t->ses_id) ? "/admin/ses/{$t->ses_id}" : '/admin/engineers';
+            return $t->ses_id ? "/admin/ses/{$t->ses_id}" : '/admin/engineers';
         }
         return $t->role === 'eg' ? '/ses/engineers' : '/ses/company';
     }

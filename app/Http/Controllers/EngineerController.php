@@ -30,7 +30,7 @@ class EngineerController extends Controller
     }
 
     // 仮登録の入力画面（姓・名・メールの3つだけ）。管理者は、参加中の SES を選ぶ（SES の画面から来たときは、その SES に決まる）。
-    // SES の人は自社に固定。管理者の直属は、新しくは登録できない
+    // SES の人は自社に固定
     public function create(Request $r)
     {
         $sesFixed = null;

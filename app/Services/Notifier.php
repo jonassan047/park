@@ -78,7 +78,8 @@ class Notifier
 
     // 知らせの相手は、本登録が済んだ人だけ（仮登録の人には送らない）
     public static function admins() { return DB::table('users')->where('role', 'admin')->where('active', 1)->whereNotNull('registered_at')->get(); }
-    public static function sesUsers($sesId) { return DB::table('users')->where('role', 'ses')->where('ses_id', $sesId)->where('active', 1)->whereNotNull('registered_at')->get(); }
+    // 会社の担当者への知らせの相手。この会社の担当者を兼ねている管理者（role=admin・ses_id がこの会社）も含める（2026-11-15）
+    public static function sesUsers($sesId) { return DB::table('users')->whereIn('role', ['ses', 'admin'])->where('ses_id', $sesId)->where('active', 1)->whereNotNull('registered_at')->get(); }
     // エンジニアあての相手：本人のアカウント（SES 担当者・管理者を兼ねている人も含む）。エンジニアが停止中・退会済なら届けない
     public static function egUsers($engineerId)
     {
@@ -93,8 +94,6 @@ class Notifier
     }
     public static function toSes($sesId, string $title, string $body, string $link, bool $mail = true, string $kind = 'notice', ?int $exceptUserId = null): void
     {
-        // 管理者の直属には SES の担当者がいないので、管理者全員に届ける
-        if (Workflow::isDirect($sesId ? (int) $sesId : null)) { self::toAdmins($title, $body, $link, $mail, $kind, $exceptUserId); return; }
         foreach (self::sesUsers($sesId) as $u) if ((int) $u->id !== (int) $exceptUserId) self::notify($u->id, $title, $body, $link, $mail, $kind, 'ses');
     }
     public static function toEg($engineerId, string $title, string $body, string $link, bool $mail = true, string $kind = 'notice', ?int $exceptUserId = null): void
@@ -104,6 +103,9 @@ class Notifier
 
     public static function audit($userId, string $action, ?string $detail = ''): void
     {
+        // 管理者が、兼ねた会社の担当者の立場でした操作には、頭に印を付ける（公平性のため。あとで分かるように）
+        $me = auth()->user();
+        if ($me && $userId !== null && (int) $userId === (int) $me->id && $me->role === 'ses' && base_role() === 'admin') $detail = '［管理者の兼任］'.$detail;
         DB::table('audit_log')->insert(['user_id' => $userId, 'action' => $action, 'detail' => $detail, 'at' => now_str()]);
     }
 }

@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\DB;
 // 送れる範囲（1か所で決める。画面の出し分けも、送るときも、ここを使う）
 //   管理者   → 全社のエンジニア
 //   SES・担当者 → 自社のエンジニアだけ
-//   エンジニア → 所属の会社の SES・担当者（直属なら管理者）だけ
+//   エンジニア → 所属の会社の SES・担当者（担当者を兼ねている管理者も含む）だけ
 // 宛先は、使える人だけ（エンジニアは本登録済み・停止中でない・退会でない、SES・担当者・管理者は使えている人）。自分自身は出ない。
 // 案件の案内メール（CaseMail）・管理者とのやり取り（messages）とは別のもの。
 class DirectMail
@@ -76,7 +76,7 @@ class DirectMail
         return $out;
     }
 
-    // エンジニアが送れる、所属の会社の SES・担当者（直属なら管理者）の全体。
+    // エンジニアが送れる、所属の会社の SES・担当者の全体。
     // ok＝使える人（[users.id => 行]。代表を先に、ほかは名前順）、unusable＝範囲の中だが今は使えない人の users.id
     private static function staffRange($u): array
     {
@@ -85,11 +85,9 @@ class DirectMail
         $e = DB::table('engineers')->find($u->engineer_id);
         $s = $e ? DB::table('ses_companies')->find($e->ses_id) : null;
         if (!$s) return $out;
-        $direct = $s->kind === 'direct';
-        $rows = $direct
-            ? DB::table('users')->where('role', 'admin')->where('id', '!=', $u->id)->orderBy('name')->get()
-            : DB::table('users')->where('role', 'ses')->where('ses_id', $s->id)->where('id', '!=', $u->id)->orderBy('name')->get();
-        $rep = $direct ? 0 : (int) $s->rep_user_id;
+        // 会社の担当者。この会社の担当者を兼ねている管理者（role=admin・ses_id がこの会社）も入れる
+        $rows = DB::table('users')->whereIn('role', ['ses', 'admin'])->where('ses_id', $s->id)->where('id', '!=', $u->id)->orderBy('name')->get();
+        $rep = (int) $s->rep_user_id;
         $rows = $rows->sortBy(fn ($x) => (int) $x->id === $rep ? 0 : 1)->values(); // 代表を先に（同じ並びの中では名前順のまま）
         foreach ($rows as $x) {
             if (Registration::usable($x)) $out['ok'][(int) $x->id] = $x;
@@ -124,12 +122,12 @@ class DirectMail
     public static function engineerLabels($u, array $ok): array
     {
         $ses = $u->role === 'admin' && $ok
-            ? DB::table('engineers as e')->join('ses_companies as s', 's.id', '=', 'e.ses_id')->whereIn('e.id', array_keys($ok))->get(['e.id', 's.name', 's.kind'])->keyBy('id')
+            ? DB::table('engineers as e')->join('ses_companies as s', 's.id', '=', 'e.ses_id')->whereIn('e.id', array_keys($ok))->get(['e.id', 's.name'])->keyBy('id')
             : collect();
         $out = [];
         foreach ($ok as $eid => $row) {
             $s = $ses[$eid] ?? null;
-            $out[$eid] = $row->eg_name.($s ? '（'.($s->kind === 'direct' ? '直属' : $s->name).'）' : '');
+            $out[$eid] = $row->eg_name.($s ? '（'.$s->name.'）' : '');
         }
         return $out;
     }
@@ -144,7 +142,7 @@ class DirectMail
         }
         $out = [];
         foreach ($ok as $id => $row) {
-            $out[$id] = user_label($row).($row->role === 'admin' ? '（管理者）' : ((int) $id === $repId ? '（代表）' : ''));
+            $out[$id] = user_label($row).($row->role === 'admin' ? '（管理者兼任）' : ((int) $id === $repId ? '（代表）' : ''));
         }
         return $out;
     }

@@ -58,8 +58,7 @@ function user_label(?object $u): string
 {
     if (!$u) return '';
     if ($u->role === 'admin') return trim((admin_sender($u) ?? setting('operator_name')).' '.$u->name);
-    $s = DB::table('ses_companies')->where('id', $u->ses_id)->first(['name', 'kind']);
-    if ($u->role === 'eg' && ($s->kind ?? '') === 'direct') return (string) $u->name; // 管理者の直属は、会社名をつけない
+    $s = DB::table('ses_companies')->where('id', $u->ses_id)->first(['name']);
     return trim(($s->name ?? '').' '.$u->name);
 }
 

@@ -13,7 +13,7 @@ class Ids
     const KINDS = [
         'A' => ['users', 'admin_code'],          // 管理者
         'T' => ['users', 'staff_code'],          // 担当者（SES の人）
-        'S' => ['ses_companies', 'code'],        // 会社（SES も直属も）
+        'S' => ['ses_companies', 'code'],        // 会社（SES）
         'E' => ['engineers', 'code'],            // エンジニア
         'C' => ['cases', 'code'],                // 案件
         'AP' => ['applications', 'code'],        // 応募
@@ -100,7 +100,7 @@ class Ids
         [$table, $col] = self::KINDS[$kind];
         $q = DB::table($table)->whereNull($col);
         if ($kind === 'A') $q->where('role', 'admin');
-        if ($kind === 'T') $q->where('role', 'ses');
+        if ($kind === 'T') $q->where(fn ($w) => $w->where('role', 'ses')->orWhere(fn ($x) => $x->where('role', 'admin')->whereNotNull('ses_id'))); // 担当者を兼ねる管理者にも ST- を振る
         if ($kind === 'IV') return $q->whereIn('status', ['issued', 'paid'])->orderBy('issued_at')->orderBy('id');
         return $q->orderBy('id');
     }

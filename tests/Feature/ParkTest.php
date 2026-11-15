@@ -55,9 +55,11 @@ class ParkTest extends TestCase
             ->assertOk()->assertSee('在庫管理システム開発')->assertSee('65');
         $this->post('/cases', ['title' => '在庫管理システム開発', 'price' => '65', 'required_skills' => 'Java、SQL', 'work_style' => 'any', 'status' => 'open'])->assertRedirect();
         $caseId = DB::table('cases')->where('title', '在庫管理システム開発')->value('id');
-        $this->get("/cases/$caseId")->assertSee('エンジニアに案内する');
-        $this->get("/cases/$caseId/mail")->assertSee('山田 太郎');
-        $this->post("/cases/$caseId/distribute", ['engineer_id' => [4], 'message' => 'どうぞ'])->assertRedirect();
+        // 管理者は案件を発信できない（v0.11.0）。案内は、持ち込んだ SES の担当者が行う
+        $this->get("/cases/$caseId")->assertDontSee('エンジニアに案内する')->assertSee('案内は、案件を持ち込んだ');
+        $this->get("/cases/$caseId/mail")->assertForbidden();
+        $this->post("/cases/$caseId/distribute", ['engineer_id' => [4], 'message' => 'どうぞ'])->assertForbidden();
+        \App\Services\Workflow::distribute((int) $caseId, [4], DB::table('users')->where('email', 'admin@park.example')->first(), 'どうぞ'); // 処理そのものは今のまま
         $this->assertDatabaseHas('case_offers', ['case_id' => $caseId, 'engineer_id' => 4]);
 
         $this->post('/applications/1/status', ['status' => 'rejected', 'reason' => '他の候補者で決定'])->assertRedirect();

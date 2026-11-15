@@ -35,12 +35,11 @@ class FindController extends Controller
             case 'A': // 管理者の ID は、管理者だけ
                 return $role === 'admin' && $row->role === 'admin' ? "/admin/admins/{$row->id}" : null;
             case 'T': // 担当者：管理者は SES の担当者の画面、同じ会社の SES・担当者は自社の画面
-                if ($row->role !== 'ses' || !$row->ses_id) return null;
-                if ($role === 'admin') return "/admin/ses/{$row->ses_id}/users/{$row->id}";
+                if (!in_array($row->role, ['ses', 'admin'], true) || !$row->ses_id) return null; // 担当者を兼ねる管理者も ST- で探せる
+                if ($role === 'admin') return $row->role === 'admin' ? "/admin/admins/{$row->id}" : "/admin/ses/{$row->ses_id}/users/{$row->id}";
                 return $role === 'ses' && (int) $row->ses_id === (int) $u->ses_id ? '/ses/company' : null;
             case 'S':
-                // 直属の入れ物には SES の詳細が無いので、直属のエンジニアの一覧へ
-                if ($role === 'admin') return $row->kind === 'direct' ? '/admin/engineers?ses=direct' : "/admin/ses/{$row->id}";
+                if ($role === 'admin') return $row->kind === 'ses' ? "/admin/ses/{$row->id}" : null; // SES の詳細が無い行（kind が ses でない）は出さない
                 return $role === 'ses' && (int) $row->id === (int) $u->ses_id ? '/ses/company' : null;
             case 'E':
                 return Perms::engineer($u, $row) ? "/engineers/{$row->id}" : null;

@@ -12,7 +12,8 @@
     $dual = $u && is_dual();
     $acting = $dual ? session('acting_role') : null;
     // 「兼任」の文は、2つの立場がどちらも使えるときだけ出す（片方が止まっていれば、その立場だけの人と同じ見え方）
-    $dualBoth = $dual && count(\App\Services\Workflow::usableRoles(DB::table('users')->find($u->id))) === 2;
+    $usableNow = $dual ? \App\Services\Workflow::usableRoles(DB::table('users')->find($u->id)) : [];
+    $dualBoth = $dual && count($usableNow) >= 2;
     if ($dual && !$acting) $passed = false;
     if ($u && !$passed) $nav = [];
     $path = '/'.trim(request()->path(), '/');
@@ -71,8 +72,9 @@
   @endif
   <form method="get" action="{{ url('/find') }}" class="findbar"><input type="text" name="code" placeholder="ID で探す（例：CA-12）" aria-label="ID で探す" maxlength="30"><button type="submit">探す</button></form>
   @if($dual)
-    @if($dualBoth)<span class="muted">（{{ $u->role === 'eg' ? $otherName[base_role()] : 'エンジニア' }}も兼任。立場を変えるときは、ログアウトして入り直してください）</span>@endif
-    @if($otherUnread)<a href="{{ url('/notifications') }}">{{ $otherName[$u->role === 'eg' ? base_role() : 'eg'] }}あてのお知らせが {{ $otherUnread }} 件あります</a>@endif
+    @php $otherNames = collect($usableNow)->reject(fn ($r) => $r === $u->role)->map(fn ($r) => $otherName[$r])->implode('・'); @endphp
+    @if($dualBoth)<span class="muted">（{{ $otherNames }}も兼任。立場を変えるときは、ログアウトして入り直してください）</span>@endif
+    @if($otherUnread)<a href="{{ url('/notifications') }}">{{ $otherNames }}あてのお知らせが {{ $otherUnread }} 件あります</a>@endif
   @endif
 </div></div>
 @endif

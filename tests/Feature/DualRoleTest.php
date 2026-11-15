@@ -831,7 +831,8 @@ class DualRoleTest extends TestCase
         Artisan::call('park:status', ['--json' => true]);
         $j = json_decode(Artisan::output(), true);
         $this->assertSame(1, $j['兼任（SES 担当者）']);
-        $this->assertSame(1, $j['兼任（管理者）']);
+        $this->assertSame(1, $j['兼任（管理者＋エンジニア）']);
+        $this->assertSame(0, $j['兼任（管理者＋SES 担当者）']);
     }
 
     // ---------- AC15：マニュアル ----------

@@ -42,13 +42,27 @@ class PurgeSamplesTest extends TestCase
         return $this->actingAs($u->fresh())->withSession([TwoFactor::SESSION_KEY => $u->id]);
     }
 
-    // 実在の役：使える管理者と、管理者の直属のエンジニア
+    private ?int $realSesId = null;
+
+    // 実在の会社（見本ではない。メールは @park.example ではない）。直属は無くなったので、実在の人はここに入る
+    private function realSes(): int
+    {
+        return $this->realSesId ??= (int) DB::table('ses_companies')->insertGetId(['name' => '実在 会社', 'kind' => 'ses', 'status' => 'active', 'code' => \App\Services\Ids::next('S'), 'email' => 'real-company@example.com',
+            'agreed_at' => now_str(), 'self_confirmed_at' => now_str(), 'joined_at' => today_str(), 'created_at' => now_str(), 'updated_at' => now_str()]);
+    }
+
+    private function realSesCode(): string
+    {
+        return (string) DB::table('ses_companies')->where('id', $this->realSes())->value('code');
+    }
+
+    // 実在の役：使える管理者と、実在の会社のエンジニア
     private function real(): array
     {
         $aid = W::createUser('real-admin@example.com', '実在 管理', 'admin', 'abcd1234');
         $this->completeProfile($aid, ['company_name' => '実在運営']);
         $admin = User::find($aid);
-        $eid = W::createEngineer(W::directSesId(), ['name' => '実在 直属', 'email' => 'real-eg@example.com'], $admin);
+        $eid = W::createEngineer($this->realSes(), ['name' => '実在 一郎', 'email' => 'real-eg@example.com'], $admin);
         $uid = DB::table('users')->where('email', 'real-eg@example.com')->value('id');
         DB::table('users')->where('id', $uid)->update(['password' => bcrypt('abcd1234')]);
         $this->completeProfile($uid); // 必須項目・同意がそろった本登録済みの形（足りないと、足りない項目の画面へ送られる）
@@ -132,12 +146,19 @@ class PurgeSamplesTest extends TestCase
         $this->assertSame(1, Artisan::call('park:purge-samples'));
         $this->assertStringNotContainsString('real-eg2@example.com', Artisan::output());
 
-        // 移すオプションを付けたときだけ、直属へ移して続ける
-        $this->assertSame(0, Artisan::call('park:purge-samples', ['--yes' => true, '--move-kept-to-direct' => true]));
+        // 移し先を指定したときだけ、その会社（参加中の SES）へ移して続ける。会社が見つからない・参加中でないときは、何も変えない
+        $before = $this->counts();
+        $this->assertSame(1, Artisan::call('park:purge-samples', ['--yes' => true, '--move-kept-to' => 'SE-999999']));
+        $this->assertSame($before, $this->counts());
+        DB::table('ses_companies')->where('id', $this->realSes())->update(['status' => 'suspended']);
+        $this->assertSame(1, Artisan::call('park:purge-samples', ['--yes' => true, '--move-kept-to' => $this->realSesCode()]));
+        $this->assertSame($before, $this->counts());
+        DB::table('ses_companies')->where('id', $this->realSes())->update(['status' => 'active']);
+        $this->assertSame(0, Artisan::call('park:purge-samples', ['--yes' => true, '--move-kept-to' => $this->realSesCode()]));
         $e = DB::table('engineers')->find($moved);
         $this->assertNotNull($e);
-        $this->assertSame(W::directSesId(), (int) $e->ses_id);
-        $this->assertSame(W::directSesId(), (int) DB::table('users')->where('email', 'real-eg2@example.com')->value('ses_id'));
+        $this->assertSame($this->realSes(), (int) $e->ses_id);
+        $this->assertSame($this->realSes(), (int) DB::table('users')->where('email', 'real-eg2@example.com')->value('ses_id'));
         $this->assertSame(0, $this->sampleUsers());
         $this->assertNotNull(DB::table('engineers')->find($directEng));
     }
@@ -148,7 +169,7 @@ class PurgeSamplesTest extends TestCase
         $sesId = (int) User::where('email', 'ses1@park.example')->value('ses_id');
         W::createUser('real-contact@example.com', '実在 担当', 'ses', 'abcd1234', ['ses_id' => $sesId]);
         $before = $this->counts();
-        $this->assertSame(1, Artisan::call('park:purge-samples', ['--yes' => true, '--move-kept-to-direct' => true]));
+        $this->assertSame(1, Artisan::call('park:purge-samples', ['--yes' => true, '--move-kept-to' => $this->realSesCode()]));
         $this->assertSame($before, $this->counts());
         $this->assertSame($sesId, (int) DB::table('users')->where('email', 'real-contact@example.com')->value('ses_id'));
     }
@@ -165,8 +186,8 @@ class PurgeSamplesTest extends TestCase
         $this->assertSame($before, $this->counts());
         $this->assertSame([], $this->backups());
         $this->assertNotNull(DB::table('cases')->find($caseId));
-        // --move-kept-to-direct でも、この守りは外れない
-        $this->assertSame(1, Artisan::call('park:purge-samples', ['--yes' => true, '--move-kept-to-direct' => true]));
+        // --move-kept-to でも、この守りは外れない
+        $this->assertSame(1, Artisan::call('park:purge-samples', ['--yes' => true, '--move-kept-to' => $this->realSesCode()]));
         $this->assertSame($before, $this->counts());
     }
 
@@ -183,10 +204,10 @@ class PurgeSamplesTest extends TestCase
         $this->assertStringNotContainsString('@park.example', $out);
 
         $this->assertSame(0, $this->sampleUsers());
-        $this->assertSame(0, DB::table('ses_companies')->where('kind', 'ses')->count());
-        $this->assertSame(1, DB::table('ses_companies')->where('kind', 'direct')->count());
+        $this->assertSame(1, DB::table('ses_companies')->where('kind', 'ses')->count()); // 実在の会社だけ
+        $this->assertSame(0, DB::table('ses_companies')->where('kind', 'direct')->count());
         $this->assertSame(0, DB::table('engineers')->where('email', 'like', '%@park.example')->count());
-        $this->assertSame(1, DB::table('engineers')->count()); // 直属の実在の人だけ
+        $this->assertSame(1, DB::table('engineers')->count()); // 実在の人だけ
         $this->assertNotNull(DB::table('engineers')->find($directEng));
         $this->assertSame(1, DB::table('cases')->count());
         $this->assertNotNull(DB::table('cases')->find($realCase));
@@ -209,13 +230,13 @@ class PurgeSamplesTest extends TestCase
         $this->assertArrayHasKey('email', $json['表']['users'][0]);
         $this->assertNotEmpty($json['表']['engineers']);
 
-        // 見本の行が 0、残った管理者でダッシュボードが開く（直属のエンジニアがいるので「はじめましょう」は出ない）
+        // 見本の行が 0、残った管理者でダッシュボードが開く（実在の会社・エンジニアがいるので「はじめましょう」は出ない）
         $this->assertSame(0, $this->parkStatus()['見本データ（@park.example）']);
         $this->as('real-admin@example.com')->get('/admin')->assertOk()->assertDontSee('PARK をはじめましょう')->assertSee('登録の状況');
         foreach (['/admin/ses', '/admin/engineers', '/admin/cases', '/admin/applications', '/admin/contracts', '/admin/invoices', '/admin/mail', '/admin/reports', '/admin/settings'] as $t) {
             $this->get($t)->assertOk();
         }
-        // 実在の直属エンジニアのログインはそのまま
+        // 実在のエンジニアのログインはそのまま
         $this->assertNotNull(DB::table('users')->where('email', 'real-eg@example.com')->value('password'));
         $this->as('real-eg@example.com')->get('/eg')->assertOk();
     }
@@ -228,7 +249,7 @@ class PurgeSamplesTest extends TestCase
         N_insert($admin->id, "/engineers/$eg1");
         N_insert($admin->id, "/cases/$case");
         N_insert($admin->id, '/notifications');
-        $keep = N_insert($admin->id, '/engineers/'.W::directSesId() . '9999');
+        $keep = N_insert($admin->id, '/engineers/'.$this->realSes().'9999');
         $this->assertSame(0, Artisan::call('park:purge-samples', ['--yes' => true]));
         $this->assertSame(0, DB::table('app_notifications')->where('user_id', $admin->id)->where('link', "/engineers/$eg1")->count());
         $this->assertSame(0, DB::table('app_notifications')->where('user_id', $admin->id)->where('link', "/cases/$case")->count());
@@ -265,10 +286,12 @@ class PurgeSamplesTest extends TestCase
     {
         $this->real();
         $other = DB::table('ses_companies')->insertGetId(['name' => '実在 SES', 'kind' => 'ses', 'status' => 'active', 'email' => 'real-ses@example.com', 'created_at' => now_str(), 'updated_at' => now_str()]);
+        // 古い直属の行（kind=direct。消さずに残してある）
+        DB::table('ses_companies')->insert(['name' => '管理者の直属', 'kind' => 'direct', 'status' => 'active', 'code' => \App\Services\Ids::next('S'), 'created_at' => now_str(), 'updated_at' => now_str()]);
         $this->assertSame(0, Artisan::call('park:purge-samples', ['--yes' => true]));
         $this->assertNotNull(DB::table('ses_companies')->find($other));
         $this->assertSame(1, DB::table('ses_companies')->where('kind', 'direct')->count());
-        $this->assertSame(1, DB::table('ses_companies')->where('kind', 'ses')->count());
+        $this->assertSame(2, DB::table('ses_companies')->where('kind', 'ses')->count()); // 実在の会社 2 つ
     }
 
     // v0.2.0：見本ではない会社の SES が見本の人なら、会社に SES がいなくなるので止める
@@ -292,7 +315,7 @@ class PurgeSamplesTest extends TestCase
     {
         [$admin] = $this->real();
         $sampleAdmin = (int) User::where('email', 'admin@park.example')->value('id');
-        $kept = W::createEngineer(W::directSesId(), ['name' => '実在 登録済み', 'email' => 'real-eg3@example.com'], User::find($sampleAdmin));
+        $kept = W::createEngineer($this->realSes(), ['name' => '実在 登録済み', 'email' => 'real-eg3@example.com'], User::find($sampleAdmin));
         $keptUser = (int) DB::table('users')->where('email', 'real-eg3@example.com')->value('id');
         $this->assertSame($sampleAdmin, (int) DB::table('users')->find($keptUser)->registered_by);
         $this->assertSame(0, Artisan::call('park:purge-samples', ['--yes' => true]));

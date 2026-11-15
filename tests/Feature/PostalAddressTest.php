@@ -45,10 +45,13 @@ class PostalAddressTest extends TestCase
         return (int) DB::table('users')->where('email', $email)->value('id');
     }
 
-    // 今いる直属のエンジニア（画面からは新しく作れないので、直接作る）
+    // 古い直属の行（kind=direct。消さずに残してある）のエンジニア（画面からは新しく作れないので、直接作る）
     private function directEngineer(): int
     {
-        return W::createEngineer(W::directSesId(), ['name' => '直属 一郎', 'email' => 'pa-direct@park.example'], User::where('email', 'admin@park.example')->first());
+        $direct = (int) DB::table('ses_companies')->where('kind', 'direct')->value('id')
+            ?: (int) DB::table('ses_companies')->insertGetId(['name' => '管理者の直属', 'kind' => 'direct', 'status' => 'active', 'code' => \App\Services\Ids::next('S'),
+                'self_confirmed_at' => now_str(), 'joined_at' => today_str(), 'created_at' => now_str(), 'updated_at' => now_str()]);
+        return W::createEngineer($direct, ['name' => '直属 一郎', 'email' => 'pa-direct@park.example'], User::where('email', 'admin@park.example')->first());
     }
 
     // ---------- マイグレーション・関数 ----------
@@ -104,8 +107,7 @@ class PostalAddressTest extends TestCase
         DB::table('users')->where('id', $uid)->update(['password' => bcrypt('park1234')]);
         $this->completeProfile($uid);
         $this->admin();
-        $this->get('/admin/engineers')->assertOk()->assertSee('直属</span>', false)->assertSee('直属だけ');
-        $this->get('/admin/engineers?ses=direct')->assertOk()->assertSee('直属 一郎')->assertDontSee('山田 太郎');
+        $this->get('/admin/engineers')->assertOk()->assertSee('直属 一郎')->assertDontSee('直属</span>', false)->assertDontSee('直属だけ'); // 絞り込み・印は無い（v0.11.0）
         $this->get("/engineers/$eid")->assertOk();
         $this->get("/engineers/$eid/edit")->assertOk();
         $this->post("/engineers/$eid", ['name_sei' => '直属', 'name_mei' => '二郎'])->assertSessionHas('flash.type', 'ok');

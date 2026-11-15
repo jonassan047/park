@@ -25,7 +25,7 @@
 </x-table></x-card>
 <x-card title="募集中の案件"><x-slot:actions><a class="btn small" href="{{ url('/cases/new') }}">案件を登録</a></x-slot:actions>
 <x-table :head="['案件', '金額', '配信', '応募', '']" :count="$openCases->count()" empty="募集中の案件はありません。「案件を登録」から入れます。">
-@foreach($openCases as $c)<tr><td>{{ $c->title }}</td><td>{{ man($c->price) }}</td><td>{{ $c->offers }}</td><td>{{ $c->apps }}</td><td><a class="btn small" href="{{ url('/cases/'.$c->id) }}">{{ $c->offers ? '開く' : 'マッチング' }}</a></td></tr>@endforeach
+@foreach($openCases as $c)<tr><td>{{ $c->title }}</td><td>{{ man($c->price) }}</td><td>{{ $c->offers }}</td><td>{{ $c->apps }}</td><td><a class="btn small" href="{{ url('/cases/'.$c->id) }}">開く</a></td></tr>@endforeach
 </x-table></x-card>
 </div><div>
 <x-card title="登録の状況">

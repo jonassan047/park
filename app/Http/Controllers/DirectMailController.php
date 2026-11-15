@@ -48,7 +48,7 @@ class DirectMailController extends Controller
         $u = $r->user();
         abort_unless(DM::canCompose($u), 403);
         $ids = $this->ids($r, $u, true);
-        $toEg = $u->role !== 'eg'; // 管理者・SES・担当者が送る相手はエンジニア。エンジニアが送る相手は SES・担当者（直属なら管理者）
+        $toEg = $u->role !== 'eg'; // 管理者・SES・担当者が送る相手はエンジニア。エンジニアが送る相手は SES・担当者
         if ($toEg && !$ids) return $this->go($this->backUrl($u, []), '送る相手を選んでください。', 'bad');
         $t = DM::targets($u, $ids);
         abort_if($t['outside'], 403); // 範囲の外（他社のエンジニアなど）が混ざっていたら、開かない
