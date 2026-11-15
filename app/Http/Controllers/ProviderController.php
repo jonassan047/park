@@ -1,0 +1,89 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Services\Notifier as N;
+use App\Services\Workflow as W;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+
+// プロバイダー（案件を SES に提供してくれる上位者）：管理者だけの登録・一覧・編集・削除。エンジニア・SES には出さない
+class ProviderController extends Controller
+{
+    public function index()
+    {
+        $list = DB::table('providers')->orderBy('name')->orderBy('id')->get();
+        [$list, $pager] = page_slice($list);
+        return view('admin.providers-index', compact('list', 'pager'));
+    }
+
+    public function create() { return view('admin.providers-form', ['p' => null]); }
+
+    public function store(Request $r)
+    {
+        $in = $this->input($r);
+        if (isset($in['bad'])) return back()->withInput()->with('flash', ['msg' => $in['bad'], 'type' => 'bad']);
+        $id = DB::table('providers')->insertGetId($in['ok'] + ['created_at' => now_str(), 'updated_at' => now_str()]);
+        N::audit($r->user()->id, 'provider-add', $in['ok']['name']);
+        return $this->go("/admin/providers/$id", 'プロバイダーを登録しました。');
+    }
+
+    public function show(int $id)
+    {
+        return view('admin.providers-show', ['p' => $this->find($id)]);
+    }
+
+    public function edit(int $id)
+    {
+        return view('admin.providers-form', ['p' => $this->find($id)]);
+    }
+
+    public function update(Request $r, int $id)
+    {
+        $this->find($id);
+        $in = $this->input($r);
+        if (isset($in['bad'])) return back()->withInput()->with('flash', ['msg' => $in['bad'], 'type' => 'bad']);
+        DB::table('providers')->where('id', $id)->update($in['ok'] + ['updated_at' => now_str()]);
+        return $this->go("/admin/providers/$id", '保存しました。');
+    }
+
+    public function destroy(Request $r, int $id)
+    {
+        $p = $this->find($id);
+        DB::table('providers')->where('id', $id)->delete();
+        N::audit($r->user()->id, 'provider-delete', $p->name);
+        return $this->go('/admin/providers', 'プロバイダー「'.$p->name.'」を削除しました。');
+    }
+
+    private function find(int $id): object
+    {
+        $p = DB::table('providers')->where('id', $id)->first();
+        abort_unless($p, 404);
+        return $p;
+    }
+
+    // 入力の検査。必須はメール・企業名・氏名（姓）
+    private function input(Request $r): array
+    {
+        $name = clean_name($r->input('name'));
+        $sei = clean_name($r->input('sei'));
+        $mei = clean_name($r->input('mei'));
+        $email = strtolower((string) str_in($r->input('email')));
+        if ($email === '') return ['bad' => 'メールアドレスを入れてください。'];
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL) || mb_strlen($email) > 190) return ['bad' => 'メールアドレスの形が正しくありません。'];
+        if ($name === null) return ['bad' => '企業名を入れてください。'];
+        if (mb_strlen($name) > 100) return ['bad' => '企業名は100文字までにしてください。'];
+        if ($sei === null) return ['bad' => '氏名（姓）を入れてください。'];
+        if (mb_strlen($sei) > 50 || ($mei !== null && mb_strlen($mei) > 50)) return ['bad' => '氏名は50文字までにしてください。'];
+        $phone = str_in($r->input('phone'));
+        if ($phone !== null && mb_strlen($phone) > 50) return ['bad' => '電話番号は50文字までにしてください。'];
+        $strengths = str_in($r->input('strengths'));
+        if ($strengths !== null && mb_strlen($strengths) > 200) return ['bad' => '得意な分野は200文字までにしてください。'];
+        $ad = W::addressCols($r->all() + ['postal_code' => null, 'address' => null], '所在地');
+        if (isset($ad['bad'])) return $ad;
+        $emp = int_or_null($r->input('employees'));
+        if ($emp !== null && ($emp < 0 || $emp > 1000000)) return ['bad' => '人数が正しくありません。'];
+        return ['ok' => ['name' => $name, 'sei' => $sei, 'mei' => $mei, 'email' => $email, 'phone' => $phone, ...$ad['ok'],
+            'employees' => $emp, 'strengths' => $strengths, 'notes' => str_in($r->input('notes'))]];
+    }
+}
