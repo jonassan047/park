@@ -72,7 +72,9 @@ class Notifier
             $url = $link ? "\n\n▼詳しくはこちら\n".url($link) : '';
             // 兼任の人には、どの立場あてのメールかを頭に書く
             $head = $forRole && Workflow::isDual($u) ? ['ses' => '【SES 担当者あて】', 'admin' => '【管理者あて】', 'eg' => '【エンジニアあて】'][$forRole]."\n" : '';
-            self::queueMail($u->email, $u->name, $title, $head.user_label($u)." 様\n\n".($body ?: $title).$url, $kind);
+            // 担当者の立場あては、兼任の管理者にも「会社名 氏名」で宛名を書く（管理者の企業名は出さない）
+            $who = $forRole === 'ses' ? staff_label($u) : user_label($u);
+            self::queueMail($u->email, $u->name, $title, $head.$who." 様\n\n".($body ?: $title).$url, $kind);
         }
     }
 

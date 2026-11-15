@@ -117,7 +117,7 @@
   @else
   @if($canMail)<p class="muted">案内は「エンジニアに案内する」から、メールで送ります（返事のリンク付き。送った記録と返事は、左の「案内メール」に出ます）。</p>
   <p><a class="btn" href="{{ url('/cases/'.$c->id.'/search') }}">エンジニアに案内する</a></p>
-  @else<p class="muted">この案件は{{ $c->ses_name ? 'ほかの SES' : '管理者' }}が持ち込んだものです。合う方がいれば「推薦する」で、持ち込んだ{{ $c->ses_name ? ' SES' : '管理者' }}に知らせます（名前は伏せて伝えます）。</p>@endif
+  @else<p class="muted">{{ $c->ses_name ? 'この案件は、ほかの SES が持ち込んだものです。合う方がいれば「推薦する」で、持ち込んだ SES に知らせます（名前は伏せて伝えます）。' : 'この案件は、持ち込んだ SES がまだ決まっていません。合う方がいれば「推薦する」で、管理者に知らせます（名前は伏せて伝えます）。' }}</p>@endif
   <x-table :head="['エンジニア', '点数', '足りない点', '']" :count="count($rows)" empty="登録しているエンジニアがいません。">
   @foreach($rows as $row)<tr><td><a href="{{ url('/engineers/'.$row['e']->id) }}">{{ $row['e']->name }}</a> <x-code :v="$row['e']->code" /><div class="muted">{{ lbl('engStatus', $row['e']->status) }}</div></td>
     <td><x-score :n="$row['score']" /></td><td><small class="bad-text">{{ implode('、', $row['missing']) }}</small></td>

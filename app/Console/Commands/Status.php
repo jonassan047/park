@@ -102,6 +102,7 @@ class Status extends Command
             '兼任（SES 担当者）' => DB::table('users')->where('role', 'ses')->whereNotNull('ses_id')->whereNotNull('engineer_id')->count(),
             '兼任（管理者＋エンジニア）' => DB::table('users')->where('role', 'admin')->whereNotNull('engineer_id')->count(),
             '兼任（管理者＋SES 担当者）' => DB::table('users')->where('role', 'admin')->whereNotNull('ses_id')->count(),
+            '管理者で ses_id がある行（担当者の兼任になる。反映の前に、古い行が無いか確かめる）' => DirectMerge::adminsWithSes(),
             self::ID_KEY => $this->missingIds(),
             '見本データ（@park.example）' => DB::table('users')->where('email', 'like', '%@park.example')->count(),
         ] + $this->registrationCounts();

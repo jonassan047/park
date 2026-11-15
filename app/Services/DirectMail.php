@@ -142,7 +142,7 @@ class DirectMail
         }
         $out = [];
         foreach ($ok as $id => $row) {
-            $out[$id] = user_label($row).($row->role === 'admin' ? '（管理者兼任）' : ((int) $id === $repId ? '（代表）' : ''));
+            $out[$id] = staff_label($row).($row->role === 'admin' ? '（管理者兼任）' : ((int) $id === $repId ? '（代表）' : ''));
         }
         return $out;
     }
@@ -221,7 +221,11 @@ class DirectMail
         $sent = 0;
         foreach ($t['ok'] as $id => $to) {
             if ($viaEg) { $toRole = 'eg'; $toName = (string) $to->eg_name; $toLabel = $toName; $eid = (int) $id; }
-            else { $toRole = $to->role; $toLabel = user_label($to); $toName = $toLabel; $eid = null; }
+            else {
+                // 宛先は会社の担当者。担当者を兼ねている管理者（DB の role が admin）にも、担当者の立場あてとして出す（表示も「会社名 氏名」）
+                $toRole = $to->role === 'admin' ? 'ses' : $to->role;
+                $toLabel = staff_label($to); $toName = $toLabel; $eid = null;
+            }
             $replyTo = self::replyToAllowed($u, $to) ? ($u->email ?: null) : null;
             $outbox = N::queueMail($to->email, $toName, $subject, self::compose($toName, $body, $fromLabel, (bool) $replyTo, $mailId), self::KIND, $replyTo, $u->role === 'admin' ? admin_sender($u) : $fromLabel);
             DB::table('direct_mail_recipients')->insert(['direct_mail_id' => $mailId, 'to_user_id' => $to->id, 'to_engineer_id' => $eid, 'to_role' => $toRole,

@@ -51,7 +51,7 @@ class SesController extends Controller
         foreach ($list as $e) {
             $e->skills = $skills[$e->id] ?? ''; // 同じ技術は1回だけ
             $e->account = engineer_state($e, $users[$e->id] ?? null);
-            $e->mail = account_mail($users[$e->id] ?? null);
+            $e->mail = self::mailForSes($users[$e->id] ?? null);
             $e->login_id = self::provisionalLoginId($users[$e->id] ?? null);
         }
         $egIds = $list->pluck('id');
@@ -103,6 +103,12 @@ class SesController extends Controller
         ]);
     }
 
+    // SES・担当者の画面に出すメールアドレス。管理者を兼ねる人（DB の role が admin）のアドレスは出さない
+    public static function mailForSes(?object $u): string
+    {
+        return $u && $u->role === 'admin' ? '—' : account_mail($u);
+    }
+
     public function company(Request $r)
     {
         $id = $r->user()->ses_id;
@@ -110,7 +116,7 @@ class SesController extends Controller
         $egIds = $engs->pluck('id');
         $s = DB::table('ses_companies')->find($id);
         $egUsers = DB::table('users')->whereIn('engineer_id', $egIds)->orderByRaw("case when role = 'eg' then 1 else 0 end")->get()->keyBy('engineer_id');
-        foreach ($engs as $e) { $e->account = engineer_state($e, $egUsers[$e->id] ?? null); $e->mail = account_mail($egUsers[$e->id] ?? null); $e->login_id = self::provisionalLoginId($egUsers[$e->id] ?? null); }
+        foreach ($engs as $e) { $e->account = engineer_state($e, $egUsers[$e->id] ?? null); $e->mail = self::mailForSes($egUsers[$e->id] ?? null); $e->login_id = self::provisionalLoginId($egUsers[$e->id] ?? null); }
         return view('ses.company', [
             's' => $s, 'repName' => Registration::repName($s)[0], 'isRep' => Requirements::isRep($r->user()), 'repId' => $s->rep_user_id,
             'users' => DB::table('users')->where('ses_id', $id)->whereIn('role', ['ses', 'admin'])->orderByRaw("case when role = 'admin' then 1 else 0 end")->orderBy('id')->get(), // 担当者を兼ねる管理者は最後に

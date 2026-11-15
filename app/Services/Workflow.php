@@ -888,7 +888,8 @@ class Workflow
     {
         $tag = Ids::tag($code);
         $link = "/cases/$caseId";
-        if (N::sesUsers($sesId)->isEmpty()) {
+        // 登録した管理者本人（担当者を兼ねている）だけのときも、他に案内できる人がいないので、管理者に知らせる
+        if (N::sesUsers($sesId)->reject(fn ($x) => (int) $x->id === (int) ($actor->id ?? 0))->isEmpty()) {
             N::toAdmins("案件を登録しました（担当者がいません）：{$title}{$tag}", "「{$title}」を ".self::sesCompanyName($sesId)." の案件として登録しましたが、担当者がいないため、案内できる人がいません。", $link, true, 'case');
             return;
         }

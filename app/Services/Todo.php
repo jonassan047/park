@@ -50,12 +50,13 @@ class Todo
         $s = DB::table('ses_companies')->find($sesId);
         // 案内メールの返事
         $mails = DB::table('case_mails as m')->join('cases as c', 'c.id', '=', 'm.case_id')->join('engineers as e', 'e.id', '=', 'm.engineer_id')
-            ->where('c.source_ses_id', $sesId)->where('c.status', 'open')->select('m.*', 'c.title', 'e.name', 'e.initials')->get();
+            ->where('c.source_ses_id', $sesId)->where('c.status', 'open')->select('m.*', 'c.title', 'e.name', 'e.initials', 'e.ses_id as eg_ses_id')->get();
         $applied = DB::table('applications')->whereIn('case_id', $mails->pluck('case_id')->unique()->all())->get(['case_id', 'engineer_id'])
             ->map(fn ($a) => $a->case_id.'-'.$a->engineer_id)->all();
         foreach ($mails as $m) {
             if (in_array($m->case_id.'-'.$m->engineer_id, $applied)) continue;
-            $who = $m->route === 'own' ? $m->name : ($m->initials ?: 'グループの人');
+            // 自社のエンジニアかは、案内メールの記録の route ではなく、エンジニアの今の会社で決める
+            $who = (int) $m->eg_ses_id === $sesId ? $m->name : ($m->initials ?: 'グループの人');
             if ($m->reply === 'interested') $out[] = self::item("{$who} さんが「応募したい」：{$m->title}", '書類を添付して先方に返し、「書類を返した」を押す', "/cases/{$m->case_id}#mails");
             if ($m->reply === 'question') $out[] = self::item("{$who} さんから質問：{$m->title}", ($m->reply_note ?: '内容を確かめて').'。答えて、返事を記録する', "/cases/{$m->case_id}#mails");
         }

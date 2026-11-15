@@ -73,7 +73,9 @@ class CaseController extends Controller
         }
         $id = W::saveCase($r->all(), $r->user());
         $queued = CaseAi::queue($id, $r->user(), true); // 本文があれば、手元の AI に必須・尚可を読み直してもらう（入れられなくても登録は成功）
-        return $this->go("/cases/$id", ($own ? "登録しました。案内は {$own->name} の担当者が行います（担当者にお知らせしました）。" : '登録しました。続けて「エンジニアに案内する」で、合うエンジニアにメールで案内できます。')
+        // 知らせた相手が実際にいるかで、文を変える（登録した管理者本人を除いて、会社に担当者がいないときは、管理者に知らせている）
+        $hasStaff = $own && N::sesUsers($own->id)->reject(fn ($x) => (int) $x->id === (int) $r->user()->id)->isNotEmpty();
+        return $this->go("/cases/$id", ($own ? ($hasStaff ? "登録しました。案内は {$own->name} の担当者が行います（担当者にお知らせしました）。" : "登録しました。{$own->name} には、案内できる担当者がいません（管理者にお知らせしました）。") :'登録しました。続けて「エンジニアに案内する」で、合うエンジニアにメールで案内できます。')
             .($queued ? ' 手元の AI が必須・尚可を読み直しています。' : ''));
     }
 
@@ -222,10 +224,11 @@ class CaseController extends Controller
         $s = Matcher::score($c, $e);
         $text = "{$ses} から、案件「{$c->title}」にエンジニアの推薦がありました。\n".($e->initials ?: '—')."（{$s['score']}点）。合う点：".(implode('、', array_slice($s['reasons'], 0, 4)) ?: '—')
             ."\n案内するときは、案件の「エンジニアに案内する」の「グループのほかの人」から選んでください。";
-        if ($c->source_ses_id) N::toSes($c->source_ses_id, "エンジニアの推薦がありました：{$c->title}".Ids::tag($c->code), $text, "/cases/$id/mail?scope=group", true, 'recommend');
-        N::toAdmins("エンジニアの推薦がありました：{$c->title}".Ids::tag($c->code),$text, "/cases/$id/mail", !$c->source_ses_id, 'recommend');
+        if ($c->source_ses_id) N::toSes($c->source_ses_id, "エンジニアの推薦がありました：{$c->title}".Ids::tag($c->code), $text, "/cases/$id", true, 'recommend');
+        // 管理者は案内できないので、知らせは案件の画面へ（持ち込み元が無い古い案件のときだけ、メールも送る）
+        N::toAdmins("エンジニアの推薦がありました：{$c->title}".Ids::tag($c->code), $text, "/cases/$id", !$c->source_ses_id, 'recommend');
         N::audit($u->id, 'recommend', $key);
-        return $this->go("/cases/$id", '推薦しました。持ち込んだ'.($c->source_ses_id ? ' SES' : '管理者').'に知らせました。');
+        return $this->go("/cases/$id", $c->source_ses_id ? '推薦しました。持ち込んだ SES に知らせました。' : '推薦しました。持ち込み元が決まっていないので、管理者に知らせました。');
     }
 
     public function apply(Request $r, int $id)

@@ -22,7 +22,7 @@ $self = (int) $u->id === (int) auth()->id(); // ご自身の行には操作を�
 $isRepRow = (int) $u->id === (int) $repId || (int) $u->id === (int) $s->next_rep_user_id; // SES（次の SES）の行は、交代のあとでなければ止められない
 $isAdminRow = $u->role === 'admin'; // 担当者を兼ねている管理者。貴社からは止められない（やめるのは本人だけ）
 @endphp<tr><td><x-code :v="$u->staff_code" /></td><td>{{ $u->name }}@if($isAdminRow) <span class="badge warn">管理者（兼任）</span>@endif @if((int) $u->id === (int) $repId) <span class="badge info">SES</span>@elseif((int) $u->id === (int) $s->next_rep_user_id) <span class="badge info">次の SES</span>@endif
-@if($u->engineer_id) <a class="badge info" href="{{ url('/engineers/'.$u->engineer_id) }}">エンジニア兼任</a>@endif</td><td>{{ account_mail($u) }}</td><td>{{ $state }}</td>
+@if($u->engineer_id && !$isAdminRow) <a class="badge info" href="{{ url('/engineers/'.$u->engineer_id) }}">エンジニア兼任</a>@endif</td><td>{{ $isAdminRow ? '—' : account_mail($u) }}</td><td>{{ $state }}</td>
 <td>{{ fmt_dt($u->last_login) }}</td><td>@if($isRep && !$isAdminRow && !$isRepRow && is_provisional_state($state))<x-post :action="'/people/'.$u->id.'/resend'" label="送り直し" cls="ghost small" />
 <a class="btn ghost small" href="{{ url('/people/'.$u->id.'/edit') }}">仮登録の内容を直す</a>
 <x-post :action="'/people/'.$u->id.'/cancel'" label="取り消し" cls="danger small" confirm="この仮登録を取り消します。元に戻せません。よろしいですか？" />@endif

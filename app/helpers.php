@@ -62,6 +62,15 @@ function user_label(?object $u): string
     return trim(($s->name ?? '').' '.$u->name);
 }
 
+// 担当者としての表示「会社名 氏名」。担当者を兼ねている管理者（DB の role が admin で ses_id がある）は、管理者の企業名ではなく、兼ねた会社の名前で出す（K13）
+function staff_label(?object $u): string
+{
+    if (!$u) return '';
+    if ($u->role === 'admin' && empty($u->ses_id)) return user_label($u);
+    $s = DB::table('ses_companies')->where('id', $u->ses_id)->first(['name']);
+    return trim(($s->name ?? '').' '.$u->name);
+}
+
 // 人のアカウントの状態（1か所で決める。上から順に判定）：退会済・停止・仮登録（心当たりなし／期限切れ）・仮登録・参加中。
 // 「期限切れ」は別の状態ではなく、仮登録の中の表示
 function user_state(?object $u): string

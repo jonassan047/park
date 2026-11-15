@@ -247,7 +247,8 @@ class CaseThread
             // 兼任の人が自分の発言で自分に知らせないよう、書いた人（$u->id）は除く
             N::toSes($sesId, "エンジニアから案件の質問が届きました：{$c->title}".$tag, $text, $threadLink, true, self::KIND, (int) $u->id);
             // 会社に使える担当者が1人もいないときは、管理者にも知らせる
-            if (N::sesUsers($sesId)->isEmpty()) N::toAdmins("エンジニアから案件の質問が届きました：{$c->title}".$tag, $text, $threadLink, true, self::KIND, (int) $u->id);
+            // （書いた本人は除いて数える。兼任の人が自分の質問を自分で受けるだけのときも、管理者に知らせる）
+            if (N::sesUsers($sesId)->reject(fn ($x) => (int) $x->id === (int) $u->id)->isEmpty()) N::toAdmins("エンジニアから案件の質問が届きました：{$c->title}".$tag, $text, $threadLink, true, self::KIND, (int) $u->id);
         } elseif ($u->role === 'ses') {
             N::toEg($e->id, "担当者から案件の返事が届きました：{$c->title}".$tag, "案件「{$c->title}」について、担当者から書き込みがありました。\n\n{$preview}", $egLink, true, self::KIND, (int) $u->id);
         }

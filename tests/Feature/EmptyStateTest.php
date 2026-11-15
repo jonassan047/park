@@ -171,6 +171,7 @@ class EmptyStateTest extends TestCase
         W::createEngineer($this->activeSes(), ['name_sei' => '所属', 'name_mei' => '一郎', 'email' => 'direct-one@example.com'], $a);
         $this->as($a)->get('/admin')->assertDontSee('PARK をはじめましょう');
         DB::table('engineers')->delete();
+        DB::table('ses_companies')->where('kind', 'ses')->update(['status' => 'left']); // 参加中の SES が残っていると「はじめましょう」は出ない
         $this->get('/admin')->assertSee('PARK をはじめましょう');
         $this->post('/cases', ['title' => '最初の案件', 'price' => '60', 'status' => 'open'])->assertRedirect();
         $this->get('/admin')->assertDontSee('PARK をはじめましょう');
