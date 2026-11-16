@@ -1,7 +1,7 @@
 @php $u = auth()->user(); @endphp
 @extends('layouts.app', ['title' => '案件のやり取り', 'wide' => true])
 @section('content')
-<p class="muted">エンジニアが、案件について担当者に確かめた内容です。{{ $u->role === 'admin' ? '管理者は、すべてのやり取りを読むだけです（書けません）。' : '貴社のエンジニアの1本と、貴社が持ち込んだ案件で他社のエンジニアと話す1本が出ます。' }}</p>
+<p class="muted">エンジニアが、案件について担当者に確かめた内容です。{{ $u->role === 'admin' ? '管理者は、すべてのやり取りを読むだけです（書けません）。' : '貴社のエンジニアの1本と、貴社が提案元 SES の案件で他社のエンジニアと話す1本が出ます。' }}</p>
 @if($u->role === 'admin' && $sesOptions)
 <form method="get" class="inline">
 <label>会社で絞る <select name="ses" onchange="this.form.submit()"><option value="">すべて</option>@foreach($sesOptions as $k => $t)<option value="{{ $k }}" @selected($sesFilter === (int) $k)>{{ $t }}</option>@endforeach</select></label>

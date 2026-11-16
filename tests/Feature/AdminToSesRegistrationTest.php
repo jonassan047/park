@@ -429,7 +429,7 @@ class AdminToSesRegistrationTest extends TestCase
         $ses2 = (int) $this->user('ses2@park.example')->ses_id;
         $recommended = W::createEngineer($ses2, ['name' => 'テスト 推薦', 'kana' => 'てすと すいせん', 'email' => null], $admin, false);
         $applying = W::createEngineer($ses1, ['name' => 'テスト 応募', 'kana' => 'てすと おうぼ', 'email' => null], $admin, false);
-        $caseId = (int) DB::table('cases')->where('status', 'open')->orderBy('id')->value('id'); // 見本の案件1（SES1 が持ち込んだ案件）
+        $caseId = (int) DB::table('cases')->where('status', 'open')->orderBy('id')->value('id'); // 見本の案件1（SES1 が提案元 SES の案件）
         $this->as('ses2@park.example')->post("/cases/$caseId/recommend", ['engineer_id' => $recommended])->assertSessionHas('flash', fn ($f) => $f['type'] === 'bad');
         $this->assertSame(0, DB::table('audit_log')->where('action', 'recommend')->count());
         $this->as('ses1@park.example')->post("/cases/$caseId/apply", ['engineer_id' => $applying, 'start_ok' => 1, 'price_ok' => 1, 'style_ok' => 1])->assertSessionHas('flash', fn ($f) => $f['type'] === 'bad');

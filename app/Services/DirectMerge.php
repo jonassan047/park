@@ -26,7 +26,7 @@ class DirectMerge
         'applications' => ['ses_id'],
         'contracts' => ['ses_id'],
         'case_threads' => ['ses_id', 'partner_ses_id'],
-        'cases' => ['source_ses_id'],     // 直属のものと、持ち込み元が空のもの
+        'cases' => ['source_ses_id'],     // 直属のものと、提案元 SES が空のもの
         'case_mails' => ['ses_id'],
         'case_searches' => ['ses_id'],
         'direct_mails' => ['from_ses_id'],
@@ -71,7 +71,7 @@ class DirectMerge
                 if (!Schema::hasColumn($table, $col)) continue;
                 $q = DB::table($table);
                 if ($table === 'users') $q->whereIn($col, $d)->where('role', 'eg');
-                elseif ($table === 'cases') $q->where(fn ($w) => $w->whereIn($col, $d)->orWhereNull($col)); // 持ち込み元が空の案件も（D5）
+                elseif ($table === 'cases') $q->where(fn ($w) => $w->whereIn($col, $d)->orWhereNull($col)); // 提案元 SES が空の案件も（D5）
                 else $q->whereIn($col, $d);
                 $ids = $q->orderBy('id')->pluck('id')->map(fn ($i) => (int) $i)->all();
                 if ($ids) $rows["{$table}.{$col}"] = $ids;
@@ -86,7 +86,7 @@ class DirectMerge
         return ['counts' => array_map('count', self::plan()), 'adminsWithSes' => self::adminsWithSes()];
     }
 
-    // 直属を指している行の数（持ち込み元が空の案件は含めない）。付け替えのあとは 0 のはず
+    // 直属を指している行の数（提案元 SES が空の案件は含めない）。付け替えのあとは 0 のはず
     public static function references(): int
     {
         $d = self::directIds();

@@ -55,8 +55,8 @@ class ParkTest extends TestCase
             ->assertOk()->assertSee('在庫管理システム開発')->assertSee('65');
         $this->post('/cases', ['title' => '在庫管理システム開発', 'price' => '65', 'required_skills' => 'Java、SQL', 'work_style' => 'any', 'status' => 'open'])->assertRedirect();
         $caseId = DB::table('cases')->where('title', '在庫管理システム開発')->value('id');
-        // 管理者は案件を発信できない（v0.11.0）。案内は、持ち込んだ SES の担当者が行う
-        $this->get("/cases/$caseId")->assertDontSee('エンジニアに案内する')->assertSee('案内は、案件を持ち込んだ');
+        // 管理者は案件を発信できない（v0.11.0）。案内は、提案元 SES の担当者が行う
+        $this->get("/cases/$caseId")->assertDontSee('エンジニアに案内する')->assertSee('案内は、提案元 SES');
         $this->get("/cases/$caseId/mail")->assertForbidden();
         $this->post("/cases/$caseId/distribute", ['engineer_id' => [4], 'message' => 'どうぞ'])->assertForbidden();
         \App\Services\Workflow::distribute((int) $caseId, [4], DB::table('users')->where('email', 'admin@park.example')->first(), 'どうぞ'); // 処理そのものは今のまま
@@ -279,9 +279,9 @@ class ParkTest extends TestCase
         // 本人が PARK の画面で見送ると、返事が記録される
         $this->as('eg2@park.example')->post("/cases/$cid/decline", ['reason' => '時期が合わない']);
         $this->assertDatabaseHas('case_mails', ['id' => $g->id, 'reply' => 'declined', 'reply_via' => 'app']);
-        // 案件を持ち込んでいない SES は、案内できない
+        // 提案元ではない SES は、案内できない
         $this->as('ses2@park.example')->get("/cases/$cid/mail")->assertForbidden();
-        // 持ち込んでいない SES は、自社のエンジニアを推薦できる（持ち込んだ SES に知らせる）
+        // 提案元ではない SES は、自社のエンジニアを推薦できる（提案元 SES に知らせる）
         $this->post("/cases/$cid/recommend", ['engineer_id' => 2])->assertRedirect();
         $this->assertDatabaseHas('app_notifications', ['user_id' => DB::table('users')->where('email', 'ses1@park.example')->value('id'), 'title' => 'エンジニアの推薦がありました：Java の保守案件［'.DB::table('cases')->where('id', $cid)->value('code').'］']);
         $this->post("/cases/$cid/recommend", ['engineer_id' => 1])->assertForbidden(); // 他社のエンジニアは推薦できない

@@ -169,7 +169,7 @@ class V0120InboundMoreTest extends TestCase
         // 管理者
         $this->as('admin@park.example')->get('/admin/inbound')->assertOk();
         $this->get("/inbound/$id/raw")->assertOk();
-        // 持ち込み元の SES・担当者
+        // 提案元 SES の SES・担当者
         foreach (['ses1@park.example', 'staff-m@example.test'] as $e) {
             $this->as($e)->get('/inbound')->assertOk();
             $this->get("/inbound/$id")->assertOk();

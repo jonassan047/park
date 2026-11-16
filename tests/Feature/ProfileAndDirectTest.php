@@ -393,7 +393,7 @@ class ProfileAndDirectTest extends TestCase
         $d = $this->get('/admin');
         $expect = DB::table('ses_companies')->where('kind', 'ses')->where('status', 'active')->count();
         $this->assertSame($expect, $d->viewData('counts')['ses']);
-        // 分析・案件の持ち込み SES
+        // 分析・案件の提案元 SES
         $this->assertStringNotContainsString('管理者の直属', $this->get('/admin/reports')->assertOk()->getContent());
         $this->assertStringNotContainsString('管理者の直属', $this->get('/cases/new')->assertOk()->getContent());
         // park:status

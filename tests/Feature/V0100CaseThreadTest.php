@@ -42,7 +42,7 @@ class V0100CaseThreadTest extends TestCase
         DB::table('applications')->update(['status' => 'rejected']);
         DB::table('contracts')->update(['status' => 'ended']);
         $this->eg1 = $this->engId(self::EG1);
-        // 案件は持ち込み元なし（管理者の登録）の募集中のもの。相手は EG1 の所属の会社。EG1 には届いている（持ち込み元がある場合は V0101CaseThreadPartnerTest と、T5・T6 の後半）
+        // 案件は提案元 SESなし（管理者の登録）の募集中のもの。相手は EG1 の所属の会社。EG1 には届いている（提案元 SESがある場合は V0101CaseThreadPartnerTest と、T5・T6 の後半）
         $this->caseId = $this->mkCase(null);
         $this->offer($this->caseId, $this->eg1);
     }
@@ -202,13 +202,13 @@ class V0100CaseThreadTest extends TestCase
         $other = $this->mkCase(null, 'open', '届いていない案件');
         $this->get("/cases/$other")->assertForbidden();
         $this->get("/cases/$other/threads/{$this->eg1}")->assertNotFound();
-        // 持ち込み元が他社の案件では、相手は持ち込み元の担当者。所属の会社も読める
-        $src = $this->mkCase($this->sesId(self::SES2), 'open', '持ち込み元ありの案件');
+        // 提案元 SESが他社の案件では、相手は提案元 SESの担当者。所属の会社も読める
+        $src = $this->mkCase($this->sesId(self::SES2), 'open', '提案元 SES ありの案件');
         $this->offer($src, $this->eg1);
         $this->get("/cases/$src")->assertOk()->assertSee('相手：'.self::B.'の担当者')->assertSee('（'.self::A.'も読めます）');
     }
 
-    // T6：EG が書くと、相手（持ち込み元がなければ所属の会社）の担当者全員に届く。記録に本文が残らない。持ち込み元が他社なら、そちらに届き、所属には「始まりました」の知らせ1件だけ
+    // T6：EG が書くと、相手（提案元 SESがなければ所属の会社）の担当者全員に届く。記録に本文が残らない。提案元 SESが他社なら、そちらに届き、所属には「始まりました」の知らせ1件だけ
     public function test_t6_eg_post_reaches_partner(): void
     {
         $this->mkStaff($this->sesId(self::SES1), self::A2, '担当 次郎');
@@ -231,12 +231,12 @@ class V0100CaseThreadTest extends TestCase
         $this->assertStringContainsString("#thread {$t->id}", $audit[0]->detail);
         $this->assertSame((int) $t->ses_id, (int) $t->partner_ses_id);
 
-        // 後半：持ち込み元が他社（B）の案件
-        $this->mkStaff($this->sesId(self::SES2), 'staff-b2@example.test', '持ち込み 担当');
+        // 後半：提案元 SESが他社（B）の案件
+        $this->mkStaff($this->sesId(self::SES2), 'staff-b2@example.test', '提案元 担当');
         $src = $this->mkCase($this->sesId(self::SES2), 'open', '架空の案件T6B');
         $this->offer($src, $this->eg1);
         $mailsA = DB::table('mail_outbox')->where('to_email', self::SES1)->where('kind', 'case-thread')->count();
-        $this->send(self::EG1, $src, $this->eg1, '持ち込み元への質問')->assertSessionHas('flash.type', 'ok');
+        $this->send(self::EG1, $src, $this->eg1, '提案元 SESへの質問')->assertSessionHas('flash.type', 'ok');
         $t2 = DB::table('case_threads')->where('case_id', $src)->first();
         $this->assertSame([$this->sesId(self::SES1), $this->sesId(self::SES2)], [(int) $t2->ses_id, (int) $t2->partner_ses_id]);
         foreach ([self::SES2, 'staff-b2@example.test'] as $e) {
@@ -314,7 +314,7 @@ class V0100CaseThreadTest extends TestCase
     }
 
     // ---------- 段階3：担当者・管理者・権限 ----------
-    // T13：無関係な会社（EG の所属でも、案件の持ち込み元でもない）の SES・担当者からは見えない・書けない・一覧にも出ない
+    // T13：無関係な会社（EG の所属でも、案件の提案元 SESでもない）の SES・担当者からは見えない・書けない・一覧にも出ない
     public function test_t13_unrelated_company_cannot_see(): void
     {
         $this->mkStaff($this->sesId(self::SES2), 'staff-b2@example.test', '他社 担当');

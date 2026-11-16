@@ -71,7 +71,7 @@ class V0110AdminStaffDualTest extends TestCase
         return $id;
     }
 
-    // A が持ち込んだ募集中の案件
+    // A が提案元 SES の募集中の案件
     private function mkCaseOfA(string $title = '架空の案件X'): int
     {
         return W::saveCase(['title' => $title, 'price' => 60, 'required_skills' => 'Java、SQL', 'status' => 'open', 'description' => '架空の作業内容', 'raw_text' => "架空のメール\n■必須\n・Java\n・SQL"], $this->row(self::SES1));

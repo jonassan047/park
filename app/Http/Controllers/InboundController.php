@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 // 案内メールへの返信メール（v0.12.0）。
-// SES・担当者：自社が持ち込んだ案件への返信だけを読む（見える範囲は Inbound::query が決める。見られない人には 404）。
+// SES・担当者：自社が提案元 SES の案件への返信だけを読む（見える範囲は Inbound::query が決める。見られない人には 404）。
 // 管理者：受信したメールをすべて読み、紐付かなかったものを手で紐付ける。EG は入れない（ルートで 403）。
 class InboundController extends Controller
 {
@@ -53,7 +53,7 @@ class InboundController extends Controller
         $data = ['m' => Inbound::masked($u, $row), 'isAdmin' => $u->role === 'admin', 'c' => $row->case_id ? DB::table('cases')->find($row->case_id) : null,
             'cm' => $row->case_mail_id ? DB::table('case_mails')->find($row->case_mail_id) : null, 'search' => null, 'sourceName' => null, 'notifyName' => null];
         if ($u->role === 'admin' && $row->status === 'linked') {
-            // 見える会社（案件の今の持ち込み元）と、知らせた会社（案内メールを送った会社）。違うことがある
+            // 見える会社（案件の今の提案元 SES）と、知らせた会社（案内メールを送った会社）。違うことがある
             $data['sourceName'] = $row->case_source ? DB::table('ses_companies')->where('id', $row->case_source)->value('name') : null;
             $data['notifyName'] = $row->ses_id && (int) $row->ses_id !== (int) $row->case_source ? $row->ses_name : null;
         }

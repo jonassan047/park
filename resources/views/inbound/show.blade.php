@@ -30,7 +30,7 @@
 @if($isAdmin)
 @if($m->status === 'linked')
 <x-card title="紐付け">
-<p>この返信は、{{ $sourceName ?: '（会社なし）' }} の担当者に見えています（案件を持ち込んだ会社）。</p>
+<p>この返信は、{{ $sourceName ?: '（会社なし）' }} の担当者に見えています（提案元 SES）。</p>
 @if($notifyName)<p>お知らせは、案内メールを送った {{ $notifyName }} の担当者に届きました。</p>@endif
 <x-post :action="'/inbound/'.$m->id.'/unlink'" label="紐付けを外す" cls="ghost small" confirm="紐付けを外します。担当者からは見えなくなります。よろしいですか？" />
 </x-card>
@@ -51,7 +51,7 @@
   </x-table>
   @if($search['pick'])
   <div class="flash warn">
-  <p>この返信は、{{ $search['sourceName'] ? $search['sourceName'].' の担当者に見えるようになります（案件を持ち込んだ会社）。' : '案件を持ち込んだ会社がないので、だれにも見えません。' }}選び間違えると、ほかの会社に見えてしまいます。よく確かめてください。</p>
+  <p>この返信は、{{ $search['sourceName'] ? $search['sourceName'].' の担当者に見えるようになります（提案元 SES）。' : '提案元 SES がないので、だれにも見えません。' }}選び間違えると、ほかの会社に見えてしまいます。よく確かめてください。</p>
   @if($search['notifyName'])<p>お知らせは、案内メールを送った {{ $search['notifyName'] }} の担当者に届きます（見える会社と違います）。</p>@endif
   <p>選んだ案内メール：{{ $search['pick']->eg_name }}（{{ fmt_dt($search['pick']->sent_at) }} に送信）</p>
   <x-post :action="'/inbound/'.$m->id.'/link'" label="紐付ける" :fields="['case_mail_id' => $search['pick']->id, 'case_id' => $search['case']->id]" />

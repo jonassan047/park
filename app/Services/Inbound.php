@@ -217,7 +217,7 @@ class Inbound
 
     // ---------- 知らせ ----------
 
-    // 紐付いた返信を、案件を持ち込んだ会社の担当者全員に知らせる（同じ記録に 2 回は出さない）。未紐付けは管理者に（メールなし）
+    // 紐付いた返信を、提案元 SES の担当者全員に知らせる（同じ記録に 2 回は出さない）。未紐付けは管理者に（メールなし）
     public static function notify(int $id): void
     {
         $m = DB::table('inbound_mails')->find($id);
@@ -256,7 +256,7 @@ class Inbound
 
     // ---------- 見える範囲 ----------
 
-    // 一覧・詳細の元の問い合わせ。管理者はすべて、SES・担当者は「紐付け済みで、案件の今の持ち込み元が自社」のものだけ。EG は何も見えない
+    // 一覧・詳細の元の問い合わせ。管理者はすべて、SES・担当者は「紐付け済みで、案件の今の提案元 SES が自社」のものだけ。EG は何も見えない
     public static function query($u)
     {
         $q = DB::table('inbound_mails as i')->leftJoin('cases as c', 'c.id', '=', 'i.case_id')->leftJoin('engineers as e', 'e.id', '=', 'i.engineer_id')
@@ -410,7 +410,7 @@ class Inbound
         if (!$done) return ['type' => 'bad', 'msg' => 'もう紐付いています。'];
         N::audit($admin->id, 'inbound-link', "#$id → 案件 ".($case->code ?? $cm->case_id)." 案内メール #{$cm->id}");
         self::notify($id);
-        return ['type' => 'ok', 'msg' => '紐付けました。'.($ses ? '案件を持ち込んだ会社の担当者に知らせました。' : '')];
+        return ['type' => 'ok', 'msg' => '紐付けました。'.($ses ? '提案元 SES の担当者に知らせました。' : '')];
     }
 
     public static function unlink($admin, int $id): array

@@ -407,7 +407,7 @@ class V0120InboundTest extends TestCase
         $this->get('/inbound')->assertOk()->assertDontSee($e->name);
     }
 
-    // T-21：EG の所属の会社の担当者でも、持ち込み元でなければ 404
+    // T-21：EG の所属の会社の担当者でも、提案元 SES でなければ 404
     public function test_t21_other_company_staff_gets_404(): void
     {
         $cm = $this->sendMail(self::SES1, $this->caseId, $this->eg2);

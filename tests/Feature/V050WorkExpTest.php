@@ -263,7 +263,7 @@ class V050WorkExpTest extends TestCase
         $c = DB::table('cases')->find($cid);
         $this->assertSame('資料作成', $c->required_exp);
         $this->assertSame('T案件', $c->title);
-        // 持ち込んだ SES の担当者は編集できる（同じ会社）
+        // 提案元 SES の担当者は編集できる（同じ会社）
         $this->as($this->staff())->post("/cases/$cid", ['title' => '担当者が更新', 'status' => 'open'] + $this->expForm(['移行' => 'required']))->assertRedirect();
         $this->assertSame('移行', DB::table('cases')->find($cid)->required_exp);
     }
