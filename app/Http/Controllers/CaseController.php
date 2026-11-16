@@ -137,6 +137,10 @@ class CaseController extends Controller
                 return $m;
             });
             $data['mailApps'] = DB::table('applications')->where('case_id', $id)->pluck('id', 'engineer_id')->all();
+            // 案内メールへの返信メールの件数（持ち込み元の担当者だけ。v0.12.0）
+            if ($data['canMail']) {
+                $data['inboundN'] = DB::table('inbound_mails')->where('case_id', $id)->where('status', 'linked')->selectRaw('engineer_id, count(*) as n')->groupBy('engineer_id')->pluck('n', 'engineer_id')->all();
+            }
         }
 
         if ($u->role === 'admin') {

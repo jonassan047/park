@@ -11,7 +11,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // 受信箱を読む元（v0.12.0）。本物は IMAP。テストでは偽物に差し替える
+        $this->app->bind(\App\Contracts\MailSource::class, fn () => \App\Support\ImapClient::fromConfig());
     }
 
     /**

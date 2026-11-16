@@ -105,16 +105,31 @@ class CaseMail
             $body = (string) $it['body'];
             // 返事のリンク：押すだけで PARK に記録され、送った人に知らせが届く（メールで返信してもよい）
             $token = bin2hex(random_bytes(16));
+            // 返信先のトークン（v0.12.0）：返ってきたメールを、どの案内メールへの返事か探すための印。件名と本文にも入れる
+            $inbound = Inbound::enabled(); // 受信が使えるときだけ、返信先を PARK にも向ける（使えないのに変えると、返信が誰にも届かない）
+            [$tokenId, $replyToken] = ReplyTokens::issue(ReplyTokens::KIND_CASE_MAIL, (int) $c->id, $sesId, (int) $e->id, $inbound);
+            $note = $own
+                ? ($inbound ? "\n※このメールに返信すると、担当者と PARK に届きます。" : "\n※このメールに返信しても、担当者に届きます。")
+                : ($inbound ? "\n※このメールに返信すると、PARK を通して案件の担当者に届きます。署名などの個人の連絡先は書かなくてかまいません。"
+                    : "\n※PARK のグループの案件です。このメールへの返信は担当者に届かないので、上のリンクからお願いします。");
             $body .= "\n\n▼ご返事はこちらから（押すだけで担当者に届きます）\n"
                 ."応募したい：".url("/r/$token/interested")."\n質問がある：".url("/r/$token/question")."\n見送る　　：".url("/r/$token/declined")
-                .($own ? "\n※このメールに返信しても、担当者に届きます。" : "\n※PARK のグループの案件です。このメールへの返信は担当者に届かないので、上のリンクからお願いします。")
+                .$note
                 // PARK の画面で案件を開き、担当者への質問や応募ができるように（v0.10.0）
                 ."\n\n▼案件の詳細（PARK にログインして見られます。担当者への質問もここから）\n".url("/cases/{$c->id}")
-                ."\n▼あなたに届いた案件の一覧\n".url('/eg/offers');
+                ."\n▼あなたに届いた案件の一覧\n".url('/eg/offers')
+                // 返信を探すための印（件名にも付ける）。消さないでもらう
+                ."\n\n――――――――――\n［システム伝達項目・消さないでください］\n案内番号：PARK-".ReplyTokens::tagOf($replyToken)."\n案件 ID：".(($c->code ?? null) ?: '—');
             $to = $e->email ?: DB::table('users')->where('engineer_id', $e->id)->value('email');
-            $outbox = N::queueMail($to, $e->name, (string) $it['subject'], $body, 'case-mail', $own && $sesId ? $u->email : null, $u->role === 'admin' ? admin_sender($u) : null);
-            DB::table('case_mails')->insert(['case_id' => $c->id, 'engineer_id' => $e->id, 'ses_id' => $sesId, 'sent_by' => $u->id, 'route' => $own ? 'own' : 'group', 'mode' => $mode,
-                'subject' => (string) $it['subject'], 'body' => $body, 'score' => $score['score'], 'suggest' => implode(' / ', self::suggestions($c, $e, $score)), 'outbox_id' => $outbox, 'sent_at' => now_str(), 'token' => $token]);
+            $ownReply = $own && $sesId ? $u->email : null; // 自社のエンジニアの返信は、送った担当者にも届ける
+            $replyTo = $inbound ? Inbound::replyAddress($replyToken).($ownReply ? ', '.$ownReply : '') : $ownReply;
+            $mark = ReplyTokens::subjectMark($replyToken);
+            $subject = (string) $it['subject'];
+            $sendSubject = str_contains($subject, $mark) ? $subject : rtrim($subject).' '.$mark;
+            $outbox = N::queueMail($to, $e->name, $sendSubject, $body, 'case-mail', $replyTo, $u->role === 'admin' ? admin_sender($u) : null);
+            $mailId = DB::table('case_mails')->insertGetId(['case_id' => $c->id, 'engineer_id' => $e->id, 'ses_id' => $sesId, 'sent_by' => $u->id, 'route' => $own ? 'own' : 'group', 'mode' => $mode,
+                'subject' => $subject, 'body' => $body, 'score' => $score['score'], 'suggest' => implode(' / ', self::suggestions($c, $e, $score)), 'outbox_id' => $outbox, 'sent_at' => now_str(), 'token' => $token]);
+            ReplyTokens::attach($tokenId, ['case_mail_id' => $mailId, 'outbox_id' => $outbox, 'message_id' => $outbox ? DB::table('mail_outbox')->where('id', $outbox)->value('message_id') : null]);
             // 本人が PARK の画面からも見られるように（応募・見送りもできる）
             if (!DB::table('case_offers')->where('case_id', $c->id)->where('engineer_id', $e->id)->exists()) {
                 DB::table('case_offers')->insert(['case_id' => $c->id, 'engineer_id' => $e->id, 'score' => $score['score'], 'reasons' => implode(' / ', $score['reasons']),

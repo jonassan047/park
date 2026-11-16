@@ -2,8 +2,8 @@
     $u = auth()->user();
     $nav = [
         'admin' => [['/admin', 'ダッシュボード'], ['/admin/admins', '管理者'], ['/admin/ses', 'SES'], ['/admin/engineers', 'エンジニア'], ['/admin/providers', 'プロバイダー'], ['/admin/cases', '案件'], ['/admin/applications', '応募・選考'],
-            ['/admin/contracts', '契約'], ['/admin/invoices', '請求'], ['/threads', '案件のやり取り'], ['/admin/messages', 'EG とのやり取り'], ['/mails', '連絡メール'], ['/admin/mail', 'メール'], ['/admin/reports', '分析'], ['/admin/ai', 'AI'], ['/admin/settings', '設定'], ['/manual', '使い方']],
-        'ses' => [['/ses', 'ダッシュボード'], ['/ses/company', 'SES'], ['/ses/engineers', 'エンジニア'], ['/ses/providers', 'プロバイダー'], ['/ses/cases', '案件'], ['/ses/applications', '応募・選考'], ['/ses/contracts', '契約'], ['/ses/invoices', '請求'], ['/threads', '案件のやり取り'], ['/mails', '連絡メール'], ['/manual', '使い方']],
+            ['/admin/contracts', '契約'], ['/admin/invoices', '請求'], ['/threads', '案件のやり取り'], ['/admin/messages', 'EG とのやり取り'], ['/mails', '連絡メール'], ['/admin/mail', 'メール'], ['/admin/inbound', '受信メール'],['/admin/reports', '分析'], ['/admin/ai', 'AI'], ['/admin/settings', '設定'], ['/manual', '使い方']],
+        'ses' => [['/ses', 'ダッシュボード'], ['/ses/company', 'SES'], ['/ses/engineers', 'エンジニア'], ['/ses/providers', 'プロバイダー'], ['/ses/cases', '案件'], ['/ses/applications', '応募・選考'], ['/ses/contracts', '契約'], ['/ses/invoices', '請求'], ['/threads', '案件のやり取り'], ['/inbound', '返信メール'], ['/mails', '連絡メール'], ['/manual', '使い方']],
         'eg' => [['/eg', 'ホーム'], ['/eg/offers', '届いた案件'], ['/eg/applications', '応募・面談'], ['/eg/profile', 'プロフィール'], ['/eg/sheet', 'スキルシート'], ['/eg/messages', '管理者とのやり取り'], ['/mails', '連絡メール'], ['/manual', '使い方']],
     ][$u->role ?? ''] ?? [];
     // 2要素認証が済むまでは、メニューを出さない
@@ -29,6 +29,8 @@
     foreach ($alias as $from => $to) if (str_starts_with($path, $from.'/')) { $current = $to; break; }
     // 案件のやり取りの画面は、「案件のやり取り」のメニューを選択中にする
     if (in_array($u->role ?? '', ['admin', 'ses'], true) && preg_match('#^/cases/\d+/threads/#', $path)) $current = '/threads';
+    // 受信メールの詳細（/inbound/1）は、管理者は「受信メール」を選択中にする
+    if (($u->role ?? '') === 'admin' && str_starts_with($path, '/inbound')) $current = '/admin/inbound';
     if (($u->role ?? '') === 'eg' && str_starts_with($path, '/engineers/')) $current = str_ends_with($path, '/sheet') ? '/eg/sheet' : (str_ends_with($path, '/messages') ? '/eg/messages' : '/eg/profile');
     if (str_starts_with($path, '/ses/')) $current = $path;
     // ベルの数：兼任の人は、いまの立場の分だけ。もう一方の立場あての未読は、帯に出す

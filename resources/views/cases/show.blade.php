@@ -68,7 +68,8 @@
 <div id="mails"></div>
 <x-table :head="$canMail ? ['エンジニア', '送った日', '返事', '記録する', '案件をくれた先へ返す書類'] : ['エンジニア', '送った日', '返事']" :count="$mails->count()" :empty="$canMail ? 'まだ送っていません。「エンジニアに案内する」で、候補を絞ってメールを送れます。' : 'まだ送っていません。案内は、案件を持ち込んだ SES の担当者が行います。'">
 @foreach($mails as $m)<tr>
-<td>@if($m->route === 'own' || $u->role === 'admin'){{ $m->name }} <x-code :v="$m->eg_code" />@else{{ $m->initials ?: '—' }} <span class="muted">（{{ $m->ses_name }}・PARK から）</span>@endif<div class="muted">{{ $m->score }}点・{{ \App\Services\CaseMail::MODES[$m->mode] ?? '同じ内容' }}</div></td>
+<td>@if($m->route === 'own' || $u->role === 'admin'){{ $m->name }} <x-code :v="$m->eg_code" />@else{{ $m->initials ?: '—' }} <span class="muted">（{{ $m->ses_name }}・PARK から）</span>@endif<div class="muted">{{ $m->score }}点・{{ \App\Services\CaseMail::MODES[$m->mode] ?? '同じ内容' }}</div>
+@if(!empty($inboundN[$m->engineer_id]))<div><a href="{{ url('/inbound?case='.$c->id.'&eg='.$m->engineer_id) }}">返信メール {{ $inboundN[$m->engineer_id] }} 件</a></div>@endif</td>
 <td>{{ fmt_dt($m->sent_at) }}</td>
 <td>{{ \App\Services\CaseMail::REPLIES[$m->reply] ?? $m->reply }}@if($m->reply_note)<div class="muted">{{ $m->reply_note }}</div>@endif @if($m->reply_via === 'app')<div class="muted">（本人が画面で）</div>@endif</td>
 @if($canMail)<td>@if($m->route === 'own')<form method="post" action="{{ url('/case-mails/'.$m->id.'/reply') }}" class="inline">@csrf

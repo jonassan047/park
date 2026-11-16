@@ -72,6 +72,23 @@ class Status extends Command
         }
     }
 
+    // 受信メール（v0.12.0）の状態。マイグレーション前（表が無い）は、落ちずに「未反映」と出す
+    private function inboundLines(): array
+    {
+        $enabled = \App\Services\Inbound::enabled() ? 'あり' : 'なし';
+        try {
+            if (!Schema::hasTable('inbound_mails')) return ['受信：設定' => $enabled.'／未反映'];
+            return [
+                '受信：設定' => $enabled,
+                '受信：最後に取り込んだ日時' => DB::table('settings')->where('key', 'inbound_last_fetch_at')->value('value') ?? 'まだ',
+                '受信：未紐付けの件数' => DB::table('inbound_mails')->where('status', 'unlinked')->count(),
+                '受信：読まれていない返信の件数' => DB::table('inbound_mails')->where('status', 'linked')->whereNull('ses_read_at')->whereNull('auto')->count(),
+            ];
+        } catch (\Throwable $e) {
+            return ['受信：設定' => $enabled.'／未反映'];
+        }
+    }
+
     public function handle(): int
     {
         $ago = fn (string $s) => date('Y-m-d H:i:s', strtotime($s));
@@ -105,7 +122,7 @@ class Status extends Command
             '管理者で ses_id がある行（担当者の兼任になる。反映の前に、古い行が無いか確かめる）' => DirectMerge::adminsWithSes(),
             self::ID_KEY => $this->missingIds(),
             '見本データ（@park.example）' => DB::table('users')->where('email', 'like', '%@park.example')->count(),
-        ] + $this->registrationCounts();
+        ] + $this->inboundLines() + $this->registrationCounts();
         if ($this->option('json')) {
             $this->line(json_encode($d, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
             return 0;

@@ -40,7 +40,8 @@ class MailSenderTest extends TestCase
     // 末尾の署名（「――」の線のあとの1行目）
     private function signature(object $m): string
     {
-        return trim(explode("\n", explode("――――――――――\n", $m->body)[1])[0]);
+        $parts = explode("――――――――――\n", $m->body); // v0.12.0: system block uses same rule line; take last part (signature)
+        return trim(explode("\n", end($parts))[0]);
     }
 
     private function openCase(): int

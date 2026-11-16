@@ -173,6 +173,20 @@ SES が受けた案件メールから、エンジニアへの案内メールを�
 - **管理者が担当者を兼ねる**：管理者の `users.ses_id` に会社を入れる（1社だけ。列は足さない）。`Workflow::isDual`・`rolesOf`（管理者・SES 担当者・エンジニアの順に最大3つ）。SES の詳細 `/admin/ses/{id}` の「この会社の担当者を兼ねる」「兼任をやめる」（`POST /admin/ses/{id}/staff-dual`・`…/stop`。自分のことだけ）。会社の担当者へのお知らせ・EG の連絡メールの宛先・担当者の一覧（「管理者（兼任）」）・ST- の ID には入れるが、SES（代表）・次の SES の候補・使える担当者の数・会社からの停止・退会には入れない。担当者の立場の操作は記録に「［管理者の兼任］」が付く（`Notifier::audit`）。
 - 版は `v0.11.0`（`config/park.php`）。
 
+## 案内メールの返信先トークンと、受信の紐付け（v0.12.0。2026-11-16）
+
+案内メールへの返信を受け取り、どの案内メールへの返信かを探して、案件を持ち込んだ会社の担当者に知らせる。
+
+- **送る側**（R13。`CaseMail::send`）：案内メール 1 通ごとに、推測できないトークン（英小文字と数字 20 字。`ReplyTokens`、表 `reply_tokens`）を発行する。件名の最後に ` [PARK-<頭 10 字>]`、本文の最後に「［システム伝達項目・消さないでください］／案内番号／案件 ID」を入れる（**受信が使えなくても入れる**）。`mail_outbox.message_id` に、送るメールすべての Message-ID を残す（`Notifier::queueMail`・`headers`）。
+- **返信先は、受信が使えるときだけ変える**：`.env` の `PARK_IMAP_HOST`・`PARK_IMAP_USER`・`PARK_IMAP_PASSWORD` が全部そろっているとき（`Inbound::enabled()`）だけ、Reply-To を `park+<トークン>@…` にする（自社のエンジニアあては、その後ろに送った担当者のアドレスも）。空の間は今までどおり（自社＝担当者のアドレス、他社＝なし）。取り込めない間に変えると、返信が誰にも届かなくなるため。鍵の名前は `.env.example`（`PARK_IMAP_HOST`・`PARK_IMAP_PORT`・`PARK_IMAP_USER`・`PARK_IMAP_PASSWORD`・`PARK_IMAP_MAILBOX`・`PARK_REPLY_BASE`。**値はここにも、コードにも書かない**）。
+- **受け取る側**（R14。`Inbound::ingest`・`MailParser`）：1通（.eml の生の文）を読み、PARK 自身が送ったもの（From が `MAIL_FROM_ADDRESS`）は記録せず、同じものは 1 件にする。探す順は、宛先のトークン → In-Reply-To/References → 件名の `[PARK-…]` → 本文（案内番号・返事のリンク `/r/…`・案件 ID）。件名・本文の 2 つは「返信の形」（In-Reply-To がある、または件名が Re:／返信 で始まる。Fwd:／FW:／転送 は除く。`Inbound::isReplyShape`）のときだけ。他社のエンジニアあて（`route=group`）で、送ったとき返信先を PARK に向けていなかった（`reply_tokens.via_park` が偽、またはトークン無し）案内メールは、In-Reply-To・`/r/`・案件 ID でも自動では紐付けない。取り出した文字（`MailParser`）は最後に全部 UTF-8 にそろえ、SES・担当者の画面ではエンジニアが分からない行も差出人を伏せる。件名・本文の案内番号と案件 ID は、差出人がエンジニアの登録アドレスのときだけ使う（`from_mismatch` は「登録と違うアドレスから」の印）。見つからなければ未紐付け（管理者だけが見て、手で紐付ける）。元のメールは `storage/app/private/inbound/` に保存（公開しない）。不達の通知・自動返信は記録するが、知らせない。メールの読み取りは自前（外のライブラリ・`ext-imap` は使わない）。
+- **知らせと見える範囲**（R15）：紐付けた返信は、案件の今の持ち込み元の担当者全員に見える（`Inbound::query`）。自社のエンジニアの返信はお知らせだけ、他社のエンジニアの返信はお知らせ＋メール（本文は入れない）。SES・担当者の画面（`/inbound`、ナビ「返信メール」）では、他社のエンジニアの氏名・ふりがな・メール・電話を伏せる（`Inbound::masked`）。管理者（`/admin/inbound`、ナビ「受信メール」）はすべてを伏せずに読め、元の .eml を取り出せ、紐付け・外す・対象外・戻すができる（記録は `audit_log` の `inbound-*`）。EG は入れない（403）。返信の中身から `case_mails.reply` を自動で変えることはしない。
+- **取り込み**（`MailFetch`・`ImapClient`）：`php artisan park:mail-fetch [--from-start]`。設定が空なら「受信の設定がありません」と出して何もしない。あれば、前回の続き（UID。`settings` の `inbound_last_uid`・`inbound_uidvalidity`・`inbound_last_fetch_at`）から最大 50 通。初回は今ある分を読まず、ここから先だけ。UIDVALIDITY が変わったときも初回と同じ（最後の UID を保存し、監査に `mail-fetch-uidvalidity` を残す）。はじめから読み直すのは、人が `--from-start` を付けたとき。受信箱は `EXAMINE`（読むだけで開く）と `BODY.PEEK` で読み、消す・移す・既読にする・旗を変える命令は使わない。管理者の「受信メール」の［今すぐ取り込む］も同じ。テストは偽の `MailSource` で動かし、本物の IMAP にはつながない。`php artisan park:mail-ingest <.eml のファイル>` は、ファイル 1 つを手で取り込む（設定が空でも動く）。
+- **公開版の cron**（TEZZO の了承のあとに登録する）：`*/5 * * * * cd <park のフォルダ> && /opt/php-8.3/bin/php artisan park:mail-fetch`。
+- `php artisan park:status` に「受信：設定／最後に取り込んだ日時／未紐付けの件数／読まれていない返信の件数」。
+- **テスト**：`tests/Feature/V0120InboundTest.php`。
+- 版は `v0.12.0`（`config/park.php`）。
+
 ## 案件のやり取りと、案件の知らせのリンク（v0.10.0。2026-11-14。相手の決め方は v0.10.1 で変更）
 
 エンジニア（EG）が、応募の前に、案件のことを担当者に確かめられる。あわせて、EG に届く案件の知らせに、案件の詳細と「届いた案件」の一覧へのリンクを載せた。表は2つ足すだけ（`database/migrations/2026_11_14_000001_case_threads.php`。今ある表は触らない）。

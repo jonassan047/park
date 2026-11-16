@@ -1,3 +1,331 @@
+# PLAN：案内メールの返信先トークンと、受信の紐付け（v0.12.0。2026-11-16）
+
+> **これが今の計画**。前の計画（v0.11.0 以前、2219 行）は、この節の下に続く。**Leo が `git show HEAD:PLAN.md >> PLAN.md` で、このファイルの末尾に戻す**（planner は編集の道具が無く、全体を書き直さなかったため）。
+> 要件の正本：41_Park-Project の `33_要件定義/2026-11-16-01-メールの紐付け方式.md` と `2026-11-16-02-要件定義書（草案）.md` の R13〜R17。
+> 今回の範囲：R13（トークン・Reply-To・件名・本文末尾の一文）、R14（受信の取り込みと紐付け）、R15（記録と SES への通知）、未紐付けの画面。**R16・R17 は次の版**（10章）。
+> 作る順：段階1 → 2 → 3 → 4 → 5（段階ごとに commit。`php artisan test` を通してから次へ）→ park-reviewer → park-tester。commit・push は Leo。
+> プレーヤー：管理者・SES・担当者・EG の4つ（担当者＝`users.role=ses`。SES も担当者の1人。今回の権限は SES と担当者で同じ。**知らせが届くのは会社の担当者全員**なので、担当者で必ず確かめる）。
+> 外部のライブラリは足さない（IMAP・MIME の読み取りも自前。`ext-imap` に頼らない）。名前・メール・合言葉はこのファイルにもテストにも書かない（テストは架空の会社・人、`@park.example`）。
+> **公開版への反映は、7章の警告 W1〜W5 を TEZZO さんに報告してから**（グループ単位の変更のため。v0.11.0 と同じ扱い）。IMAP の `.env` と cron は TEZZO さんの承認のあと（9章）。
+
+## 0. コードで確かめた今の形
+
+- 案内メールの出口は1つ：`CaseMail::send`（`CaseSearch::send` 387 もここを通す）。1人1通で `case_mails` に1行（`case_id`・`engineer_id`・`ses_id`＝送った会社・`sent_by`・`route` own/group・`subject`・`body`・`outbox_id`・`sent_at`・`token`（32 桁 16 進。返事のリンク `/r/{token}/…` 用、2026_10_16_000006））。
+- 今の返信先：`route=own`（自社の EG）は送った担当者のアドレス（`queueMail` の `$replyTo`）。`route=group`（他社の EG）は返信先なしで、本文に「このメールへの返信は担当者に届かないので、上のリンクから」。
+- `Notifier::queueMail` は `mail_outbox` に入れ、送れるときは `deliver`（`Mail::raw`）。`reply_to` は1つの文字列。Message-ID は保存していない（Symfony が自動で付ける）。件名の頭に `[PARK]`（`setting('app_name')`）、本文の後ろに共通の署名（「ご不明な点は park@jona.jp まで」）。
+- 見本データ宛て（`@park.example`）は `deliver` で `park@jona.jp`（`config('park.dummy_mailbox')`）に差し替えて届く。**From も park@jona.jp なので、受信箱には PARK 自身が送ったメールが混ざる**。テストメール（管理者の設定画面）も同じ。
+- 案件の画面の「案内メール」（`cases/show` 64–85、`CaseController::show` 124–140）：見えるのは `CaseMail::canSend`（持ち込み元の担当者）と管理者。他社の EG の行は「イニシャル（会社名・PARK から）」。
+- 名前の伏せ方：`CaseThread::egName`／`maskName`（他社の担当者には「イニシャル（所属の会社名）」）。
+- 今やること：`Todo::ses`（案内メールの返事・やり取りの未読など）、`Todo::admin`。ナビは `layouts/app.blade.php` 4–7。
+- 定期実行の仕組みは無い（`routes/console.php` は空。AI は FOCUS のつなぎ役が取りに来る形）。
+- `config/park.php`：`version`・`dummy_mailbox` だけ。
+
+## 1. 受け入れ条件
+
+| 番号 | 立場 | 条件 |
+|---|---|---|
+| AC1 | SES・担当者 | 案内メールを送ると、1通ごとに推測できないトークン（英小文字と数字 20 字）が発行され、`reply_tokens` に「トークン・案件・送った会社・EG・案内メール（`case_mails`）・`mail_outbox`・送信日時・Message-ID」が残る |
+| AC2 | SES・担当者 | 受信が使えるとき（4章 D2）、案内メールの `Reply-To` は `park+<トークン>@jona.jp`（自社の EG あては、その後ろに送った担当者のアドレスも）。From は `MAIL_FROM_ADDRESS` のまま |
+| AC3 | SES・担当者 | 件名の最後に `[PARK-<トークンの頭 10 字>]`、本文の最後（共通の署名の前）に「［システム伝達項目・消さないでください］案内番号：PARK-…／案件 ID：CA-…」が入る。受信が使えないときも入る |
+| AC4 | SES・担当者 | 受信が使えないとき（`.env` が空）は、返信先と EG への説明の文は今までどおり（自社＝担当者のアドレス、他社＝なし） |
+| AC5 | システム | 1通のメール（.eml の生の文）を渡すと、宛先のトークン → In-Reply-To/References → 件名の `[PARK-…]` → 本文（案内番号・返事のリンク・案件 ID）の順に案内メールを探し、見つかれば「紐付け済み」、なければ「未紐付け」で記録する（`park:mail-ingest`） |
+| AC6 | システム | 同じメールを2回渡しても1件（Message-ID か中身のハッシュで重複を見る）。PARK 自身が送ったメール（From が `MAIL_FROM_ADDRESS`）は記録しない。不達の通知・自動返信は記録するが、SES には知らせない |
+| AC7 | システム | 元のメール（.eml）を `storage` の非公開の場所に保存し、記録（`inbound_mails`）から引ける |
+| AC8 | SES・担当者 | 紐付けた返信は、案件を持ち込んだ会社の担当者全員にお知らせが出る。自社の EG からはお知らせだけ（メールは本人から直接届いているため）、他社の EG からはお知らせ＋メール（本文は入れず、画面へのリンクだけ） |
+| AC9 | SES・担当者 | 「返信メール」（`/inbound`）で、自社が持ち込んだ案件への返信だけが見える（他社の案件への返信は 404）。他社の EG は「イニシャル（会社名）」で、本文・件名の中の氏名・ふりがな・メール・電話も伏せる。開くと既読。案件の画面の「案内メール」の行に「返信メール n 件」 |
+| AC10 | SES・担当者 | 読んでいない返信は「今やること」に出る |
+| AC11 | 管理者 | 「受信メール」（`/admin/inbound`）で全件（未紐付け・紐付け済み・対象外）を読める（氏名は伏せない）。元の .eml をダウンロードできる |
+| AC12 | 管理者 | 未紐付けの1件を、案件 ID（CA-）を入れて出る案内メールの一覧から選んで紐付けられる（確認の画面に「見えるようになる会社」を出す）。紐付けると AC8 と同じ知らせが出る。紐付けを外す・対象外にする・対象外から戻すもできる。操作は `audit_log` に残る |
+| AC13 | 管理者 | 未紐付けがあると、お知らせ（メールなし）と「今やること」に出る |
+| AC14 | 管理者 | ［今すぐ取り込む］：受信の設定があれば取り込み、件数を出す。無ければ「受信の設定がまだです（.env）」と出て何もしない |
+| AC15 | システム | `park:mail-fetch`：`.env` の IMAP の設定が空なら何もせず「受信の設定がありません」と出して終わる（エラーにしない）。あれば、前回の続き（UID）から最大 50 通を読み、受信箱のメールは消さない・既読にしない |
+| AC16 | EG | 画面は変わらない。受信が使えるとき、案内メールの説明が「このメールに返信すると、PARK を通して案件の担当者に届きます」になる。自動の返信は送らない |
+| AC17 | 担当者 | AC8〜AC10 が SES と同じに働く（同じ会社の担当者全員） |
+| AC18 | 全員 | `park:status` に「受信：設定あり／なし・最後に取り込んだ日時・未紐付けの件数・読まれていない返信の件数」が出る |
+
+## 2. データ（マイグレーション1本、足すだけ）
+
+`database/migrations/2026_11_16_000001_inbound_mails.php`。`down()` は足したものを消すだけ。
+
+- `mail_outbox` に `message_id`（string 255、null 可、index）。
+- `reply_tokens`（新）：`id`、`token`（string 40、unique）、`kind`（string 20。今回は `case-mail`。R16 の送信でも使う）、`case_mail_id`（null 可、index）、`case_id`、`ses_id`（null 可。送った会社）、`engineer_id`（null 可）、`outbox_id`（null 可）、`message_id`（string 255、null 可、index）、`sent_at`、`created_at`。外部キーは付けない（案件・EG を消しても記録が残るように。`case_mails` は cascade なので、消えても受信の記録は残す）。
+- `inbound_mails`（新）：
+  - 取り込み：`id`、`source`（`imap`／`file`）、`imap_uidvalidity`・`imap_uid`（null 可。2つで unique）、`message_id`（null 可、unique）、`raw_hash`（sha256、unique）、`raw_path`、`raw_size`、`fetched_at`、`received_at`（Date ヘッダー。読めなければ取り込んだ日時）。
+  - 中身：`from_email`、`from_name`、`to_addrs`（text。To・Cc・Delivered-To・X-Original-To をまとめたもの）、`subject`、`in_reply_to`、`references`（text）、`body_text`（mediumText。5 万字まで）、`attachments`（text。JSON で名前・種類・大きさだけ）、`auto`（string 10、null 可：`bounce`／`auto`）。
+  - 紐付け：`status`（`linked`／`unlinked`／`ignored`）、`match_by`（`token`／`in_reply_to`／`subject`／`body`／`manual`、null 可）、`reply_token_id`・`case_mail_id`・`case_id`・`ses_id`・`engineer_id`（null 可、index）、`from_mismatch`（boolean。差出人が EG の登録アドレスと違う）、`linked_by`・`linked_at`、`note`（text。対象外の理由など）。
+  - 知らせ：`notified_at`、`ses_read_at`。
+- 設定（`settings` 表。`set_setting`）：`inbound_uidvalidity`、`inbound_last_uid`、`inbound_last_fetch_at`。
+
+## 3. 仕様
+
+### 3-1. 設定（`config/park.php`）
+
+```php
+'inbound' => [
+    'host' => env('PARK_IMAP_HOST'), 'port' => (int) env('PARK_IMAP_PORT', 993),
+    'user' => env('PARK_IMAP_USER'), 'password' => env('PARK_IMAP_PASSWORD'),
+    'mailbox' => env('PARK_IMAP_MAILBOX', 'INBOX'),
+    'reply_base' => env('PARK_REPLY_BASE'), // 空なら MAIL_FROM_ADDRESS（park@jona.jp）
+],
+```
+
+- `Inbound::enabled()`＝host・user・password がすべて空でない。`.env.example` に鍵の名前だけ足す（値は書かない）。
+- 返信先 `Inbound::replyAddress($token)`＝`reply_base`（無ければ `mail.from.address`）の `@` の前に `+<token>`。
+
+### 3-2. 送る側（R13。`CaseMail::send` を直す）
+
+1. 1人ごとに `ReplyTokens::issue()`：`token`＝英小文字と数字 20 字（`random_bytes` から。Xserver のプラスアドレスで使える文字だけ）。
+2. 件名：`$it['subject']` の最後に ` [PARK-<token の頭 10 字>]`（同じ印が既にあれば足さない）。`case_mails.subject` には送った件名をそのまま残す。
+3. 本文の最後（今の返事のリンク・案件の詳細のリンクのあと）に：
+   ```
+   ――――――――――
+   ［システム伝達項目・消さないでください］
+   案内番号：PARK-<token の頭 10 字>
+   案件 ID：<CA-…>
+   ```
+4. 返信先：
+   - 受信が使えるとき：自社の EG（`$own && $sesId`）は `park+<token>@…, <送った担当者のアドレス>`（2つ。先頭が PARK）。他社の EG は `park+<token>@…` だけ。
+   - 使えないとき：今のまま。
+   - EG への説明の文（今の 110 行）：使えるとき、自社＝「※このメールに返信すると、担当者と PARK に届きます。」、他社＝「※このメールに返信すると、PARK を通して案件の担当者に届きます。署名などの個人の連絡先は書かなくてかまいません。」。使えないときは今の文。
+5. `queueMail` の戻りの `outbox_id` と、その行の `message_id` を `reply_tokens` に入れる（`case_mail_id` は `case_mails` の insert のあとで更新）。
+
+`Notifier`：
+- `queueMail`：全メールで `message_id`＝`<32 桁 16 進>@<From のドメイン>`（`<>` なしで保存）を作って `mail_outbox` に入れる。
+- `deliver`：`self::headers($msg, $m)` を新設して呼ぶ。中で Message-ID を `$msg->getSymfonyMessage()->getHeaders()->addIdHeader('Message-ID', $m->message_id)`（null なら付けない）、`reply_to` を `,` で分けて配列で `replyTo`。テストで Symfony の `Email` を渡して確かめられる形にする。
+
+### 3-3. 受け取る側（R14。`app/Services/Inbound.php`、`app/Support/MailParser.php`）
+
+`Inbound::ingest(string $raw, string $source, ?int $uidvalidity = null, ?int $uid = null): array`（戻り：`['status' => 'saved'|'duplicate'|'self'|'too_large', 'id' => ?int]`）
+
+1. 20MB を超えるものは、ヘッダーだけ読んで記録（`body_text` は「大きすぎるため本文を読んでいません」）。
+2. `MailParser::parse($raw)`：ヘッダーの折り返しを戻す、エンコードされた語（`=?ISO-2022-JP?B?…?=` など）は `mb_decode_mimeheader`／`iconv_mime_decode`。multipart をたどり、`text/plain` を優先（無ければ `text/html` をタグを外して）。転送の符号化（base64・quoted-printable）と文字コード（UTF-8・ISO-2022-JP・Shift_JIS は `SJIS-win`・EUC-JP）を `mb_convert_encoding` で UTF-8 に。添付は名前・種類・大きさだけ。
+3. 自分あて：From が `mail.from.address` と同じ → 記録しない（`self`）。見本宛ての差し替え・テストメールが受信箱に戻ってくるため。
+4. 重複：`message_id` か `raw_hash` が既にある → `duplicate`。
+5. 不達・自動返信：From が `MAILER-DAEMON`／`postmaster`、`Content-Type: multipart/report`、`Auto-Submitted` が `no` 以外、`X-Autoreply`・`X-Autorespond` があれば `auto` に印。
+6. 元の文を `Storage::disk('local')`（`storage/app/private`）の `inbound/YYYY/MM/<id>.eml` に保存（公開しない）。
+7. 紐付け（`Inbound::match`。見つかったら止める）：
+   1. **宛先のトークン**：`to_addrs` の中の `<reply_base の前半>+<token>@<ドメイン>`（大文字小文字は区別しない）→ `reply_tokens.token`。
+   2. **In-Reply-To / References**：その中の Message-ID → `reply_tokens.message_id`。
+   3. **件名の `[PARK-xxxxxxxxxx]`**：頭 10 字が一致する `reply_tokens`（`token like 'xxxxxxxxxx%'`）。1件だけで、**差出人が その EG の登録アドレス**（`engineers.email` か、その EG の `users.email`）のときだけ。
+   4. **本文**：a. 「案内番号：PARK-xxxxxxxxxx」→ 3 と同じ（差出人の確認つき）。b. 返事のリンク `/r/<32 桁>` → `case_mails.token`（128 ビットなので差出人は見ない。v0.12.0 より前の案内メールへの返信もこれで拾える）。c. 「CA-…」＋差出人が EG の登録アドレス → その案件・その EG の `case_mails`（1件だけのとき）。
+   5. どれでもなければ `unlinked`。
+   - 1・2・4b で見つかり、差出人が EG の登録アドレスと違えば `from_mismatch=true`（画面に「登録と違うアドレスから」と出す。紐付けはする）。
+   - 紐付いたら `case_mail_id`・`case_id`・`engineer_id`・`ses_id`（`case_mails.ses_id`、空なら `cases.source_ses_id`）を入れる。
+8. 紐付いたら 3-4 の知らせ。未紐付けなら管理者にお知らせ（メールなし）。`auto` は知らせない。
+9. `case_mails.reply` は変えない（応募したい・見送りの判断は担当者が今までどおり記録する。自動で読むのは R16 の版）。
+
+コマンド：
+- `park:mail-ingest {path}`：.eml のファイル1つを `ingest`（`source=file`）。結果を1行で出す。手での確かめとテスト用。
+- `park:mail-fetch {--from-start}`：3-5。
+
+### 3-4. 記録と知らせ（R15。`Inbound::notify`）
+
+- 届け先：`ses_id` の会社の担当者全員（`Notifier::toSes`。兼任の管理者も含む今の決まりどおり）。種類 `inbound`、リンク `/inbound/{id}`。
+- 自社の EG（EG の今の `ses_id`＝届け先）：お知らせだけ（`mail=false`）。題「{氏名} さんから案内メールへの返信：{案件名}[CA-]」、本文は返信の頭 200 字。
+- 他社の EG：お知らせ＋メール。題「{イニシャル（会社名）} さんから案内メールへの返信：{案件名}[CA-]」、本文「返信の内容は PARK の画面で見てください。」（**メールに本文を入れない**）。
+- `notified_at` を入れる。同じ記録に2回は出さない。
+- 管理者が手で紐付けたときも同じ（紐付けを外して付け直したときは、新しい会社にだけ出す）。
+- EG には何も送らない（自動返信の行き来を避ける）。
+
+### 3-5. IMAP の取り込み（`app/Support/ImapClient.php`、`app/Services/MailFetch.php`）
+
+- `ImapClient`：`stream_socket_client('ssl://host:port')`（証明書を確かめる。タイムアウト 20 秒）。使う命令は `LOGIN`・`SELECT`（UIDVALIDITY・UIDNEXT を読む）・`UID SEARCH UID n:*`・`UID FETCH n (BODY.PEEK[])`（既読にしない）・`LOGOUT` だけ。**消す・移す・旗を変える命令は使わない**。
+- `MailFetch::run(MailSource $src)`：`MailSource` は `fetchSince(int $uid, int $limit): iterable<[uid, raw]>` と `uidvalidity()` を持つインターフェース。本物は `ImapClient`、テストは配列で返す偽物（コンテナに `bind`）。
+- 流れ：`Inbound::enabled()` でなければ何もしない → ロック（`Cache::lock('park-mail-fetch', 300)`。取れなければ「取り込み中」）→ UIDVALIDITY が保存と違えば `inbound_last_uid=0`（重複は 3-3 の 4 で防ぐ）→ **初回（`inbound_last_uid` が無い）は、今ある分は読まず `UIDNEXT-1` を保存して終わる**（`--from-start` のときだけ全部読む）→ 最大 50 通を `ingest` → 1通ごとに `inbound_last_uid` を進める → `inbound_last_fetch_at`。
+- 失敗（接続・ログイン）は例外を捕まえて1行出し、`audit_log` に `mail-fetch-error`（パスワードは書かない）。
+- 定期実行：公開版の cron で `*/5 * * * * cd <park> && php artisan park:mail-fetch`（**9章の承認のあと**。`routes/console.php` は使わない）。
+
+### 3-6. 見える範囲（`Inbound::visible($u, $row)`）
+
+| 立場 | 見えるもの |
+|---|---|
+| 管理者 | 全部（未紐付け・対象外も）。氏名を伏せない。.eml のダウンロード可 |
+| SES・担当者 | `status=linked` で、その案件の今の持ち込み元が自社（`cases.source_ses_id = users.ses_id`。案件の画面の「案内メール」と同じ決まり）。他社の EG は伏せる。.eml は不可 |
+| EG | なし（ルートで 403） |
+
+- 伏せ方（`Inbound::masked($u, $row)`）：見る人が SES で、EG の今の所属が自社でないとき、件名・本文・添付の名前の中の、その EG の 氏名（姓名続き・姓・名）・ふりがな・`engineers.email`・`users.email`・電話・From のアドレスと名前を、`イニシャル（会社名）` か「（伏せています）」に置き換える。差出人の欄は `CaseThread::egName` と同じ。
+- 未紐付けは管理者だけ（4章 D5）。
+
+## 4. 決めたこと（Leo の推奨で仮置き。違えば直す）
+
+| 番号 | 決めたこと | 理由 |
+|---|---|---|
+| D1 | トークンは新しい表 `reply_tokens`（`case_mails.token` は返事のリンクのまま別に残す） | R16 のプロバイダーへの送信でも同じ表を使える。返事のリンクを変えない |
+| D2 | **Reply-To を `park+…` に変えるのは、受信が使えるとき（IMAP の `.env` がそろったとき）だけ**。トークン・件名の印・本文の一文は、いつも入れる | 取り込めない間に返信先だけ変えると、EG の返信が誰にも届かなくなる |
+| D3 | 自社の EG あては Reply-To を2つ（PARK＋送った担当者）。他社の EG あては PARK だけ | 今の流れ（自社の EG の返信は担当者に直接届く。2026-10-16）を壊さずに、PARK にも記録を残す。要件メモの「どちらを正にするか」は、両方に届く形で解く |
+| D4 | 件名の印は `[PARK-<トークンの頭 10 字>]`、本文の一文も同じ番号＋案件 ID。件名・本文の番号で紐付けるのは、差出人が EG の登録アドレスのときだけ | 頭 10 字は短く推測の余地があるため。完全なトークン・返事のリンクは差出人を問わない |
+| D5 | **未紐付けは管理者だけが見て、手で紐付ける**（SES の画面には出さない） | park@jona.jp は運営の問い合わせ窓口でもある（全メールの署名）。EG が運営に書いた相談（所属の会社のことなど）を、その会社に見せないため。要件の「SES または管理者」のうち管理者を選ぶ |
+| D6 | 自社の EG の返信はお知らせだけ、他社の EG の返信はお知らせ＋メール（本文なし） | 自社は本人のメールが直接届いている。他社の本文をメールで外に出さない |
+| D7 | 返信の内容から `case_mails.reply` を自動で変えない。案件のやり取り（`case_threads`）にも入れない | 自動の読み取りは R16 の版。やり取りに入れると EG の所属の会社にも見え、決まりが増える |
+| D8 | 元の .eml は保存するが、ダウンロードは管理者だけ。添付は名前・大きさだけ出し、SES は取り出せない | 伏せられない中身（添付の履歴書など）を他社に出さない。添付の取り出しは次の版 |
+| D9 | 初回の取り込みは「今から」（受信箱の過去のメールは読まない）。受信箱のメールは消さない・既読にしない | 削除は了承が要る。TEZZO さんがウェブメールで読んでも取りこぼさない（UID で進める） |
+| D10 | 定期実行は cron で `park:mail-fetch` を5分ごと＋管理者の［今すぐ取り込む］ | スケジューラーを使う理由が他に無い |
+| D11 | 案内メール以外（連絡メール・配信の知らせ・お知らせのメール）には、トークンを付けない。それらへの返信は未紐付け（管理者） | 今回の範囲は案内メール（R13） |
+| D12 | 版は `v0.12.0` | 受信という新しい機能 |
+
+## 5. 画面と操作（プレーヤーごと）
+
+| 立場 | 画面 | 操作 |
+|---|---|---|
+| 管理者 | ナビ「受信メール」（`/admin/inbound`。「メール」の隣）。上にタブ「未紐付け（n）／紐付け済み／対象外／すべて」、受信の状態（設定あり・なし、最後に取り込んだ日時）、［今すぐ取り込む］ | 一覧：受け取った日時・差出人・件名・案件（CA-）・会社・紐付け方・状態 |
+| 管理者 | 詳細 `/inbound/{id}`：ヘッダー・本文・添付の名前・「登録と違うアドレスから」の印、［元のメール（.eml）］ | 未紐付け：案件 ID（CA-）を入れて［探す］→ その案件の案内メールの一覧（EG・会社・送った日）から選ぶ → 確認「この返信は {会社名} の担当者に見えるようになります」→［紐付ける］。紐付け済み：［紐付けを外す］。［対象外にする］（理由を書ける）／［未紐付けに戻す］ |
+| SES・担当者 | ナビ「返信メール」（`/inbound`。「案件のやり取り」の隣）。自社の案件への返信の一覧（未読を太字・件数） | 開くと既読（`ses_read_at`。会社で1つ）。詳細は伏せたうえで本文を読む。案件・案内メールへのリンク |
+| SES・担当者 | 案件の画面の「案内メール」の行に「返信メール n 件」（`/inbound?case={id}&eg={eid}`） | — |
+| SES・担当者 | ダッシュボードの「今やること」：「{名前} さんから返信メール：{案件名}」→ `/inbound/{id}` | — |
+| EG | 変わらない（案内メールの説明の文だけ。3-2 の 4） | — |
+
+ルート：`role:admin,ses` に `GET /inbound`・`GET /inbound/{id}`。`role:admin` に `GET /admin/inbound`・`POST /admin/inbound/fetch`（throttle 6,1）・`GET /inbound/{id}/raw`・`POST /inbound/{id}/link`・`/unlink`・`/ignore`・`/restore`。コントローラーは `InboundController`（新）。
+
+## 6. 境界の挙動
+
+| 場面 | 挙動 |
+|---|---|
+| 権限がない | SES が他社の案件への返信・未紐付けを開く → 404。EG が `/inbound` → 403。SES が link・raw → 403 |
+| 案件が別の会社に移った | 見えるのは今の持ち込み元（案件の画面と同じ）。知らせは紐付けたときの会社だけ |
+| トークンが見つからない宛先（`park+知らない文字@`） | 2 以降で探す。なければ未紐付け |
+| トークンの EG が退会・停止 | 紐付けて記録する（知らせも出す）。停止中でも返信の事実は残す |
+| 案内メール（`case_mails`）が消えた | `reply_tokens` で案件・会社・EG は分かるので紐付ける（`case_mail_id` は残るが行は無い。画面は「案内メールの記録はありません」） |
+| 二重の操作 | 同じメールの取り込み2回 → 1件。紐付けの2回押し → 2回目は「もう紐付いています」。取り込みの同時実行 → ロックで1つだけ |
+| 0件 | 一覧は「まだ返信メールはありません」。取り込み0通 → 「新しいメールはありませんでした」 |
+| `.env` が空 | `park:mail-fetch`・［今すぐ取り込む］は何もしない（メッセージだけ）。`park:mail-ingest` は動く（手での確かめ用） |
+| 文字化け・読めない形式 | 読めた分だけ本文に入れ、元の .eml は残す |
+| 自分（PARK）が送ったメール | 記録しない |
+| 不達・自動返信 | 記録・紐付けはするが知らせない。一覧に「自動」の印 |
+
+## 7. TEZZO さんへの確認
+
+### 警告：グループ単位の変更（公開版に反映する前に報告する）
+
+- **W1** 他社の EG（B 社の F）が、A 社が持ち込んだ案件の案内メールに返信すると、その本文が A 社の担当者全員に見える（今までは他社の EG の返信はどこにも届かなかった）。氏名・ふりがな・メール・電話は登録の値で伏せるが、本文に書かれた別の書き方（署名の会社名・ローマ字の名前など）は伏せきれない。
+- **W2** A 社の担当者全員に、F の返信のお知らせとメール（「イニシャル（B 社の会社名）さんから返信」）が届く。
+- **W3** 管理者が未紐付けを手で紐付けると、その本文が案件の持ち込み元の会社に見えるようになる（選び間違えると、別の会社に見える。確認の画面と `audit_log` で守る）。
+- **W4** 案件の持ち込み元が変わると、過去の返信メールも新しい持ち込み元の担当者に見える（案件の画面の「案内メール」と同じ決まり）。
+- **W5** 管理者は、すべての会社の EG の返信と元のメールを、伏せずに読める（兼任の管理者が担当者として見る範囲は SES と同じ）。公平性のルール・誓約書の対象。
+
+### Leo が推奨で決めた件（4章の D1〜D12。TEZZO さんに上げない）
+
+- 特に D3（自社の EG は返信先を2つ）と D5（未紐付けは管理者だけ）。違えば言ってもらい、直す。
+
+### TEZZO さんに上げる件
+
+- **T1（設定変更の承認）** 公開版の `.env` に `PARK_IMAP_HOST`・`PARK_IMAP_PORT`・`PARK_IMAP_USER`・`PARK_IMAP_PASSWORD`（park@jona.jp の受信用）を入れる。入れた時点で、案内メールの返信先が `park+…` に変わる（D2）。
+- **T2（設定変更の承認）** 公開版（Xserver）の cron に `park:mail-fetch` を5分ごとで登録する。
+- **T3（了承）** W1〜W5 を承知のうえで公開版に反映してよいか。
+
+## 8. 作業の手順（implementer 向け）
+
+### 段階1：データと送る側（R13）
+
+1. マイグレーション（2章）。`php artisan migrate` が通り、`migrate:rollback` で戻ることを確かめる。
+2. `config/park.php` に `inbound`（3-1）。`.env.example` に鍵の名前だけ。
+3. `app/Services/ReplyTokens.php`（`issue`・`tagOf($token)`＝頭 10 字・`find($token)`）。
+4. `Inbound::enabled()`・`Inbound::replyAddress()`（この段階では、この2つだけ）。
+5. `Notifier::queueMail` で `message_id`、`deliver` から `headers()`（3-2）。
+6. `CaseMail::send`：件名の印・本文の一文・返信先・説明の文・`reply_tokens` の行（3-2）。
+7. テスト（9章の T-1〜T-6）。
+
+### 段階2：受け取る側（R14）
+
+1. `app/Support/MailParser.php`（3-3 の 2）。
+2. `app/Services/Inbound.php`：`ingest`・`match`・保存（3-3）。知らせは段階3で入れるので、ここでは呼ぶ所だけ空にしておく。
+3. `app/Console/Commands/MailIngest.php`（`park:mail-ingest`）。
+4. テストの見本メール `tests/Fixtures/mail/*.eml`（架空の名前・`@park.example`。ISO-2022-JP の件名、quoted-printable、multipart/alternative、html だけ、添付つき、不達、自動返信、PARK 自身）。
+5. テスト（T-7〜T-16）。
+
+### 段階3：記録・知らせ・画面（R15・未紐付け）
+
+1. `Inbound::notify`（3-4）、`Inbound::visible`・`masked`（3-6）、手での `link`・`unlink`・`ignore`・`restore`（`audit_log` に `inbound-link` など）。
+2. `InboundController` とルート（5章）。画面 `resources/views/inbound/index.blade.php`・`show.blade.php`（SES と管理者で共通。管理者だけの欄は `@if`）、`admin/inbound.blade.php`。
+3. ナビ（`layouts/app.blade.php` 5–6）。案件の画面の「案内メール」に「返信メール n 件」（`CaseController::show` で件数を1回の問い合わせで取る）。
+4. `Todo::ses`（読んでいない返信）・`Todo::admin`（未紐付け）。
+5. テスト（T-17〜T-30）。
+
+### 段階4：IMAP の取り込み
+
+1. `app/Support/ImapClient.php`（3-5。使う命令だけ）。`app/Contracts/MailSource.php`（インターフェース）、`app/Services/MailFetch.php`。
+2. `app/Console/Commands/MailFetch.php`（`park:mail-fetch`）、管理者の［今すぐ取り込む］。
+3. `park:status`（`Console/Commands/Status.php`）に AC18 の行。
+4. テスト（T-31〜T-36。偽の `MailSource`）。**本物の IMAP にはテストでつながない**。
+
+### 段階5：マニュアル・README・版
+
+1. `config/park.php` の `version` を `v0.12.0`。
+2. マニュアル（`resources/manuals/`）：
+   - `ses.md`・`ses-steps.md`：案内メールの返信の届き方（受信が使えるとき：自社の EG の返信は担当者と PARK に、他社の EG の返信は PARK を通して「返信メール」に）、「返信メール」の画面と既読、伏せ方。96 行の表・140・146・169 行を直す。担当者も同じことができると書く。
+   - `engineer.md`・`engineer-steps.md`：102・111 行。「このメールに返信すると担当者に届く。グループの案件も届く」「［システム伝達項目］の部分は消さないで」。
+   - `admin.md`・`admin-steps.md`：「受信メール」の画面、未紐付けの紐付け・対象外、［今すぐ取り込む］、受信の設定（`.env` の鍵の名前・cron。値は書かない）、伏せずに読めること（公平性）。
+3. README：受信の設定（鍵の名前）、`park:mail-ingest`・`park:mail-fetch`、cron の行、受信が使えないときの動き。
+4. 直したら Leo が 41_Park-Project の `04_Manuals` の写しを写し直す（写しのテストも通す）。
+
+## 9. テスト（`tests/Feature/V0120InboundTest.php` ほか）
+
+受信が使えるかは `config(['park.inbound.host' => 'imap.example', 'park.inbound.user' => 'x', 'park.inbound.password' => 'y'])` で切り替える。メールは `mail_outbox` を見る。
+
+| 番号 | 立場・手順 | 確かめること |
+|---|---|---|
+| T-1 | SES の担当者で、自社の EG に検索 → 送信（受信が使える） | `reply_tokens` に1行（案件・会社・EG・`case_mail_id`・`outbox_id`・`message_id`）。`mail_outbox.reply_to` が `park+<token>@…,<担当者のアドレス>`。件名の最後が `[PARK-<頭10字>]`。本文に「［システム伝達項目・消さないでください］」と案件 ID |
+| T-2 | 同じで他社の EG に送る | `reply_to` が `park+<token>@…` だけ。説明の文が「PARK を通して案件の担当者に届きます」 |
+| T-3 | 受信が使えない（`.env` 空）で送る | `reply_to` が今まで（自社＝担当者、他社＝空）。件名の印と本文の一文はある |
+| T-4 | 2人に送る | トークンが2つとも違う。20 字の英小文字と数字 |
+| T-5 | `Notifier::headers` に Symfony の `Email` を渡す | Message-ID が `mail_outbox.message_id`、Reply-To が2つ |
+| T-6 | 管理者が案内メールを送ろうとする | 今までどおり 403（v0.11.0。トークンは作られない） |
+| T-7 | `park:mail-ingest` で、宛先が `park+<token>@…` のメール | `inbound_mails` が `linked`・`match_by=token`、案件・会社・EG が入る。.eml が保存される |
+| T-8 | 宛先はただの `park@…`、In-Reply-To が送ったときの Message-ID | `match_by=in_reply_to` |
+| T-9 | 件名に `[PARK-…]`、差出人が EG の登録アドレス | `match_by=subject` |
+| T-10 | T-9 で差出人が別のアドレス | `unlinked` |
+| T-11 | 本文に返事のリンク `/r/<32桁>`（v0.12.0 より前の案内） | `match_by=body`、差出人は問わない |
+| T-12 | 本文に「CA-…」だけ、差出人が EG の登録アドレス、その案件の案内が1件 | `match_by=body` |
+| T-13 | どれにも当たらない | `unlinked`、管理者にお知らせ（`mail_outbox` に行が増えない） |
+| T-14 | 同じ .eml を2回 | 1件だけ、知らせも1回 |
+| T-15 | From が `MAIL_FROM_ADDRESS` | 記録しない |
+| T-16 | ISO-2022-JP の件名・本文、quoted-printable、html だけ、添付つき、不達、自動返信 | 件名・本文が読める。添付は名前だけ。不達・自動返信は `auto` で知らせなし |
+| T-17 | 自社の EG の返信を取り込む | 持ち込み元の担当者**全員**（SES と担当者）にお知らせ、メールは無し |
+| T-18 | 他社の EG の返信を取り込む | 担当者全員にお知らせ＋メール。メールの本文に返信の本文・EG の氏名が無い |
+| T-19 | 担当者（SES でない）で `/inbound` | 自社の案件への返信が一覧に出る。開くと既読、今やることから消える |
+| T-20 | 他社の EG の返信を A 社の担当者が開く | 差出人が「イニシャル（会社名）」。本文の中の氏名・ふりがな・メール・電話が伏せてある |
+| T-21 | B 社（EG の所属）の担当者が A 社の案件への返信を開く | 404。一覧にも出ない |
+| T-22 | SES が未紐付けを開く・`/inbound/{id}/raw`・link を送る | 404／403／403 |
+| T-23 | EG で `/inbound` | 403 |
+| T-24 | 管理者で `/admin/inbound` | 全部見える。未紐付けのタブに件数 |
+| T-25 | 管理者が未紐付けを CA- で探し、案内メールを選んで紐付ける | `match_by=manual`・`linked_by`、持ち込み元の担当者に知らせ、`audit_log` |
+| T-26 | 紐付けを外して別の案内メールに付け直す | 新しい会社にだけ知らせ。前の会社からは見えない |
+| T-27 | 対象外にする → 戻す | 状態が変わる。消えない |
+| T-28 | 紐付けの2回押し | 2回目は「もう紐付いています」、知らせは1回 |
+| T-29 | 案件の画面（持ち込み元の担当者） | 案内メールの行に「返信メール 1 件」 |
+| T-30 | 管理者の「今やること」 | 未紐付けの件数 |
+| T-31 | `.env` 空で `park:mail-fetch`・［今すぐ取り込む］ | 何もしない。「受信の設定がありません」 |
+| T-32 | 偽の `MailSource`（3通）で初回 | 読まずに最後の UID を保存（D9） |
+| T-33 | 2回目（新しい2通） | 2通取り込み、`inbound_last_uid` が進む |
+| T-34 | `--from-start` | 全部読む。重複は1件 |
+| T-35 | UIDVALIDITY が変わった | 最初から読み直すが、重複は増えない |
+| T-36 | 偽の `MailSource` が例外 | 落ちずにメッセージ。`audit_log` にパスワードが無い |
+| T-37 | `park:status` | 受信の行が出る |
+| T-38 | 既存のテスト（案内メール・検索・返事のリンク・写し） | 件名に印が足されたことで落ちるものを直す（件名の完全一致を `str_starts_with` に） |
+
+## 10. 次の版（今回は作らない）
+
+- **R16 プロバイダーへの返信**：EG の返信を、プロバイダーへの返信の文に変える（手元の AI。案件・個人の情報を外のサービスに渡さない）、プロバイダーの宛先、SES ごとに分けるか・まとめるか（要件メモで未決。TEZZO さんに上げる）。送るメールにも `reply_tokens`（`kind=provider`）を付け、プロバイダーの返事を同じ仕組みで受ける。
+- **R17 合否の登録**：プロバイダーからの合否メール（`kind=provider` で紐付け）を応募に登録する画面と、電話などで知った SES・担当者が手で登録する画面。
+- 返信の中身から `case_mails.reply` を自動で記録する（応募したい・見送り）。
+- 添付の取り出し（SES。伏せ方の決まりを先に決める）。
+- 返信を案件のやり取り（`case_threads`）に入れるか。
+- SES が自社の EG からの未紐付けを扱えるようにするか（D5 の見直し）。
+
+## 11. 了承が要ること（Leo が TEZZO さんに取る）
+
+- 公開版の `.env` に IMAP の4つを入れる（T1）。手元の FOCUS の `.env` に入れるときも同じ（本物の受信箱を読むため）。
+- 公開版の cron の登録（T2）。
+- 公開版への反映（W1〜W5 の報告のあと。T3）。
+- 公開版で案内メールを実際に送って返信を確かめるとき（メールの送信）。宛先は見本の EG（park@jona.jp に届く）にする。
+- 受信箱のメール・`inbound_mails` の行・保存した .eml を消すこと（今回の仕組みには、消す操作を作らない）。
+
+---
+
+（ここから下に、前の計画（v0.11.0 以前）を Leo が `git show HEAD:PLAN.md >> PLAN.md` で戻す）
+
+
+---
+
 # v0.11.0 TEZZO の答え（2026-11-15。これが本文の仮置きより優先）
 
 - Q1：**管理者と SES 担当者の兼任を作る**（コードを変える）。管理者が、MRSY など1つの会社の担当者を兼ねられるようにする。兼任の仕組み（今は EG＋担当者／EG＋管理者）に倣い、planner の判断で最小の形にする。兼任した管理者が、担当者として案件を発信できる（管理者としては発信できない）。

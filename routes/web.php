@@ -12,6 +12,7 @@ use App\Http\Controllers\EgController as Eg;
 use App\Http\Controllers\EngineerController as Eng;
 use App\Http\Controllers\ProviderController as Prov;
 use App\Http\Controllers\FindController as Find;
+use App\Http\Controllers\InboundController as Inb;
 use App\Http\Controllers\ManualController as Man;
 use App\Http\Controllers\PeopleController as People;
 use App\Http\Controllers\PipelineController as Pip;
@@ -113,6 +114,9 @@ Route::middleware('role')->group(function () {
 
 Route::middleware('role:admin,ses')->group(function () {
     Route::get('/threads', [Thr::class, 'index']); // 案件のやり取りの一覧（v0.10.0）
+    // 案内メールへの返信メール（v0.12.0）。見える範囲は Inbound が決める（見られない人は 404）
+    Route::get('/inbound', [Inb::class, 'index']);
+    Route::get('/inbound/{id}', [Inb::class, 'show']);
     Route::get('/cases/new', [Cas::class, 'create']);
     Route::post('/cases/import', [Cas::class, 'import']);
     Route::post('/cases', [Cas::class, 'store']);
@@ -187,8 +191,16 @@ Route::middleware('role:admin,ses,eg')->group(function () {
 Route::middleware('role:admin')->group(function () {
     Route::post('/contracts/{id}/extend', [Pip::class, 'extend']);
     Route::post('/contracts/{id}/end', [Pip::class, 'end']);
+    // 受信メールの扱い（v0.12.0）：元のメールの取り出し、紐付け・外す・対象外・戻す
+    Route::get('/inbound/{id}/raw', [Inb::class, 'raw']);
+    Route::post('/inbound/{id}/link', [Inb::class, 'link']);
+    Route::post('/inbound/{id}/unlink', [Inb::class, 'unlink']);
+    Route::post('/inbound/{id}/ignore', [Inb::class, 'ignore']);
+    Route::post('/inbound/{id}/restore', [Inb::class, 'restore']);
 
     Route::prefix('admin')->group(function () {
+        Route::get('/inbound', [Inb::class, 'admin']);
+        Route::post('/inbound/fetch', [Inb::class, 'fetch'])->middleware('throttle:6,1');
         Route::get('/', [Adm::class, 'dashboard']);
         Route::get('/ses', [Adm::class, 'sesIndex']);
         Route::get('/ses/new', [Adm::class, 'sesNew']);

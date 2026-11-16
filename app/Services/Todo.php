@@ -66,6 +66,10 @@ class Todo
         foreach ($cases as $c) $out[] = self::item("新しい案件「{$c->title}」", 'エンジニアに案内する', "/cases/{$c->id}/mail");
         // 案件のやり取り：エンジニアの未読の発言
         foreach (CaseThread::unreadForSes($sesId, $ownEngineerId) as $t) $out[] = self::item(CaseThread::egNameRow($sesId, $t)." さんから案件の質問：{$t->title}", '読んで返事をする', "/cases/{$t->case_id}/threads/{$t->engineer_id}");
+        // 案内メールへの返信メール（読んでいないもの。v0.12.0）
+        foreach (Inbound::unreadForSes($sesId) as $i) {
+            $out[] = self::item(Inbound::senderLabel((object) ['role' => 'ses', 'ses_id' => $sesId], $i)." さんから返信メール：{$i->case_title}", '読んで、必要なら返事を記録する', "/inbound/{$i->id}");
+        }
         $out = array_merge($out, self::pipeline(self::apps()->where('a.ses_id', $sesId)));
         foreach (DB::table('engineers')->where('ses_id', $sesId)->whereNotNull('registered_at')->whereNull('self_confirmed_at')->get() as $e) {
             $out[] = self::item("{$e->name} さんの本人の確認がまだ", 'ご本人に声をかける（確認するまで応募できません）', "/engineers/{$e->id}");
@@ -107,6 +111,8 @@ class Todo
         if ($n) $out[] = self::item("技術マスタ：自動で足された技術（{$n}件）", '分類を確かめる', '/admin/skills');
         $n = DB::table('ai_jobs')->where('status', 'done')->count();
         if ($n) $out[] = self::item("AI の下書きができています（{$n}件）", '中身を確かめて、採用するか捨てる', '/admin/ai');
+        $n = Inbound::unlinkedCount();
+        if ($n) $out[] = self::item("どの案内メールへの返信か分からない受信メール（{$n}件）", '読んで、案内メールに紐付けるか、対象外にする', '/admin/inbound');
         return $out;
     }
 }

@@ -22,6 +22,7 @@ class Notifier
         $id = DB::table('mail_outbox')->insertGetId([
             'to_email' => $to, 'to_name' => $name ?? '', 'from_name' => $fromName ?: null, 'subject' => '['.setting('app_name').'] '.$subject, 'body' => $body.$footer,
             'kind' => $kind, 'status' => self::canSend() ? 'queued' : 'saved', 'created_at' => now_str(), 'reply_to' => $replyTo,
+            'message_id' => self::newMessageId(), // 返信から元のメールを探すため、送るメールすべてに付ける（v0.12.0）
         ]);
         if (self::canSend()) self::deliver($id);
         return $id;
@@ -39,8 +40,8 @@ class Notifier
             Mail::raw($body, function ($msg) use ($m, $dummy, $subject) {
                 $dummy ? $msg->to(config('park.dummy_mailbox'), 'PARK テスト受信') : $msg->to($m->to_email, $m->to_name);
                 $msg->subject($subject);
-                if (!empty($m->reply_to)) $msg->replyTo($m->reply_to);
                 if ($from = self::fromOf($m)) $msg->from(...$from);
+                self::headers($msg, $m);
             });
             DB::table('mail_outbox')->where('id', $id)->update(['status' => 'sent', 'sent_at' => now_str(), 'error' => null]);
             return true;
@@ -48,6 +49,27 @@ class Notifier
             DB::table('mail_outbox')->where('id', $id)->update(['status' => 'failed', 'error' => mb_substr($e->getMessage(), 0, 500)]);
             return false;
         }
+    }
+
+    // 送るメールの Message-ID（<> なし）。@ のあとは差出人のドメイン
+    public static function newMessageId(): string
+    {
+        $domain = substr(strrchr((string) config('mail.from.address'), '@') ?: '@localhost', 1);
+        return bin2hex(random_bytes(16)).'@'.$domain;
+    }
+
+    // 返信先（複数なら , で区切る）と Message-ID をメールに付ける。$msg は Mail::raw の中のメッセージ
+    public static function headers($msg, object $m): void
+    {
+        // Symfony の Email を直接渡されたとき（テスト）と、Laravel の Message（本番）の両方に使える
+        $symfony = $msg instanceof \Symfony\Component\Mime\Email ? $msg : (method_exists($msg, 'getSymfonyMessage') ? $msg->getSymfonyMessage() : null);
+        if (!empty($m->reply_to)) {
+            $list = array_values(array_filter(array_map('trim', explode(',', (string) $m->reply_to))));
+            if ($list && $symfony === $msg) $msg->replyTo(...$list);
+            elseif ($list) $msg->replyTo(count($list) === 1 ? $list[0] : $list);
+        }
+        // Message-ID は Symfony のメッセージにだけ付けられる（テストの偽物には無いので、あるときだけ）
+        if (!empty($m->message_id) && $symfony) $symfony->getHeaders()->addIdHeader('Message-ID', $m->message_id);
     }
 
     // 差出人の名前があれば [アドレス, 名前]。アドレスは全メール共通のまま（送信ドメインの認証のため）。なければ null（.env の既定）
