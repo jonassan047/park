@@ -45,8 +45,9 @@ class DemoReset extends Command
         ))));
         $offerIds = DB::table('case_offers')->where('case_id', $case->id)->where('engineer_id', $eg->id)->pluck('id')->all();
 
-        // お知らせ：その案件の画面か、この案件の受信メール・下書きへのリンクを持つもの
-        $notes = DB::table('app_notifications')->where(function ($q) use ($case, $inIds, $pmIds) {
+        // お知らせ：その案件の画面か、この案件の受信メール・下書きへのリンクを持つもの。今回のデモの案内を送った時刻以降のものだけ（前のテスト送信の分は残す）
+        $since = $cmIds ? DB::table('case_mails')->whereIn('id', $cmIds)->min('sent_at') : null;
+        $notes = DB::table('app_notifications')->when($since, fn ($q) => $q->where('created_at', '>=', $since), fn ($q) => $q->whereRaw('1 = 0'))->where(function ($q) use ($case, $inIds, $pmIds) {
             $q->where('link', 'like', '/cases/'.$case->id.'%');
             foreach ($inIds as $i) $q->orWhere('link', 'like', '/inbound/'.$i.'%');
             foreach ($pmIds as $i) $q->orWhere('link', 'like', '/provider-mails/'.$i.'%');
