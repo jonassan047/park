@@ -11,6 +11,7 @@ use App\Http\Controllers\DirectMailController as DMail;
 use App\Http\Controllers\EgController as Eg;
 use App\Http\Controllers\EngineerController as Eng;
 use App\Http\Controllers\ProviderController as Prov;
+use App\Http\Controllers\ProviderMailController as PMail;
 use App\Http\Controllers\FindController as Find;
 use App\Http\Controllers\InboundController as Inb;
 use App\Http\Controllers\ManualController as Man;
@@ -137,7 +138,16 @@ Route::middleware('role:admin,ses')->group(function () {
     Route::get('/searches/{sid}/members/{eid}', [CSearch::class, 'member']);
     Route::post('/searches/{sid}/members/{eid}', [CSearch::class, 'saveMember']);
     Route::post('/case-mails/{id}/reply', [CMail::class, 'reply']);
+    Route::post('/case-mails/{id}/result', [CMail::class, 'result']); // 先方の結果（v0.13.0）
     Route::get('/case-mails/{id}/doc/{kind}', [CMail::class, 'doc']);
+    // プロバイダーへの返信（v0.13.0）。見られない人は 404、管理者の操作は 403（中で確かめる）
+    Route::get('/provider-mails/{id}', [PMail::class, 'show']);
+    Route::post('/provider-mails/{id}', [PMail::class, 'save']);
+    Route::post('/provider-mails/{id}/send', [PMail::class, 'send'])->middleware('throttle:20,1');
+    Route::post('/provider-mails/{id}/redraft', [PMail::class, 'redraft']);
+    Route::post('/provider-mails/{id}/discard', [PMail::class, 'discard']);
+    Route::post('/inbound/{id}/provider-draft', [PMail::class, 'fromInbound']);
+    Route::post('/case-mails/{id}/provider-draft', [PMail::class, 'fromCaseMail']);
     Route::post('/cases/{id}/status', [Cas::class, 'status']);
     Route::get('/engineers/new', [Eng::class, 'create']);
     Route::post('/engineers', [Eng::class, 'store'])->middleware('throttle:20,1');

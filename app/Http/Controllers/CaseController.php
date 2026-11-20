@@ -137,6 +137,15 @@ class CaseController extends Controller
                 return $m;
             });
             $data['mailApps'] = DB::table('applications')->where('case_id', $id)->pluck('id', 'engineer_id')->all();
+            // プロバイダーへの返信（下書き・送ったもの。v0.13.0）。ここに出る人（持ち込み元の担当者・管理者）は全員が見てよい
+            $data['providerMails'] = DB::table('provider_mails as p')->leftJoin('engineers as e', 'e.id', '=', 'p.engineer_id')->where('p.case_id', $id)
+                ->select('p.*', 'e.name as eg_name', 'e.initials as eg_initials', 'e.ses_id as eg_ses_id')->orderByDesc('p.id')->get()
+                ->map(function ($p) use ($u) {
+                    $p->who = $p->eg_name === null ? 'エンジニア' : CaseThread::egName($u, (object) ['name' => $p->eg_name, 'initials' => $p->eg_initials, 'ses_id' => $p->eg_ses_id]);
+                    return $p;
+                });
+            // 案内メールの行ごとの、いま開く下書き（なければ送ったもの）
+            $data['pmByCm'] = $data['providerMails']->whereNotNull('case_mail_id')->where('status', '!=', 'discarded')->sortBy(fn ($p) => $p->status === 'draft' ? 0 : 1)->groupBy('case_mail_id')->map(fn ($g) => $g->first());
             // 案内メールへの返信メールの件数（提案元 SES の担当者だけ。v0.12.0）
             if ($data['canMail']) {
                 $data['inboundN'] = DB::table('inbound_mails')->where('case_id', $id)->where('status', 'linked')->selectRaw('engineer_id, count(*) as n')->groupBy('engineer_id')->pluck('n', 'engineer_id')->all();

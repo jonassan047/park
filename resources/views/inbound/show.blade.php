@@ -27,6 +27,21 @@
 <p class="muted">大きすぎるメールは、元のメールの一部（ヘッダーなど）だけを保存します。</p>@endif
 </x-card>
 
+@if($m->status === 'linked' && !$m->auto)
+@if($isProvider)
+<x-card title="プロバイダーからの返信">
+<p>プロバイダー（{{ $providerName ?: '—' }}）からの返信です。@if($pm)<a href="{{ url('/provider-mails/'.$pm->id) }}">送ったメール</a>に対する返事です。@endif</p>
+@if($cm)<h3>先方の結果</h3>@include('cases._result', ['m' => $cm, 'canEdit' => $canResult, 'back' => 'inbound', 'backId' => $m->id])@endif
+</x-card>
+@else
+<x-card title="プロバイダーへの返信">
+@if($pm)<p>{{ \App\Services\ProviderReply::STATUSES[$pm->status] ?? $pm->status }}：<a class="btn small" href="{{ url('/provider-mails/'.$pm->id) }}">開く</a></p>
+@elseif($canResult)<p class="muted">この返信の下書きは、まだありません。</p><x-post :action="'/inbound/'.$m->id.'/provider-draft'" label="下書きを作る" cls="small" />
+@else<p class="muted">下書きはありません。作れるのは、持ち込み元の担当者だけです。</p>@endif
+</x-card>
+@endif
+@endif
+
 @if($isAdmin)
 @if($m->status === 'linked')
 <x-card title="紐付け">

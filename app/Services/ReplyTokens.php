@@ -9,7 +9,8 @@ use Illuminate\Support\Facades\DB;
 class ReplyTokens
 {
     const KIND_CASE_MAIL = 'case-mail';
-    const LENGTH = 20;      // トークンの字数（英小文字と数字。メールアドレスの + のあとに使える文字だけ）
+    const KIND_PROVIDER = 'provider';      // プロバイダーへ送った返信（v0.13.0）
+    const LENGTH = 20;     // トークンの字数（英小文字と数字。メールアドレスの + のあとに使える文字だけ）
     const TAG_LENGTH = 10;  // 件名・本文の印に使う、トークンの頭の字数
     const ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
 
@@ -36,10 +37,10 @@ class ReplyTokens
         throw new \RuntimeException('reply token could not be made');
     }
 
-    // 送ったメールの情報を書き足す（case_mail_id・outbox_id・message_id だけ）
+    // 送ったメールの情報を書き足す（case_mail_id・provider_mail_id・outbox_id・message_id だけ）
     public static function attach(int $id, array $fields): void
     {
-        $fields = array_intersect_key($fields, array_flip(['case_mail_id', 'outbox_id', 'message_id']));
+        $fields = array_intersect_key($fields, array_flip(['case_mail_id', 'provider_mail_id', 'outbox_id', 'message_id']));
         if ($fields) DB::table('reply_tokens')->where('id', $id)->update($fields);
     }
 
@@ -53,6 +54,12 @@ class ReplyTokens
     public static function subjectMark(string $token): string
     {
         return '[PARK-'.self::tagOf($token).']';
+    }
+
+    // プロバイダーあての件名の印（PARK の名前を出さない）
+    public static function providerMark(string $token): string
+    {
+        return '[No.'.self::tagOf($token).']';
     }
 
     public static function find(string $token): ?object

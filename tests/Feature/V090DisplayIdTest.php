@@ -606,7 +606,7 @@ class V090DisplayIdTest extends TestCase
     // T26：版
     public function test_t26_version(): void
     {
-        $this->assertSame('v0.12.0', config('park.version'));
-        $this->get('/login')->assertOk()->assertSee('v0.12.0');
+        $this->assertSame('v0.13.0', config('park.version'));
+        $this->get('/login')->assertOk()->assertSee('v0.13.0');
     }
 }

@@ -68,8 +68,16 @@ class Todo
         foreach (CaseThread::unreadForSes($sesId, $ownEngineerId) as $t) $out[] = self::item(CaseThread::egNameRow($sesId, $t)." さんから案件の質問：{$t->title}", '読んで返事をする', "/cases/{$t->case_id}/threads/{$t->engineer_id}");
         // 案内メールへの返信メール（読んでいないもの。v0.12.0）
         foreach (Inbound::unreadForSes($sesId) as $i) {
+            if (($i->sender_kind ?? 'eg') === 'provider') {
+                $out[] = self::item(($i->provider_name ?: 'プロバイダー')." から返信：{$i->case_title}", '読んで、先方の結果を登録する', "/inbound/{$i->id}");
+                continue;
+            }
             $out[] = self::item(Inbound::senderLabel((object) ['role' => 'ses', 'ses_id' => $sesId], $i)." さんから返信メール：{$i->case_title}", '読んで、必要なら返事を記録する', "/inbound/{$i->id}");
         }
+        // プロバイダーへの返信の下書き（送るか取りやめるまで出す。v0.13.0）
+        $drafts = DB::table('provider_mails as p')->join('cases as c', 'c.id', '=', 'p.case_id')->leftJoin('engineers as e', 'e.id', '=', 'p.engineer_id')
+            ->where('c.source_ses_id', $sesId)->where('p.status', 'draft')->orderBy('p.id')->select('p.id', 'c.title', 'e.initials')->get();
+        foreach ($drafts as $d) $out[] = self::item("プロバイダーへの返信の下書き：{$d->title}（".($d->initials ?: 'エンジニア').'）', '確かめて、送るか取りやめる', "/provider-mails/{$d->id}");
         $out = array_merge($out, self::pipeline(self::apps()->where('a.ses_id', $sesId)));
         foreach (DB::table('engineers')->where('ses_id', $sesId)->whereNotNull('registered_at')->whereNull('self_confirmed_at')->get() as $e) {
             $out[] = self::item("{$e->name} さんの本人の確認がまだ", 'ご本人に声をかける（確認するまで応募できません）', "/engineers/{$e->id}");

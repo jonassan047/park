@@ -14,17 +14,19 @@ class Notifier
         return !in_array(config('mail.default'), ['log', 'array', null], true);
     }
 
-    public static function queueMail(?string $to, ?string $name, string $subject, string $body, string $kind = 'general', ?string $replyTo = null, ?string $fromName = null): ?int
+    public static function queueMail(?string $to, ?string $name, string $subject, string $body, string $kind = 'general', ?string $replyTo = null, ?string $fromName = null, bool $plain = false, bool $deliverNow = true): ?int
     {
+        // $deliverNow を false にすると、行を作るだけで送らない（トランザクションの中から呼ぶとき。commit のあとに deliver を呼ぶ）
         if (!$to) return null;
-        $footer = "\n\n――――――――――\n".($fromName ?: setting('operator_name'))."\n".url('/')."\n※このメールは PARK から自動で送っています。
+        // $plain：プロバイダーなど PARK の外へ送るメール。件名の [PARK] と PARK の署名を付けない（v0.13.0）
+        $footer = $plain ? '' : "\n\n――――――――――\n".($fromName ?: setting('operator_name'))."\n".url('/')."\n※このメールは PARK から自動で送っています。
 ※ご不明な点は、park@jona.jp までご相談ください。";
         $id = DB::table('mail_outbox')->insertGetId([
-            'to_email' => $to, 'to_name' => $name ?? '', 'from_name' => $fromName ?: null, 'subject' => '['.setting('app_name').'] '.$subject, 'body' => $body.$footer,
+            'to_email' => $to, 'to_name' => $name ?? '', 'from_name' => $fromName ?: null, 'subject' => $plain ? $subject : '['.setting('app_name').'] '.$subject, 'body' => $body.$footer,
             'kind' => $kind, 'status' => self::canSend() ? 'queued' : 'saved', 'created_at' => now_str(), 'reply_to' => $replyTo,
             'message_id' => self::newMessageId(), // 返信から元のメールを探すため、送るメールすべてに付ける（v0.12.0）
         ]);
-        if (self::canSend()) self::deliver($id);
+        if ($deliverNow && self::canSend()) self::deliver($id);
         return $id;
     }
 

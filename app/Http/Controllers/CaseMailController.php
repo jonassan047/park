@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\CaseMail as CM;
+use App\Services\CaseResult;
 use App\Services\EngineerDocs;
 use App\Services\Matcher;
 use App\Services\Notifier as N;
@@ -89,6 +90,17 @@ class CaseMailController extends Controller
         CM::reply($c->id, $m->engineer_id, (string) $r->input('reply'), str_in($r->input('note')), 'ses');
         N::audit($r->user()->id, 'case-mail-reply', "#$mid ".$r->input('reply'));
         return $this->go("/cases/{$c->id}#mails", '返事を記録しました。');
+    }
+
+    // 先方の結果（結果待ち・合格・不合格）とメモの登録（v0.13.0）。持ち込み元の担当者だけ（管理者・ほかの会社・EG は 403）。
+    // 自社の EG だけでなく、案内した他社の EG の分も登録できる（ownEngineer は見ない）
+    public function result(Request $r, int $mid)
+    {
+        $m = DB::table('case_mails')->find($mid);
+        abort_unless($m, 404);
+        $c = $this->load($r, $m->case_id);
+        $res = CaseResult::set($r->user(), $mid, (string) $r->input('result'), (string) $r->input('note'));
+        return $this->go((string) $r->input('back') === 'inbound' && $r->input('inbound') ? '/inbound/'.(int) $r->input('inbound') : ((string) $r->input('back') === 'pm' && $r->input('pm') ? '/provider-mails/'.(int) $r->input('pm') : "/cases/{$c->id}#mails"), $res['msg'], $res['type']);
     }
 
     // 6 のあと：案件をくれた先へ書類を返した（応募した）ことを記録する。ここから面談依頼・成約へ進む

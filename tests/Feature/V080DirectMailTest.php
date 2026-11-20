@@ -446,8 +446,8 @@ class V080DirectMailTest extends TestCase
 
     public function test_t22_version(): void
     {
-        $this->assertSame('v0.12.0', config('park.version'));
-        $this->get('/login')->assertOk()->assertSee('v0.12.0');
+        $this->assertSame('v0.13.0', config('park.version'));
+        $this->get('/login')->assertOk()->assertSee('v0.13.0');
     }
 
     public function test_t23_existing_mail_flows_remain(): void
