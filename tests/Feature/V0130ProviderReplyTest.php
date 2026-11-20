@@ -294,6 +294,31 @@ class V0130ProviderReplyTest extends TestCase
         $this->assertSame('discarded', DB::table('provider_mails')->find($d->id)->status);
     }
 
+    // デモのやり直し：案内・返事・下書き・送信・受信・お知らせを消し、案件とエンジニアは残す
+    public function test_demo_reset_clears_the_flow_but_keeps_case_and_engineer(): void
+    {
+        $this->enableInbound();
+        [$cm, $iid] = $this->reply($this->eg1, "参画したいです。");
+        $d = $this->draft($iid);
+        $this->as(self::SES1)->post("/provider-mails/{$d->id}/send")->assertRedirect();
+        $caseCode = DB::table("cases")->where("id", $this->caseId)->value("code");
+        $egCode = DB::table("engineers")->where("id", $this->eg1)->value("code");
+        // 見るだけ：何も消えない
+        $this->artisan("park:demo-reset", ["case" => $caseCode, "engineer" => $egCode])->assertExitCode(0);
+        $this->assertSame(1, DB::table("provider_mails")->count());
+        $this->assertSame(1, DB::table("case_mails")->where("id", $cm->id)->count());
+        // 実行
+        $this->artisan("park:demo-reset", ["case" => $caseCode, "engineer" => $egCode, "--yes" => true])->assertExitCode(0);
+        foreach (["provider_mails", "inbound_mails", "reply_tokens", "case_mails"] as $t) $this->assertSame(0, DB::table($t)->count(), $t);
+        $this->assertSame(1, DB::table("cases")->where("id", $this->caseId)->count());
+        $this->assertSame(1, DB::table("engineers")->where("id", $this->eg1)->count());
+        // 続けて、案内の送信からやり直せる
+        $cm2 = $this->sendMail(self::SES1, $this->eg1);
+        $this->assertNotNull($cm2);
+        // 表示 ID が違えば、何もしない
+        $this->artisan("park:demo-reset", ["case" => "CA-999999", "engineer" => $egCode, "--yes" => true])->assertExitCode(1);
+    }
+
     // ---------- 合否 ----------
     // 登録のあと、案件の画面にメッセージが出る（画面の上に固定する toast として）
     public function test_result_registration_shows_message_on_case_page(): void
