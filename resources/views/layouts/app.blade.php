@@ -38,6 +38,13 @@
     $unread = $u ? ($dual ? (clone $unreadQ)->where(fn ($w) => $w->whereNull('for_role')->orWhere('for_role', $u->role))->count() : $unreadQ->count()) : 0;
     $otherUnread = ($dual && $acting) ? (clone $unreadQ)->whereNotNull('for_role')->where('for_role', '!=', $u->role)->count() : 0;
     $otherName = ['admin' => '管理者', 'ses' => 'SES 担当者', 'eg' => 'エンジニア'];
+    // 担当者の立場のとき：プロバイダーからの未読の返事（自動のものは除く）。件数・最小の id・案件名を 1 回の問い合わせで取る
+    $provMail = null;
+    if ($u && $passed && $u->role === 'ses') {
+        $provMail = \App\Services\Inbound::query($u)->where('i.sender_kind', 'provider')->whereNull('i.ses_read_at')->whereNull('i.auto')
+            ->select(DB::raw('count(*) as n, min(i.id) as first_id, min(c.title) as first_title'))->first();
+        if (!$provMail || !(int) $provMail->n) $provMail = null;
+    }
     $flash = session('flash');
     $print = $print ?? false;
 @endphp
@@ -82,6 +89,11 @@
 @endif
 @endunless
 <main class="wrap {{ ($wide ?? false) ? 'wide' : '' }}">
+@if($provMail && !$print)
+  {{-- プロバイダーから返事が届いていて、まだ開いていないとき（開くと消える） --}}
+  <div class="flash warn provmail">プロバイダーからメールが届きました。確認してください（{{ $provMail->n }} 件{{ (int) $provMail->n === 1 && $provMail->first_title ? '：'.$provMail->first_title : '' }}）
+    <a class="btn small" href="{{ url((int) $provMail->n === 1 ? '/inbound/'.$provMail->first_id : '/inbound') }}">確認する</a></div>
+@endif
 @if($flash)<div class="flash {{ $flash['type'] }}">{{ $flash['msg'] }}</div>@endif
 @if($errors->any())<div class="flash bad">@foreach($errors->all() as $err){{ $err }}<br>@endforeach</div>@endif
 @unless($noTitle ?? false)<h1>{{ $title }}</h1>@endunless

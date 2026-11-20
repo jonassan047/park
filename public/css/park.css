@@ -259,6 +259,7 @@ header nav a.on { background: var(--blue2); color: var(--blue-dark); }
 input, select, textarea { border-radius: 12px; border-color: var(--blue3); }
 input:focus, select:focus, textarea:focus { outline-color: var(--blue2); }
 .flash { border-radius: 14px; }
+.flash.provmail { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-weight: 700; }
 .badge { font-weight: 700; padding: 2px 10px; }
 .badge.ok { background: #d9f2e4; color: #1f7a4a; }
 .badge.info { background: var(--blue2); color: var(--blue-dark); }
