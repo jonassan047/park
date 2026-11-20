@@ -295,6 +295,14 @@ class V0130ProviderReplyTest extends TestCase
     }
 
     // ---------- 合否 ----------
+    // 登録のあと、案件の画面にメッセージが出る（画面の上に固定する toast として）
+    public function test_result_registration_shows_message_on_case_page(): void
+    {
+        $cm = $this->sendMail(self::SES1, $this->eg1);
+        $this->as(self::SES1)->post("/case-mails/{$cm->id}/result", ["result" => "passed", "note" => ""])->assertSessionHas("flash.msg", "登録しました。");
+        $this->get("/cases/{$this->caseId}")->assertOk()->assertSee("flash toast ok", false)->assertSee("登録しました。");
+    }
+
     public function test_result_is_recorded_and_notified_without_memo(): void
     {
         $cm = $this->sendMail(self::SES1, $this->eg1);
