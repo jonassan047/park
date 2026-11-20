@@ -107,6 +107,14 @@ class ImapClient implements MailSource
             if (preg_match('/\[UIDVALIDITY (\d+)\]/', $l['text'], $m)) $this->validity = (int) $m[1];
             if (preg_match('/\[UIDNEXT (\d+)\]/', $l['text'], $m)) $this->uidnext = (int) $m[1];
         }
+        // Courier-IMAP（Xserver）は、開いたときの応答に UIDNEXT を含めない。足りなければ STATUS で聞く
+        if ($this->validity === null || $this->uidnext === null) {
+            $r = $this->command('STATUS '.$this->quote((string) ($this->cfg['mailbox'] ?? 'INBOX')).' (UIDNEXT UIDVALIDITY)', false);
+            foreach ($r['lines'] as $l) {
+                if (preg_match('/UIDVALIDITY (\d+)/', $l['text'], $m)) $this->validity = (int) $m[1];
+                if (preg_match('/UIDNEXT (\d+)/', $l['text'], $m)) $this->uidnext = (int) $m[1];
+            }
+        }
         if ($this->validity === null || $this->uidnext === null) throw new \RuntimeException('受信箱の情報を読めませんでした');
     }
 
