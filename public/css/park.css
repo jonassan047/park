@@ -331,3 +331,8 @@ body.role-admin .logo .mark, body.role-eg .logo .mark { box-shadow: 0 3px 8px rg
 /* 操作の結果のメッセージ：スクロールしても画面の上に見えるようにし、15 秒たつと消す（登録後に表の位置まで移動しても気づけるように） */
 .flash.toast { position: sticky; top: 10px; z-index: 100; font-weight: 700; box-shadow: 0 4px 14px rgba(0, 0, 0, .18); animation: toast-out 0s 15s forwards; }
 @keyframes toast-out { to { opacity: 0; visibility: hidden; } }
+
+/* 狭い画面で表のボタンの文字が縦に折れないようにする。案内メールの表は、狭いときは横にスクロールさせる */
+.btn { white-space: nowrap; }
+#mails ~ .tablewrap table { min-width: 980px; }
+#mails ~ .tablewrap td form.inline input[name="note"] { width: 150px; }
