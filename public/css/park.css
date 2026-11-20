@@ -327,3 +327,7 @@ body.role-admin .logo .mark, body.role-eg .logo .mark { box-shadow: 0 3px 8px rg
 .temp-login table { border-collapse: collapse; margin-top: 6px; } .temp-login td, .temp-login th { padding: 2px 12px 2px 0; text-align: left; }
 .right { text-align: right; }
 .pager { margin: 10px 0; }
+
+/* 操作の結果のメッセージ：スクロールしても画面の上に見えるようにし、8 秒たつと消す（登録後に表の位置まで移動しても気づけるように） */
+.flash.toast { position: sticky; top: 10px; z-index: 100; font-weight: 700; box-shadow: 0 4px 14px rgba(0, 0, 0, .18); animation: toast-out 0s 8s forwards; }
+@keyframes toast-out { to { opacity: 0; visibility: hidden; } }

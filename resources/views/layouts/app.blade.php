@@ -94,8 +94,8 @@
   <div class="flash warn provmail">プロバイダーからメールが届きました。確認してください（{{ $provMail->n }} 件{{ (int) $provMail->n === 1 && $provMail->first_title ? '：'.$provMail->first_title : '' }}）
     <a class="btn small" href="{{ url((int) $provMail->n === 1 ? '/inbound/'.$provMail->first_id : '/inbound') }}">確認する</a></div>
 @endif
-@if($flash)<div class="flash {{ $flash['type'] }}">{{ $flash['msg'] }}</div>@endif
-@if($errors->any())<div class="flash bad">@foreach($errors->all() as $err){{ $err }}<br>@endforeach</div>@endif
+@if($flash)<div class="flash toast {{ $flash['type'] }}" role="status">{{ $flash['msg'] }}</div>@endif
+@if($errors->any())<div class="flash toast bad" role="alert">@foreach($errors->all() as $err){{ $err }}<br>@endforeach</div>@endif
 @unless($noTitle ?? false)<h1>{{ $title }}</h1>@endunless
 @yield('content')
 </main>
