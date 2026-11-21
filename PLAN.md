@@ -1,3 +1,386 @@
+# PLAN：案件詳細とエンジニア選択の作り直し（v0.15.0。2026-11-21）
+
+> **これが今の計画**。前の計画（v0.14.0 以前）は、このファイルの末尾に残してある。
+> 要求：TEZZO さん（2026-11-21）案件詳細を「左＝メール本文 → 案内メール → プロバイダーへの返信 → この案件への応募」「右＝AI の読み直し → 検索のキーワード（必須・尚可・EGに確認。左にチェック、既定でオン、各節の最後に追加）→ エンジニアに提案」に。エンジニア選択画面は「エンジニアとの相性」を元にし、タイトル「エンジニアを選択」、すべてを選択、マッチした点・マッチしなかった点・件数、EGを追加、任意のメール配信先、送信。メールに「EGに確認」を必ず出し、返事が必須と書く。返信を提案元の SES 担当者が確かめられる。
+> 方針は Leo（2026-11-21、12項目）。細部は planner が決め、4章に理由を書いた。「仮置き」と書いた所は、TEZZO さんの答えで変わり得る。
+> プレーヤー：管理者・SES・担当者・EG の4つ（担当者＝`users.role=ses`。今回の権限は SES と担当者で同じ）。
+> 外部のライブラリは足さない。名前・メール・合言葉はこのファイルにもテストにも書かない（テストは架空の名前、`@park.example`）。
+> 作る順：段階1 → 6（段階ごとに `php artisan test` を通して commit）→ park-reviewer → park-tester。commit・push・公開版への反映は Leo。**本物のアドレスへの送信の試し（任意の配信先）は TEZZO さんの了承を取ってから**。
+
+## 0. コードで確かめた今の形
+
+- 案件詳細：`CaseController::show` → `cases/show.blade.php`。左に「案件票」（dl）・「AI の読み直し」（`$ai`、`Perms::caseEdit` の人だけ）・「案内メール」と「プロバイダーへの返信」（`$canSeeMails`＝`canMail` か管理者）・「エンジニアとのやり取り」・「この案件への応募」。右は役割で分かれる（管理者＝案内・配信済み・状態の変更、SES＝「エンジニアとの相性」（自社の人の点数と `Matcher` の reasons）、EG＝あなたとの相性・応募）。**元のメール（`raw_text`）は今の案件詳細のどこにも出ていない**（検索画面にだけ出る）。
+- 「案内できる人」＝`CaseMail::canSend`（role=ses で `source_ses_id` が自社）。`Perms::caseEdit` は、これに管理者を足したもの。
+- 検索：`/cases/{id}/search`（GET＝`cases/search`：左に元のメール、右に必須・尚可の表と「外す」チェック `off[side][]`、「必須に足す」「尚可に足す」）→ POST で `CaseSearch::run`（`case_searches` を案件×作った人で1つ、`case_search_members` を作り直す）→ `/searches/{sid}`（`cases/search-list`：全員選択・全員へのメッセージ・氏名（押すと詳細）・「必須 h/n　尚可 k/m」・一覧に足す・送信・保存）。
+- 条件は `case_searches.conditions`（JSON `{req: [...], pref: [...]}`、1項目は `name・kind（skill/exp）・src（case/added）・on`）。`conditions()` は案件の今の値から作り直し、前の「外す」と足した項目だけを引き継ぐ。
+- 送信：`CaseSearch::send` → 案件の行を `lockForUpdate` → `CaseMail::send`（`case_mails` に1行、返事のリンク `/r/{token}`、返信先トークン `reply_tokens`（kind=case-mail）、件名に `[PARK-xxxxxxxxxx]`、本文の最後に「案内番号」、`case_offers`、EG へのお知らせ、他社の EG なら所属 SES に知らせ、監査）。
+- 「EGに確認」：`cases.confirm_items`（改行区切り）。`CaseMail::render` が `{確認事項}` を「、」でつなぎ、空なら `■ご確認ください：` の行ごと消す。検索の本文（`CaseSearch::defaultBody`）にも同じ行がある。
+- 受信：`Inbound::match` が ①宛先 `park+トークン@…` ②In-Reply-To ③件名 `[PARK-…]`（差出人が EG の登録アドレス）④本文の案内番号・`/r/` リンク・案件 ID の順で探す。`linkFields` で `inbound_mails` に `case_mail_id・case_id・ses_id・engineer_id・sender_kind（eg/provider）`。`notify` が提案元 SES の担当者全員に知らせる。SES・担当者の見える範囲は「紐付け済みで、案件の今の提案元 SES が自社」（`Inbound::query`）。`/inbound?case=&eg=` で絞れる。
+- 返事のリンクの画面：`ReplyController`（`public/reply`）。ひとことは任意。
+- 版の表示：`config/park.php` の `version` は今 `v0.13.0`（v0.14.0 で上げていない）。版を見るテストが9か所ある（8章）。
+
+## 1. 受け入れ条件
+
+| 番号 | 立場 | 条件 |
+|---|---|---|
+| A1 | 提案元 SES の SES・担当者 | 案件詳細の左の一番上が「メール本文」。`raw_text` がそのまま出る（空なら「元のメールはありません。」と作業内容）。カードの右上に「編集」と、ID・状態・金額の1行 |
+| A2 | 同上 | メール本文の下に、折りたたみ「案件票（読み取った項目）」。今の dl（必須・尚可・業務・EGに確認・元の文・経験年数…締め切り）と作業内容・その他の条件が全部入っている |
+| A3 | 同上 | 左はその下に「案内メール」→「プロバイダーへの返信」→「この案件への応募」→「エンジニアとのやり取り」（ある時だけ）の順 |
+| A4 | 同上 | 右の一番上が「AI の読み直し」（今のカードの中身そのまま。id="ai"） |
+| A5 | 同上 | その下に「検索のキーワード」（id="keywords"）。「必須」「尚可」「EGに確認」の順に項目が並び、各項目の左にチェック。はじめは全部オン。前に外した項目は外したまま |
+| A6 | 同上 | 必須・尚可・EGに確認のそれぞれの最後に「追加」の欄とボタン。押すと条件に足され、案件詳細（#keywords）に戻る。案件の必須・尚可・EGに確認・技術マスタは変わらない |
+| A7 | 同上 | キーワード欄の最後に「エンジニアに提案」ボタン。押すとチェックの状態（と追加の欄）を保存して検索し、エンジニア選択画面（`/searches/{sid}`）へ |
+| A8 | 同上 | 「エンジニアとの相性」カードは、この人たちの画面には出ない（選択画面に移った）。案内メールの見出しの「エンジニアに提案する」は #keywords へのリンク |
+| A9 | 管理者・ほかの SES・EG | 案件詳細の配置・中身は今のまま（元のメールは出ない。キーワード欄・「エンジニアに提案」は出ない） |
+| A10 | 提案元 SES の SES・担当者 | `GET /cases/{id}/search` は `/cases/{id}#keywords` へ移る（募集を終えた案件は今どおり案件へ戻して知らせる）。管理者・ほかの SES・EG は今どおり 403 |
+| B1 | 同上 | 選択画面のタイトルは「エンジニアを選択」。一番上の行に「すべてを選択」のチェック |
+| B2 | 同上 | 一覧の列：チェック／エンジニア（押すと詳細）／点数／マッチした点／マッチしなかった点／「必須 h/n　尚可 k/m」。マッチした点・しなかった点は「必須 …」「尚可 …」を改行で分けて出す |
+| B3 | 同上 | 一覧の下に「EGを追加」（今の「一覧に足す」）と「メールアドレスを追加」。アドレス（任意で名前）を足すと「追加の宛先」の行になり、チェックが入る |
+| B4 | 同上 | 「エンジニアへメールを送信」で、チェックしたエンジニアと追加の宛先の両方に送る。送った追加の宛先は「送信済み」になり選べない |
+| B5 | 同上 | 全員へのメッセージ・詳細（個別メッセージとメールの見本）・送信済み・保存は今どおり |
+| C1 | EG・追加の宛先 | 送るメールに、チェックした「EGに確認」の項目が「■ご確認ください（必ずご返信ください）」の見出しで全部出て、返事が必須である旨の一文がある。チェックした項目が0なら、その節は出ない |
+| C2 | EG（返事のリンクの画面） | その案内に確認事項があるとき、画面に項目と「お答えが必須です」が出て、ひとことが空だと記録されない（エラーの文で戻る）。確認事項が無い案内は今どおり任意 |
+| C3 | 提案元 SES の SES・担当者 | 追加の宛先からの返信（宛先トークン／In-Reply-To／件名の印＋差出人が同じアドレス）が、その追加の宛先の行に紐付き、担当者全員にお知らせが出る。案件詳細の「案内メール」の「追加の宛先」に、送った日と「返信メール n 件」（`/inbound?case=…&extra=…` へのリンク）が出る |
+| C4 | 管理者 | 「追加の宛先」の表を読むだけで見られる（アドレス・送った日・返信の件数）。操作は無い |
+| C5 | ほかの SES・EG | 追加の宛先のアドレスは見えない（案件詳細にも、受信メールにも） |
+| D1 | システム | アドレスの形が正しくない・同じ検索に同じアドレス・この案件で送ったアドレス・登録しているエンジニアのアドレス・PARK 自身のアドレスは足さない（理由を出す）。1回に足せるのは 10 件、1つの検索に 30 件まで |
+| D2 | システム | 同時に2回送っても、同じ追加の宛先に2通出ない。送信は監査に残る |
+| D3 | システム | メールを「保存のみ」にしているときは、今の案内と同じく記録だけ残る（画面に「保存のみ」） |
+| D4 | 全員 | 今のテストが通る（検索画面の `off[...]` と `GET /cases/{id}/search` を見ていたテストは新しい形に直す。8章） |
+
+## 2. データ（マイグレーション1本、足すだけ）
+
+`database/migrations/2026_11_21_000002_case_search_extras.php`。外部キーは付けない（今までどおり）。`down()` は足したものを消すだけ。
+
+- 新しい表 `case_search_extras`（追加の宛先）
+  - `id`、`search_id`（index）、`case_id`（index）、`ses_id`（null 可。作った会社）、`created_by`
+  - `email`（string 254。小文字にそろえて入れる）、`name`（string 100、null 可）
+  - `checked`（boolean、既定 true）
+  - `sent_at`（null 可）、`sent_by`（null 可）、`reply_token_id`（null 可）、`outbox_id`（null 可）、`subject`（text null）、`body`（text null）、`confirm_items`（text null。送ったときの確認事項。改行つなぎ）
+  - `created_at`、`updated_at`
+  - unique（`search_id`, `email`）
+- `reply_tokens`：`search_extra_id`（null 可、index）。kind に `search-extra` を使う。
+- `inbound_mails`：`search_extra_id`（null 可、index）。`sender_kind` に `extra` を使う（今は eg／provider。長さ 10 で足りる）。
+- `case_mails`：`confirm_items`（text、null 可。送ったときの確認事項。改行つなぎ。検索から送ったときだけ入る）。
+
+`case_searches.conditions` の JSON に `confirm`（配列）を足す（列は変えない。古い JSON に `confirm` が無くても動く）。1項目は `{name, kind: 'text', src: 'case'|'added', on}`。
+
+## 3. 仕様
+
+### 3-1. `CaseSearch`（条件）
+
+- `key()`：`kind=text` は `text:`＋名前（前後の空白を取る）。
+- `conditions($c, $s)`：`confirm` を足す。中身は `cases.confirm_items` の行（空行は捨て、同じ文は1つ）を `src=case`、前の検索の `src=added` を後ろに。前に外した印（`on=false`）の引き継ぎは req・pref と同じ。
+- `addItems($cond, $side, $text)`：`$side=confirm` のときは改行だけで区切り（文の中の「、」で割らない）、1項目 200 字まで（`MAX_CONFIRM_LEN`）、技術マスタには通さず `kind=text`。数の上限は `MAX_ADD`（30）のまま。req・pref は今のまま。
+- `activeItems()`：`confirm` も返す。`judge`・`passes`・点数は `confirm` を見ない（今の req・pref だけ）。
+- 新：`applyForm(array $cond, Request の値): array`（コントローラーから呼ぶ。下の 3-3）。
+
+### 3-2. `CaseSearch`（メールの本文）
+
+- `defaultBody()`：`■ご確認ください：{確認事項}` の行をやめ、`■尚可：{尚可}` の次の行に `{確認事項の節}` を置く。
+- `confirmBlock(array $names): string`（新）：0件なら `''`。あれば次の形（`・` は全角）。
+  ```
+  ■ご確認ください（必ずご返信ください）
+  ・項目1
+  ・項目2
+  上の項目について、このメールへの返信で必ずお答えください（お答えがないと、ご提案を進められません）。
+  ```
+- `body()`：`$vals` に `'{確認事項の節}' => confirmBlock(activeItems の confirm の名前)` を足す（今の目印の仕組みで、空なら行ごと消える）。`CaseMail::render` に渡す `$c` は `confirm_items` を空にした写し（render の一行の確認事項を出さない）。戻り値に `'confirm' => [名前…]` を足す。
+- `send()`：`CaseMail::send` に渡す `$items[$eid]` に `'confirm' => […]` を入れる。
+- `CaseMail::send`：`$it['confirm']` があれば `case_mails.confirm_items` に改行つなぎで入れる（無ければ null。案件の画面の案内 `/cases/{id}/mail` の動きは変えない）。
+
+### 3-3. コントローラー（`CaseSearchController`）
+
+- `form`（GET `/cases/{id}/search`）：`loadCase`（権限は今のまま）→ `closed` なら今どおり → それ以外は `redirect("/cases/{$id}#keywords")`。`cases/search.blade.php` は消す（使わない）。
+- 条件の読み方（`run` と新しい `keywords` で共通の private `formCond`）：
+  - リクエストに `kw=1` がある（新しいフォーム）：`on[req][]`・`on[pref][]`・`on[confirm][]` にある鍵だけオン、無い鍵はオフ。
+  - `kw` が無い（古い形・空の POST）：今の `off[...]` の読み方のまま（`off` が無ければ前回の状態のまま）。空の POST で全部オフにならないための互換。
+  - そのあと `add_req`・`add_pref`・`add_confirm` を `addItems`。
+- `run`（POST `/cases/{id}/search`＝「エンジニアに提案」）：`formCond` → `CaseSearch::run` → `/searches/{sid}`（今どおり）。
+- 新 `keywords`（POST `/cases/{id}/keywords`＝各「追加」ボタン）：`loadCase`・`closed` → `formCond` → `CaseSearch::saveConditions($u, $c, $cond)`（新。`run` の前半＝`case_searches` の行を作る／書き直すだけ。メンバーは作らない）→ `/cases/{id}#keywords`「キーワードを保存しました。」。
+- `index`：`extras`（この検索の追加の宛先）を渡す。
+- `persist`：今に足して `xpick[]`（追加の宛先の id）で `case_search_extras.checked` を入れ直す（送信済みは触らない）。
+- 新 `addExtras`（POST `/searches/{sid}/extras`）：`persist` → `CaseSearch::addExtras($u, $s, $c, $text)` → `/searches/{sid}#extras`、結果の文（足した数・足さなかった理由）。
+- 新 `removeExtra`（POST `/searches/{sid}/extras/{xid}/remove`）：`persist` → 送っていない行だけ消す（その検索の行でなければ 404）。消すのは送る前の入力の取り消しで、記録の削除ではない。
+- `send`：`persist` → チェックしたエンジニアの id と、チェックした未送信の追加の宛先。両方0なら「送る相手を選んでください。」。`$n = CS::send(...)`（エンジニアが0なら呼ばない）＋`$x = CS::sendExtras(...)`。両方0なら「送る相手がいません。」。知らせの文：`$n>0` は今と同じ「{n}名に案内メールを送りました。返事が来たら、下の「案内メール」に記録してください。」、`$x>0` なら後ろに「追加の宛先 {x}件にも送りました。」（`$n=0` なら「追加の宛先 {x}件に案内メールを送りました。」）。行き先は今どおり `/cases/{id}#mails`。
+
+ルート（`routes/web.php` の `role:admin,ses` の中、検索の並び）：`POST /cases/{id}/keywords`、`POST /searches/{sid}/extras`、`POST /searches/{sid}/extras/{xid}/remove`。
+
+### 3-4. 追加の宛先（`CaseSearch`）
+
+- 定数：`MAX_EXTRA_ADD = 10`（1回）、`MAX_EXTRAS = 30`（1つの検索）、`EXTRA_KIND = 'search-extra'`。
+- `addExtras($u, $s, $c, ?string $text): array` → `['added' => n, 'skipped' => [理由の文…]]`
+  - 1行に1件。形は「アドレス」か「名前 <アドレス>」（`<>` の外を名前）。前後の空白を取り、アドレスは小文字。
+  - 断る：`filter_var(FILTER_VALIDATE_EMAIL)` が偽・254 字超／同じ検索にある／この案件で送ったことがある（`case_search_extras` の `case_id` が同じで `sent_at` あり）／登録しているエンジニアのアドレス（`Inbound::engineerEmails` と同じ見方。`engineers.email` と、`engineer_id` のある `users.email`）→「登録しているエンジニアです。『EGを追加』から足してください。」／PARK の送信元・返信先（`mail.from.address`・`park.inbound.reply_base`、同じドメインの `park+…` も）／1回 10 件・合計 30 件を超えた分。
+  - 名前は 100 字まで（`str_in`）。足した行は `checked=true`。
+  - 監査 `N::audit($u->id, 'case-search-extra-add', "{案件のコード} 検索#{sid} {n}件")`（アドレスは監査の文に書かない）。
+- `extraBody($u, $c, $s, $x): array`（件名・本文）
+  - 件名：`CaseMail::defaultSubject($c)`（送るときに `[PARK-…]` を付けるのは送信側）。
+  - 本文の型（`extraTemplate()`）：
+    ```
+    {呼び名} 様
+
+    お疲れさまです。{送り主}です。
+    案件のご案内です。
+
+    {全員へのメッセージ}
+
+    ■案件：{案件名}
+    ■案件 ID：{案件ID}
+    ■単価：{単価}
+    ■開始：{開始}
+    ■場所・働き方：{場所}／{働き方}
+    ■必須：{必須}
+    ■尚可：{尚可}
+    {確認事項の節}
+
+    ご興味があれば、このメールに返信してください（条件で気になる点があれば、それも一緒に）。
+    ```
+  - 呼び名は `name`、無ければ「ご担当者」。必須・尚可・確認事項は検索の条件（`activeItems`）。合う点・個別メッセージ・返事のリンク・PARK の画面のリンクは出さない。空の差し込みは行ごと詰める（`body()` と同じ目印の仕組みを共通の private 関数にして使う）。
+- `sendExtras($u, $c, $s): int`
+  - 案件の行を `lockForUpdate` するトランザクションの中で、この検索の `checked=true` かつ `sent_at` が null の行を読み直す（`lockForUpdate`）。
+  - 1行ごとに：`ReplyTokens::issue(EXTRA_KIND, case_id, 自社 ses_id, null, Inbound::enabled())` → 本文の最後に「※このメールに返信すると、担当者に届きます。」と `――――――――――\n［システム伝達項目・消さないでください］\n案内番号：PARK-{tag}\n案件 ID：{code}`。
+  - 返信先：受信が使えるとき `park+トークン@…, 送った担当者のアドレス`、使えないとき送った担当者のアドレスだけ（自社の EG あての `CaseMail::send` と同じ考え）。件名に `ReplyTokens::subjectMark`。
+  - `N::queueMail($x->email, $x->name ?: '', 件名, 本文, 'case-search-extra', 返信先, null)`。
+  - 行を `update(['sent_at', 'sent_by', 'checked' => false, 'reply_token_id', 'outbox_id', 'subject', 'body', 'confirm_items'])`（`where('sent_at', null)` を付け、0行なら送らない＝二重送信を防ぐ。更新を先にしてから `queueMail`）。`ReplyTokens::attach($tokenId, ['search_extra_id' => …, 'outbox_id' => …, 'message_id' => …])`（`attach` の許す項目に `search_extra_id` を足す）。
+  - `case_mails`・`case_offers`・EG へのお知らせは作らない。
+  - 最後に `N::audit($u->id, 'case-search-extra-send', "{$c->title} → {$n}件")`。`case_searches.last_sent_at` も更新。
+
+### 3-5. 受信の紐付け（`Inbound`・`ReplyTokens`）
+
+- `ReplyTokens::KIND_EXTRA = 'search-extra'`。`attach` に `search_extra_id`。
+- `match`：①（宛先トークン）と②（In-Reply-To）は今のままで `search-extra` のトークンも当たる。③④の件名・本文の案内番号では、今の `tokenByTag`（case-mail だけ）で当たらなかったら、新 `extraTokenByTag($tag, $from)`（kind=search-extra が1件だけ、かつ差出人がその行の `email`）を試す。`/r/`・案件 ID の探し方は対象外。
+- `linkFields`：トークンが `search-extra` なら `['status' => 'linked', 'match_by' => $by, 'reply_token_id', 'case_mail_id' => null, 'case_id' => トークンの case_id, 'ses_id' => トークンの ses_id ?: 案件の source_ses_id, 'engineer_id' => null, 'sender_kind' => 'extra', 'search_extra_id', 'from_mismatch' => 差出人が行の email と違う, 'linked_at']`。
+- `groupWithoutPark`：`case_mail_id` が無いので今のまま false（自動で紐付けてよい）。
+- `notify`：`sender_kind=extra` の分かれを provider の次に足す。`N::toSes(ses_id, '追加の宛先から案内メールへの返信：'.案件名.タグ, 本文の頭 200 字, "/inbound/$id", false, 'inbound')`（メールは出さない。返信は送った担当者のアドレスにも届いているため）。
+- `query`：`leftJoin('case_search_extras as x', 'x.id', '=', 'i.search_extra_id')`、`x.name as extra_name`・`x.email as extra_email` を足す。見える範囲は今のまま（提案元 SES と管理者だけ）。
+- `senderLabel`：`sender_kind=extra` → `extra_name` があれば「名前（アドレス）」、無ければアドレス（行が無ければ「追加の宛先」）。
+- `masked`：`sender_kind=extra` は伏せない（自社が入れた宛先。エンジニアではない）。
+- `unlink`：`search_extra_id => null` も戻す。手での紐付け（`link`）は今のまま（案内メールだけ）。
+- `ProviderReply::draftFromInbound`・`ProviderMailController::fromInbound` は `sender_kind=eg` だけなので、追加の宛先からは下書きを作らない（変えない）。`inbound/show` の「プロバイダーへの返信を作る」系のボタンが `extra` で出ないように、条件を `sender_kind === 'eg'` に絞る。
+- `InboundController::index`：`?extra=` で `i.search_extra_id` を絞る。
+
+### 3-6. 返事のリンクの画面（`ReplyController`・`public/reply`）
+
+- `load` の select に `m.confirm_items` を足す（`m.*` に入っている）。行に分ける（空行は捨てる）。
+- 画面：確認事項があれば、ご返事の上に「ご確認ください（お答えが必須です）」と項目の箇条書き。ひとことの見出しを「ひとこと（必須。上の項目へのお答えを書いてください）」に、`required` を付ける。無ければ今のまま（任意）。
+- `save`：確認事項があり、`note` が空なら記録しない。`redirect("/r/{$token}/{$answer}")` に戻して「上の項目へのお答えを、ひとことの欄に書いてください。」（`withErrors` か flash。入力は `withInput`）。返事の種類（応募したい・質問・見送る）を問わず必須（仮置き。見送りでもお答えをもらう）。
+- 自社の EG・他社の EG のどちらの返事の画面も同じ（同じ画面のため）。
+
+### 3-7. 画面：案件詳細（`cases/show.blade.php`・`CaseController::show`）
+
+`$newLayout = $canMail`（＝`CaseMail::canSend`）。`$newLayout` のときだけ下の配置。偽のときは今のファイルの形をそのまま出す（管理者・ほかの SES・EG）。ファイルが長くなるので、今の各カードを部分テンプレートに切り出して両方の配置で使う：`cases/_card_case`（案件票の dl と作業内容・その他の条件）、`cases/_card_ai`、`cases/_card_mails`（案内メール＋追加の宛先）、`cases/_card_provider`、`cases/_card_apps`、`cases/_card_threads`、`cases/_card_keywords`（新）。
+
+左（`$newLayout`）：
+1. 「メール本文」カード：actions に「編集」（今の条件）と `<span class="muted">ID <x-code> ・状態 badge ・金額 man()</span>`。中身は `<pre class="mailbody">raw_text</pre>`、空なら「元のメールはありません。」と作業内容。その下に `<details><summary>案件票（読み取った項目）</summary>` で `_card_case` の中身（dl・作業内容・その他の条件）。
+2. 案内メール（`#mails`）。見出しの「エンジニアに提案する」は `href="#keywords"`（募集中だけ）。表の下に「追加の宛先」（3-8）。
+3. プロバイダーへの返信。
+4. この案件への応募。
+5. エンジニアとのやり取り（ある時だけ）。
+
+右（`$newLayout`）：
+1. AI の読み直し（`isset($ai)` のとき。今のカードのまま）。
+2. 「検索のキーワード」（`id="keywords"`）。募集中でなければ「募集を終えた案件です。」だけ。
+   - `<form method="post" action="/cases/{id}/search">`、`@csrf`、`<input type="hidden" name="kw" value="1">`。
+   - 節を「必須」「尚可」「EGに確認」の順に。各項目 1 行：`<label><input type="checkbox" name="on[{side}][]" value="{key}" @checked(on)> 名前</label>`、業務は「（業務）」、足した項目は「足した」の印。項目が無い節は「項目はありません。」。
+   - 各節の最後：`<textarea name="add_{side}" rows="2">` と `<button class="btn ghost small" formaction="/cases/{id}/keywords">追加</button>`。説明：必須・尚可は「「、」や改行で区切ると、いくつでも足せます。」、EGに確認は「1行に1つ。チェックした項目は、メールの「ご確認ください」に入り、返事が必須になります。点数には使いません。」。
+   - 最後に `<button class="btn">エンジニアに提案</button>` と説明「この検索にだけ使います。案件の必須・尚可は変わりません。」。
+3. 「エンジニアとの相性」カードは出さない。
+
+`CaseController::show`：`$newLayout` で募集中なら `cond = CaseSearch::conditions($c, 自分の検索)` を渡す。追加の宛先の表のデータ（3-8）を `canSeeMails` のとき渡す。
+
+### 3-8. 案件詳細の「追加の宛先」（案内メールのカードの中）
+
+- データ：`case_search_extras` の `case_id` が同じで `sent_at` あり、新しい順。返信の件数は `inbound_mails` の `status=linked` を `search_extra_id` ごとに数える。
+- 見せる人：`$canSeeMails`（提案元 SES の SES・担当者と管理者）だけ。
+- 列：宛先（名前、アドレス）／送った日／返信。返信は、`canMail` なら「返信メール n 件」（`/inbound?case={id}&extra={xid}` へのリンク）、管理者は件数の文だけ（管理者の受信の一覧は `/admin/inbound` のため）。0件なら「まだありません」。
+- 1件も無ければ、この小見出しごと出さない。
+
+### 3-9. 画面：エンジニア選択（`cases/search-list.blade.php`）
+
+- ページのタイトル「エンジニアを選択：{案件名}」、カードの見出し「エンジニアを選択」。actions：「キーワードを変える」（`/cases/{id}#keywords`）・「案件に戻る」。
+- 一番上の行：`<label class="check"><input type="checkbox" id="pickall"> すべてを選択</label>`。押すと、送っていないエンジニア（`pick[]`）と追加の宛先（`xpick[]`）の全部に入れる／外す（仮置き：追加の宛先も含める）。
+- 一覧の列（`x-table` の head）：`''`・`エンジニア`・`点数`・`マッチした点`・`マッチしなかった点`・`件数`。
+  - チェック：今どおり（送信済みは「送信済み」）。`name="pick[]" value="{id}" checked` の並びは変えない（テストが見ている）。
+  - エンジニア：今どおり（名前のボタンで詳細へ、コード、「手で足した」、届いていなければ「条件に届いていません」）。
+  - 点数：`<x-score :n="$row['score']" />`（`Matcher` の点）。
+  - マッチした点：`$j['req']` の hit を `<b>必須</b> 名前、名前<br>`、`$j['pref']` の hit を `<b>尚可</b> …`。業務は名前のあとに「（業務）」。無ければ「—」。
+  - マッチしなかった点：同じく hit でないもの。
+  - 件数：`必須 {h}/{n}　尚可 {k}/{m}`（今の文字のまま）。
+- 一覧の下：「全員へのメッセージ」（今の欄）。
+- 「EGを追加」カード（今の「一覧に足す」。ボタンの文字「一覧に足す」は残す）。
+- 「メールアドレスを追加」カード（`id="extras"`）：説明「PARK に登録していない方にも、同じ案件のご案内を送れます。1行に1件、「アドレス」か「名前 <アドレス>」で書いてください（1回に 10 件まで）。返信は、このメールを送った担当者と PARK に届きます。」。`<textarea name="extra_text">` と `<button formaction="/searches/{sid}/extras">宛先に足す</button>`。その下に、この検索の追加の宛先の表：チェック（送信済みは「送信済み」と送った日）`name="xpick[]"`・名前・アドレス・「外す」（未送信だけ。`formaction="/searches/{sid}/extras/{xid}/remove"`）。
+- 「エンジニアへメールを送信」（今の文字）。確認の JS は `pick[]` と `xpick[]` の合計で数える（「n件に送ります。よろしいですか？」）。「チェックとメッセージを保存」は今どおり。
+- 保存のみの注意（`$canSend`）は今どおり。
+
+### 3-10. マニュアルと README
+
+- `resources/manuals/ses.md`（138〜143 行あたり）・`ses-steps.md`（87〜88 行あたり）：案件詳細の新しい配置、キーワードのチェック（既定でオン、外すと検索から外れる）、追加、「EGに確認」のチェックの意味（メールの必須の確認事項になる）、「エンジニアに提案」、選択画面（すべてを選択・列・EGを追加・メールアドレスを追加・送信）、追加の宛先の返信の見方（案件詳細の「追加の宛先」→「返信メール n 件」）。
+- `admin.md`（230〜231・237 行）・`admin-steps.md`（115 行）：担当者の流れの文を新しい名前に（「エンジニアに案内する → 条件 → エンジニアを検索」→「検索のキーワード → エンジニアに提案 → エンジニアを選択」）。管理者は「追加の宛先」を読むだけ見られること。
+- `engineer.md`・`engineer-steps.md`（返事のリンクの所）：案内に「ご確認ください（必ずご返信ください）」があるときは、ひとことに答えを書かないと返事が記録されないこと。
+- `README.md`：v0.15.0 の節（表・列、ルート、追加の宛先の受信の紐付け、上限）。
+- 直したら Leo が 41_Park-Project の `04_Manuals` の写し（`SES`・`管理者`・`エンジニア` の `マニュアル.md`・`操作手順書.md`、README）を直す。
+
+## 4. 決めたこと（planner。違えば Leo が直す）
+
+| 番号 | 決めたこと | 理由 |
+|---|---|---|
+| P1 | 新しい配置は `CaseMail::canSend` の人だけ。ほかは今のファイルの形をそのまま出す（カードは部分テンプレートで共有） | Leo 決め1。管理者・ほかの SES・EG のテストと「元のメールを出さない」決まりを壊さない |
+| P2 | 「メール本文」は `raw_text` をそのまま出す（`pre`）。案件票の dl は折りたたみで全部残す | Leo 決め2。情報を失わない。テストの `assertSee` も `<details>` の中で通る |
+| P3 | 「エンジニアとの相性」カードは、案内できる人の画面から外す | 選択画面が「相性」を元にした作りになり、同じ表が2か所に出る。推薦する人（ほかの SES）には今どおり出る |
+| P4 | 「追加」は検索を走らせず条件だけ保存（`/cases/{id}/keywords`）、「エンジニアに提案」は保存＋検索 | 追加のたびに一覧（メンバー）を作り直すと、選択画面のチェックが入れ直される |
+| P5 | 新しいフォームは `kw=1` の目印つきで「入れる」チェック。目印が無い POST は今の `off` の読み方 | チェックの外れた項目はブラウザが送らないので、目印が無いと「全部外した」と区別できない。空の POST（今のテスト）で全部オフにならない |
+| P6 | 「EGに確認」は条件の `confirm` に持ち、点数・合否に使わない。チェックは「メールに入れるか」 | Leo 決め5 |
+| P7 | 確認事項の節は検索から送るメールだけ（エンジニア・追加の宛先）。案件の画面の案内（`/cases/{id}/mail`）は今の一行のまま | 要求は選択画面からの送信。今の案内の画面の文面（担当者が保存した型）を変えない |
+| P8 | 送ったときの確認事項を `case_mails.confirm_items` と `case_search_extras.confirm_items` に残す。返事の画面はこれを見る | 案件の確認事項があとで変わっても、送ったメールと返事の画面がずれない |
+| P9 | 返事の画面で、確認事項があればひとことを必須（返事の種類を問わず）。**仮置き** | Leo 決め5。見送りでもお答えをもらうかは TEZZO さんの意図が読み切れないので、要求の「返事が必須」に寄せた |
+| P10 | 追加の宛先の返信は、新しいトークンの種類 `search-extra` と `inbound_mails.search_extra_id`・`sender_kind=extra` で紐付ける。`case_mails` は作らない | Leo 決め8。`case_mails.engineer_id` を null にすると結合とテストが壊れる。トークンの仕組みはそのまま使え、①②の探し方は変えなくて済む |
+| P11 | 追加の宛先の返信先は「PARK（受信が使えるとき）＋送った担当者」。お知らせだけでメールは出さない | 自社の EG あての案内と同じ考え。担当者には返信そのものが届いている |
+| P12 | 登録しているエンジニアのアドレスは追加の宛先にできない | 他社の EG に名前を伏せて案内する決まり・案内の記録（`case_mails`）を迂回させない |
+| P13 | 上限は 1回 10 件・1つの検索 30 件。**仮置き** | 送りすぎと、PARK の送信元の評判（迷惑メール扱い）を守る。数は TEZZO さんの答えで変える |
+| P14 | 追加の宛先の「外す」は、送る前の行だけ消す | 打ち間違いを直せるように。送った行は記録なので消さない |
+| P15 | 「すべてを選択」は追加の宛先も含める。**仮置き** | 一覧の最後尾に並ぶので、一覧の一部と読める |
+| P16 | `/cases/{id}/search` の GET は案件詳細へ移すだけ。`cases/search.blade.php` は消す | Leo 決め6。古いリンク・ブックマークも動く |
+| P17 | 版は `v0.15.0`（`config/park.php`）。版を見るテストも直す | 画面と流れが変わる |
+
+## 5. 画面と操作（プレーヤーごと）
+
+| 立場 | 画面 | 変わること |
+|---|---|---|
+| 管理者 | 案件詳細 | 配置は今のまま。「案内メール」の中に「追加の宛先」（アドレス・送った日・返信の件数。読むだけ） |
+| 管理者 | 受信メール（`/admin/inbound`） | 追加の宛先からの返信が「紐付け済み」で並ぶ。差出人は「名前（アドレス）」 |
+| 管理者 | `/cases/{id}/search`・選択画面 | 今どおり入れない（403） |
+| SES・担当者（提案元） | 案件詳細 | 新しい配置（3-7）。メール本文・キーワード・「エンジニアに提案」。「追加の宛先」と返信の件数 |
+| SES・担当者（提案元） | エンジニア選択 | 3-9。メールアドレスを追加して送れる |
+| SES・担当者（提案元） | 受信メール（`/inbound`）・今やること・お知らせ | 追加の宛先からの返信が並ぶ。差出人は伏せない |
+| SES・担当者（ほかの会社） | 案件詳細 | 今のまま（相性と推薦）。追加の宛先は見えない |
+| SES・担当者（ほかの会社） | 自社の EG に届いた案内 | 確認事項の節が入る（自社の EG がグループの案件で返事を求められる） |
+| EG | 案内メール | 「■ご確認ください（必ずご返信ください）」と項目、返事が必須の文 |
+| EG | 返事のリンクの画面 | 確認事項があれば項目が出て、ひとことが必須 |
+| EG | 案件詳細 | 今のまま |
+| 追加の宛先（PARK の外の人） | メール | 案件の案内（合う点・PARK のリンクは無い）。返信すると担当者と PARK に届く |
+
+## 6. 境界の挙動
+
+| 場面 | 挙動 |
+|---|---|
+| 権限が無い人が `/cases/{id}/keywords`・`/searches/{sid}/extras` | `loadCase`・`loadSearch` で 403（今と同じ見方）。EG はルートで止まる |
+| 募集を終えた案件 | キーワード欄は「募集を終えた案件です。」だけ。POST は今どおり案件へ戻して知らせる。追加の宛先の表は残る |
+| `raw_text` が空 | 「元のメールはありません。」と作業内容 |
+| 案件の「EGに確認」が空 | キーワード欄の節は「項目はありません。」。追加で足せる。チェックが0ならメールに節は出ない |
+| 案件の必須・尚可・EGに確認があとで変わった | `conditions()` が案件の今の値から作り直す（足した項目と外した印だけ引き継ぐ）。送ったメールの確認事項は送ったときのまま |
+| キーワードを全部外して「エンジニアに提案」 | 必須0項目なので全員合格（今の `passes`）。一覧に全員が並ぶ |
+| 「追加」を空で押す | 何も足さず、チェックの状態だけ保存して戻る |
+| 同じ検索に同じアドレス／大文字小文字だけ違う | 足さない（小文字にそろえ、unique でも止まる。unique に当たった例外は「すでにあります」に変える） |
+| この案件で別の担当者がもう送ったアドレス | 足さない（「この案件ではもう送っています」） |
+| 11 件以上を一度に／合計 31 件目 | 上限までだけ足し、残りは理由を出す |
+| 2回同時に送信 | 案件の行を押さえ、`sent_at` が null の行だけ更新して送る。2通目は出ない（エンジニアは今どおり） |
+| エンジニア0・追加の宛先だけチェック | 追加の宛先だけ送る |
+| 受信が使えない（`PARK_IMAP_*` が空） | 返信先は送った担当者だけ。PARK には紐付かない（今の案内と同じ） |
+| メールが「保存のみ」 | `queueMail` が記録だけ（今と同じ）。画面に「保存のみ」 |
+| 追加の宛先の返信が別のアドレスから | ①②で当たれば紐付き `from_mismatch=true`。③④（件名・本文の印）は差出人が同じときだけ |
+| 案件の提案元 SES が変わった | 返信は今の提案元 SES に見える（受信の今の決まり。案内メールと同じ） |
+| 返事の画面で確認事項があり、ひとことが空 | 記録しない。同じ画面に戻ってエラーの文 |
+| 古い案内（`case_mails.confirm_items` が null） | 返事の画面は今どおり（任意） |
+| 古い `conditions`（`confirm` が無い） | 案件の確認事項から作り、全部オン |
+
+## 7. 了承・警告（Leo が TEZZO さんに）
+
+- W1（警告・グループ単位）：他社の SES に所属する EG に届く案内（グループの案件）にも、「必ずご返信ください」の節が入り、返事の画面でひとことが必須になる。他社の EG の動きが変わる。
+- W2（警告・グループ単位）：PARK の送信元（公開版のメールの設定）から、PARK に登録していない人へメールが出せるようになる。送り先は各社の担当者が決める。迷惑メール扱いで PARK の送信元の評判が下がると、全社の案内メールが届きにくくなる。上限（1回 10 件・1検索 30 件）は仮置き。
+- W3（警告）：追加の宛先のアドレスと、その人からの返信の中身が PARK の DB に残る（提案元 SES と管理者に見える）。PARK の外の人の個人情報を持つことになる。
+- W4（了承が要る）：公開版で、本物の外のアドレスへ試しに送ること。手元・公開版とも、試しは `@park.example` か、メールを「保存のみ」にした状態で行う。
+- W5（報告）：提案元の担当者の案件詳細から「エンジニアとの相性」の表が消え、選択画面に移る。
+- 仮置き（TEZZO さんの答えで変える）：P9（見送りでもひとこと必須）、P13（上限の数）、P15（すべてを選択に追加の宛先を含める）。
+
+## 8. 作業の手順（implementer 向け）
+
+段階1（データ）
+- マイグレーション（2章）。`ReplyTokens::KIND_EXTRA`、`attach` の許す項目。
+
+段階2（条件とメールの本文）
+- `CaseSearch`：`key`・`conditions`・`addItems`・`activeItems` に `confirm`（3-1）。`saveConditions`。`defaultBody`・`confirmBlock`・`body`・`send` の `confirm`（3-2）。目印で差し込む部分を private 関数に分ける。
+- `CaseMail::send` に `confirm_items`（3-2）。
+
+段階3（コントローラーとルート）
+- `CaseSearchController`：`form` のリダイレクト、`formCond`（`kw`／`off` の両方）、`run`、`keywords`、`persist` に `xpick`、`addExtras`・`removeExtra`、`send` の両方送り（3-3）。ルート3本。
+- `cases/search.blade.php` を消す。
+
+段階4（追加の宛先と受信）
+- `CaseSearch::addExtras`・`extraBody`・`sendExtras`（3-4）。
+- `Inbound`：`match`・`extraTokenByTag`・`linkFields`・`notify`・`query`・`senderLabel`・`masked`・`unlink`（3-5）。`InboundController::index` の `extra`。`inbound/show` のボタンの条件。
+- `ReplyController`・`public/reply`（3-6）。
+
+段階5（画面）
+- `cases/show` を部分テンプレートに分け、`$newLayout` の配置を足す（3-7）。**まず分けるだけで今のテストが全部通ることを確かめてから**、新しい配置を足す。
+- `CaseController::show`：`cond`・追加の宛先のデータ（3-7・3-8）。
+- `cases/search-list`（3-9）。`cases/search-member` は見本の本文が変わるだけ（触らない）。
+
+段階6（版・マニュアル・既存テストの直し）
+- `config/park.php` を `v0.15.0`。版を見るテストを直す：`RegistrationFoundationTest:52`、`SkillQuestionsTest:650-651`、`V0100CaseThreadTest:520`、`V0101CaseThreadPartnerTest:657`、`V030RegressionTest:177-178`、`V050CatalogTest:158`、`V060CaseAiTest:528`、`V070SearchTest:424-425`、`V080DirectMailTest:449-450`、`V081AffiliationTest:369-370`、`V090DisplayIdTest:609-610`。
+- `V070SearchTest` を新しい形に（目的は変えない）：
+  - 167〜170 行：`GET /cases/$cid/search` は `/cases/$cid#keywords` へのリダイレクトを確かめ、`GET /cases/$cid` で元のメールの全文・`Java`・`AWS`・「エンジニアに提案」、本文の無い案件で「元のメールはありません」「架空の作業内容」。
+  - 195・204・205 行：`off[...]` を `kw=1`＋`on[...]`（外す項目以外の鍵を全部入れる）に。テストの中に「今の条件の鍵からある鍵を除いた `on`」を作る小さな関数を足す。
+  - 211 行：`GET /cases/$cid` で `ZZ架空の技術` が出る。
+  - 243 行：募集を終えた案件は今どおり `/cases/$cid` へ（変えない）。
+  - 154・159 行：`/cases/$cid/search` の文字（フォームの action）は案内できる人の画面にだけ出る、で通るはず。通らなければ理由を見て直す。
+- `V0110NoDirectTest:366・369`：「エンジニアに提案する」（案内メールの見出しのリンク）が担当者だけに出る、で通るはず。
+- 空の POST（`V0110AdminStaffDualTest`・`V0110NoDirectTest`・`V090DisplayIdTest`）は P5 の互換で今のまま通る。
+- マニュアルと README（3-10）。
+
+## 9. テスト（`tests/Feature/V0150CaseDetailSelectTest.php`）
+
+人・会社は見本データと、テストの中の架空のもの。アドレスは `@park.example`。メールは `mail_outbox` で確かめる。
+
+案件詳細（A1〜A10）
+- 提案元の担当者で `GET /cases/{id}`：`メール本文` のカードに `raw_text` の固有の文（架空）、`案件票（読み取った項目）` の `<details>`、`id="ai"`（AI のカード。編集できる人）、`id="keywords"`、「必須」「尚可」「EGに確認」、`name="on[req][]"` の項目が `checked`、`name="add_confirm"`、「エンジニアに提案」。「エンジニアとの相性」が出ない。HTML の中で「メール本文」→「案内メール」→「プロバイダーへの返信」→「この案件への応募」の順（`strpos` で比べる）、右の列で `id="ai"` が `id="keywords"` より前。
+- 管理者・ほかの SES・EG で `GET /cases/{id}`：`raw_text` の固有の文が出ない、`id="keywords"` が出ない。ほかの SES には「エンジニアとの相性」が出る。
+- 前に `confirm` の項目を外して保存 → 案件詳細でその項目に `checked` が無い。
+- 「追加」：`POST /cases/{id}/keywords`（`kw=1`、今の鍵を全部 `on`、`add_confirm`＝「架空の確認その1」）→ `/cases/{id}#keywords` へ。案件詳細に「架空の確認その1」が `checked` で出る。`cases.confirm_items`・`required_skills`・`skill_terms` の件数は変わらない。
+- 「エンジニアに提案」：`POST /cases/{id}/search`（`kw=1`、`on[req]` から1つ抜く）→ `/searches/{sid}` へ。`case_searches.conditions` の抜いた項目が `on=false`。
+- `GET /cases/{id}/search` → `/cases/{id}#keywords`。管理者・EG・ほかの SES は 403。
+- `kw` 無しの空の POST → 前回の状態のまま（全部オフにならない）。
+
+選択画面（B1〜B5）
+- `GET /searches/{sid}`：「エンジニアを選択」「すべてを選択」「マッチした点」「マッチしなかった点」、当たった項目が「マッチした点」の列に、当たらない項目が「マッチしなかった点」の列に（行の HTML で確かめる）、「必須 2/2　尚可 1/1」、「EGを追加」「一覧に足す」「メールアドレスを追加」。
+- 追加の宛先：`POST /searches/{sid}/extras`（`extra_text`＝「架空 一郎 <x1@park.example>\nx2@park.example\nnot-an-address\nX1@park.example」）→ 2件入る（小文字、名前）、2件は理由つきで断る。登録しているエンジニアのアドレス → 断る。11 件を一度に → 10 件だけ。
+- 「外す」：未送信の行が消える。送信済みの行は 404 か何もしない。
+
+送信（B4・C1・D2・D3）
+- `POST /searches/{sid}/send`（`pick` にエンジニア1人、`xpick` に追加の宛先1件）→ `case_mails` 1行（`confirm_items` にチェックした確認事項）、`case_search_extras.sent_at` が入る、`mail_outbox` 2通。どちらの本文にも「■ご確認ください（必ずご返信ください）」と項目と「必ずお答えください」の文。外した確認事項は入らない。追加の宛先の本文に「あなたに合う点」「/r/」「/eg/offers」が無く、呼び名が「架空 一郎 様」。名前の無い宛先は「ご担当者 様」。件名に `[PARK-`。知らせの文に「追加の宛先 1件にも送りました」。監査 `case-search-extra-send`。
+- 確認事項を全部外して送る → 本文に「ご確認ください」が無い。
+- 同じ送信をもう一度 → `mail_outbox` が増えない。
+- 追加の宛先だけチェック → 追加の宛先だけ送る。
+- 保存のみ（`N::canSend` が偽）→ 記録は残り、画面に「保存のみ」。
+
+返事の画面（C2）
+- 確認事項のある `case_mails` の `/r/{token}/interested`：「お答えが必須です」と項目。`POST /r/{token}`（note 空）→ `case_mails.reply` が変わらず、エラーの文。note あり → 記録される。
+- 確認事項の無い案内：note 空で記録される（今どおり）。
+
+受信（C3〜C5）
+- 受信を使える設定にして（`config(['park.inbound.host' => …])`）送り、宛先 `park+<トークン>@…`・差出人＝追加の宛先のアドレスの .eml を `Inbound::ingest` → `status=linked`・`sender_kind=extra`・`search_extra_id`・`case_id`・`engineer_id` null・`from_mismatch=false`。提案元 SES の担当者全員にお知らせ（「追加の宛先から案内メールへの返信」）、メールは出ない。`provider_mails` の下書きはできない。
+- In-Reply-To（送ったメールの `message_id`）だけの返信も紐付く。件名の `[PARK-…]` だけで差出人が違う → 紐付かない。
+- 提案元の担当者で `GET /cases/{id}`：「追加の宛先」に「返信メール 1 件」と `/inbound?case={id}&extra={xid}`。`GET /inbound?case=…&extra=…` で1件、差出人が「架空 一郎（x1@park.example）」で伏せない。
+- 管理者で `GET /cases/{id}`：「追加の宛先」とアドレスが出る、リンクは無い。
+- ほかの SES で `GET /cases/{id}`・`GET /inbound/{id}`：アドレスが出ない・404。EG：`/inbound` に入れない。
+- `Inbound::unlink` → `search_extra_id` が null に戻る。
+
+全体（D4）：`php artisan test` が全部通る。
+
+## 10. 戻し方
+
+- コード：v0.15.0 の commit を `git revert`。
+- DB：`php artisan migrate:rollback --step=1`（足した表・列を消すだけ。`case_searches.conditions` の `confirm` は古いコードが無視するので残ってよい）。公開版での rollback はデータ（追加の宛先・その返信の紐付け）の削除になるので、TEZZO さんの了承を取ってから。
+
+## 11. 次の版（今回は作らない）
+
+- 「EGに確認」へのお答えを、項目ごとに画面で記録する（今はひとことの欄にまとめて書いてもらう）。
+- 追加の宛先の返信から、プロバイダーへの返信の下書きを作る。
+- 追加の宛先を、あとで PARK に招待する（仮登録の案内）。
+- 案件の画面の案内（`/cases/{id}/mail`）にも、確認事項の節と返事の必須をそろえる。
+- 宿題（L5）：EG が案件の画面（応募・見送り）から返事をするときは、確認事項への答えを必須にしていない（返事のリンクの画面だけ必須）。そろえるか決める。
+
+
 # PLAN：案件の必須・尚可をキーワードに分け、合わない文は「EGに確認」へ（v0.14.0。2026-11-21）
 
 > **これが今の計画**。前の計画（v0.13.0 以前）は、この節の下に続く（Leo が末尾に戻し済み。2026-11-21）。

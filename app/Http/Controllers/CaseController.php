@@ -6,6 +6,7 @@ use App\Services\AiJobs;
 use App\Services\CaseMail as CM;
 use App\Services\CaseAi;
 use App\Services\CaseParser;
+use App\Services\CaseSearch;
 use App\Services\CaseThread;
 use App\Services\Ids;
 use App\Services\Matcher;
@@ -135,6 +136,9 @@ class CaseController extends Controller
                     $m->route = 'group';
                     // 提案元 SES の自社が、案内した他社のエンジニアに、やり取りで質問を受ける・書き始められる（v0.10.1）
                     $m->canThread = CaseThread::canStart($u, $c, (object) ['id' => $m->engineer_id, 'ses_id' => $m->eg_ses_id], true); // 行がある＝案内メールの記録がある
+                } elseif ($u->role === 'ses') {
+                    // 自社の行も同じ判定（応募・やり取りの行き先が、ここだけになるため）
+                    $m->canThread = CaseThread::canStart($u, $c, (object) ['id' => $m->engineer_id, 'ses_id' => $m->eg_ses_id], true);
                 }
                 return $m;
             });
@@ -152,6 +156,14 @@ class CaseController extends Controller
             if ($data['canMail']) {
                 $data['inboundN'] = DB::table('inbound_mails')->where('case_id', $id)->where('status', 'linked')->selectRaw('engineer_id, count(*) as n')->groupBy('engineer_id')->pluck('n', 'engineer_id')->all();
             }
+            // 追加の宛先（PARK に登録していない人へ送ったもの。v0.15.0）：新しい順。返信の件数は紐付け済みだけ数える
+            $data['extras'] = DB::table('case_search_extras')->where('case_id', $id)->whereNotNull('sent_at')->orderByDesc('sent_at')->orderByDesc('id')->get();
+            $data['extraN'] = DB::table('inbound_mails')->where('case_id', $id)->where('status', 'linked')->whereNotNull('search_extra_id')
+                ->selectRaw('search_extra_id, count(*) as n')->groupBy('search_extra_id')->pluck('n', 'search_extra_id')->all();
+        }
+        // 検索のキーワード（案内できる人の右の列。募集中だけ）：自分の検索の条件（外した印・足した項目を引き継ぐ）
+        if ($data['canMail'] && $c->status === 'open') {
+            $data['cond'] = CaseSearch::conditions($c, DB::table('case_searches')->where('case_id', $id)->where('created_by', $u->id)->first());
         }
 
         if ($u->role === 'admin') {

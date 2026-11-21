@@ -75,6 +75,17 @@ class V070SearchTest extends TestCase
         return DB::table('cases')->find($cid);
     }
 
+    // 新しいフォーム（kw=1＋on[…]）の入力：今の条件の鍵から、$except（['req' => [鍵…]]）を除いたものだけオン
+    private function onExcept(int $cid, array $except = []): array
+    {
+        $cond = CS::conditions($this->c($cid), DB::table('case_searches')->where('case_id', $cid)->first());
+        $on = [];
+        foreach (['req', 'pref', 'confirm'] as $side) {
+            $on[$side] = array_values(array_diff(array_map(fn ($it) => CS::key($it), $cond[$side]), $except[$side] ?? []));
+        }
+        return ['kw' => 1, 'on' => $on];
+    }
+
     private function names(array $rows): array
     {
         return array_map(fn ($r) => $r['e']->id, $rows);
@@ -161,13 +172,15 @@ class V070SearchTest extends TestCase
         $this->as(self::ADMIN)->get("/cases/$cid/search")->assertForbidden();
     }
 
+    // v0.15.0：検索画面は案件の画面の「メール本文」「検索のキーワード」に移った。古い /search は案件の画面へ移す
     public function test_t6_search_screen_shows_mail_or_description(): void
     {
         $cid = $this->mkCase(self::SES1, ['raw_text' => "架空の全文その1\n架空の全文その2"]);
-        $this->as(self::SES1)->get("/cases/$cid/search")->assertOk()->assertSee('架空の全文その1')->assertSee('架空の全文その2')
-            ->assertSee('Java')->assertSee('AWS')->assertSee('エンジニアを検索');
+        $this->as(self::SES1)->get("/cases/$cid/search")->assertRedirect("/cases/$cid#keywords");
+        $this->as(self::SES1)->get("/cases/$cid")->assertOk()->assertSee('架空の全文その1')->assertSee('架空の全文その2')
+            ->assertSee('Java')->assertSee('AWS')->assertSee('エンジニアに提案');
         $cid2 = $this->mkCase(self::SES1, ['raw_text' => '']);
-        $this->as(self::SES1)->get("/cases/$cid2/search")->assertOk()->assertSee('元のメールはありません')->assertSee('架空の作業内容');
+        $this->as(self::SES1)->get("/cases/$cid2")->assertOk()->assertSee('元のメールはありません')->assertSee('架空の作業内容');
     }
 
     public function test_t7_added_items_are_normalized_and_case_is_unchanged(): void
@@ -192,7 +205,7 @@ class V070SearchTest extends TestCase
     {
         $cid = $this->mkCase();
         $e = $this->mkEng(self::SES1, '一部 太郎', 'I.T', $this->sk('Java'));
-        $sid = $this->search(self::SES1, $cid, ['off' => ['req' => [CS::key(['kind' => 'skill', 'name' => 'SQL'])]]]);
+        $sid = $this->search(self::SES1, $cid, $this->onExcept($cid, ['req' => [CS::key(['kind' => 'skill', 'name' => 'SQL'])]]));
         $rows = CS::rows($this->user(self::SES1), DB::table('case_searches')->find($sid))['rows'];
         $this->assertSame([1, 1], [$rows[0]['j']['h'], $rows[0]['j']['n']]);
         $this->assertSame($e, $rows[0]['e']->id);
@@ -201,14 +214,15 @@ class V070SearchTest extends TestCase
     public function test_t9_previous_conditions_come_back(): void
     {
         $cid = $this->mkCase();
-        $this->search(self::SES1, $cid, ['add_req' => 'ZZ架空の技術', 'off' => ['pref' => [CS::key(['kind' => 'skill', 'name' => 'AWS'])]]]);
-        $this->search(self::SES1, $cid, ['add_req' => 'ZZ架空の技術', 'off' => ['pref' => [CS::key(['kind' => 'skill', 'name' => 'AWS'])]]]);
+        $off = ['pref' => [CS::key(['kind' => 'skill', 'name' => 'AWS'])]];
+        $this->search(self::SES1, $cid, ['add_req' => 'ZZ架空の技術'] + $this->onExcept($cid, $off));
+        $this->search(self::SES1, $cid, ['add_req' => 'ZZ架空の技術'] + $this->onExcept($cid, $off));
         $this->assertSame(1, DB::table('case_searches')->where('case_id', $cid)->count());
         $s = DB::table('case_searches')->where('case_id', $cid)->first();
         $cond = CS::conditions($this->c($cid), $s);
         $this->assertContains('ZZ架空の技術', array_column($cond['req'], 'name'));
         $this->assertFalse($cond['pref'][0]['on']);
-        $this->as(self::SES1)->get("/cases/$cid/search")->assertOk()->assertSee('ZZ架空の技術');
+        $this->as(self::SES1)->get("/cases/$cid")->assertOk()->assertSee('ZZ架空の技術');
     }
 
     public function test_t10_list_shows_passers_only_and_empty_message(): void
@@ -421,7 +435,7 @@ class V070SearchTest extends TestCase
 
     public function test_t23_version(): void
     {
-        $this->assertSame('v0.13.0', config('park.version'));
-        $this->get('/login')->assertOk()->assertSee('v0.13.0');
+        $this->assertSame('v0.15.0', config('park.version'));
+        $this->get('/login')->assertOk()->assertSee('v0.15.0');
     }
 }

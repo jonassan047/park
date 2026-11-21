@@ -128,12 +128,15 @@ Route::middleware('role:admin,ses')->group(function () {
     Route::get('/cases/{id}/mail', [CMail::class, 'form']);
     Route::post('/cases/{id}/mail/preview', [CMail::class, 'preview']);
     Route::post('/cases/{id}/mail/send', [CMail::class, 'send']);
-    // エンジニア検索（v0.7.0）：検索画面 → 一覧 → 詳細 → 送信
+    // エンジニア検索（v0.7.0）：案件の画面のキーワード → エンジニアを選択 → 詳細 → 送信（v0.15.0 で入口を案件の画面に移した）
     Route::get('/cases/{id}/search', [CSearch::class, 'form']);
     Route::post('/cases/{id}/search', [CSearch::class, 'run']);
+    Route::post('/cases/{id}/keywords', [CSearch::class, 'keywords']);
     Route::get('/searches/{sid}', [CSearch::class, 'index']);
     Route::post('/searches/{sid}', [CSearch::class, 'save']);
     Route::post('/searches/{sid}/add', [CSearch::class, 'add']);
+    Route::post('/searches/{sid}/extras', [CSearch::class, 'addExtras']);
+    Route::post('/searches/{sid}/extras/{xid}/remove', [CSearch::class, 'removeExtra']);
     Route::post('/searches/{sid}/send', [CSearch::class, 'send']);
     Route::get('/searches/{sid}/members/{eid}', [CSearch::class, 'member']);
     Route::post('/searches/{sid}/members/{eid}', [CSearch::class, 'saveMember']);

@@ -26,6 +26,7 @@ class InboundController extends Controller
         if ($case = (int) $r->query('case')) $q->where('i.case_id', $case);
         if ($eg = (int) $r->query('eg')) $q->where('i.engineer_id', $eg);
         if ($pm = (int) $r->query('pm')) $q->where('i.provider_mail_id', $pm); // プロバイダーへ送ったメールへの返事（v0.13.0）
+        if ($x = (int) $r->query('extra')) $q->where('i.search_extra_id', $x); // 追加の宛先からの返信（v0.15.0）
         [$list, $pager] = page_slice($q->get());
         return view('inbound.index', compact('list', 'pager'));
     }

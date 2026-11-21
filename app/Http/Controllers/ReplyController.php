@@ -26,12 +26,18 @@ class ReplyController extends Controller
         return view('public.message', ['title' => 'ご返事を受け付けられません', 'text' => 'このご案内への返事は、いま受け付けていません。お手数ですが、案内を送った担当者に直接ご連絡ください。']);
     }
 
+    // 送ったときの「ご確認ください」の項目（検索から送った案内だけ。無ければ空）
+    private function confirmItems(object $m): array
+    {
+        return array_values(array_filter(array_map('trim', preg_split('/\R/u', (string) ($m->confirm_items ?? ''))), fn ($x) => $x !== ''));
+    }
+
     public function form(string $token, string $answer)
     {
         $m = $this->load($token);
         abort_unless(isset(CM::REPLIES[$answer]) && $answer !== 'none', 404);
         if ($v = $this->refused($m)) return $v;
-        return view('public.reply', ['m' => $m, 'answer' => $answer, 'token' => $token]);
+        return view('public.reply', ['m' => $m, 'answer' => $answer, 'token' => $token, 'confirm' => $this->confirmItems($m)]);
     }
 
     public function save(Request $r, string $token)
@@ -41,6 +47,10 @@ class ReplyController extends Controller
         abort_unless(isset(CM::REPLIES[$answer]) && $answer !== 'none', 404);
         if ($v = $this->refused($m)) return $v;
         $note = str_in($r->input('note'));
+        // 「ご確認ください」の項目がある案内は、ひとことでのお答えが必須（返事の種類によらない）。空なら記録せず、画面に戻す
+        if ($this->confirmItems($m) && $note === null) {
+            return redirect("/r/{$token}/{$answer}")->withInput()->withErrors(['note' => '上の項目へのお答えを、ひとことの欄に書いてください。']);
+        }
         CM::reply($m->case_id, $m->engineer_id, $answer, $note, 'link');
         if ($answer === 'declined') DB::table('case_offers')->where('case_id', $m->case_id)->where('engineer_id', $m->engineer_id)->update(['status' => 'declined', 'decline_reason' => $note ?: '見送り']);
         $label = CM::REPLIES[$answer];

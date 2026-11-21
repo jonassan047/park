@@ -33,7 +33,7 @@
 <p>プロバイダー（{{ $providerName ?: '—' }}）からの返信です。@if($pm)<a href="{{ url('/provider-mails/'.$pm->id) }}">送ったメール</a>に対する返事です。@endif</p>
 @if($cm)<h3>先方の結果</h3>@include('cases._result', ['m' => $cm, 'canEdit' => $canResult, 'back' => 'inbound', 'backId' => $m->id])@endif
 </x-card>
-@else
+@elseif(($m->sender_kind ?? 'eg') === 'eg') {{-- 追加の宛先（extra）の返信からは、プロバイダーへの返信の下書きを作らない --}}
 <x-card title="プロバイダーへの返信">
 @if($pm)<p>{{ \App\Services\ProviderReply::STATUSES[$pm->status] ?? $pm->status }}：<a class="btn small" href="{{ url('/provider-mails/'.$pm->id) }}">開く</a></p>
 @elseif($canResult)<p class="muted">この返信の下書きは、まだありません。</p><x-post :action="'/inbound/'.$m->id.'/provider-draft'" label="下書きを作る" cls="small" />

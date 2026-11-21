@@ -258,11 +258,12 @@ class V0140CaseKeywordsTest extends TestCase
     {
         $e = (object) ['nickname' => 'テスト', 'name' => 'テスト 太郎', 'initials' => 'T.T'];
         $c = $this->register(self::ADMIN);
-        foreach ([CaseMail::defaultBody(), CaseSearch::defaultBody()] as $tpl) {
-            $body = CaseMail::render($tpl, $c, $e, ['reasons' => []], true, '送り主');
-            $this->assertStringContainsString('■ご確認ください：技術的知見を有している人材', $body);
-            $this->assertStringNotContainsString('{確認事項}', $body);
-        }
+        // 案件の画面の案内（CaseMail）は今の一行のまま。検索のメールは v0.15.0 から「確認事項の節」（チェックした項目。CaseSearch::confirmBlock）
+        $body = CaseMail::render(CaseMail::defaultBody(), $c, $e, ['reasons' => []], true, '送り主');
+        $this->assertStringContainsString('■ご確認ください：技術的知見を有している人材', $body);
+        $this->assertStringNotContainsString('{確認事項}', $body);
+        $this->assertStringContainsString('{確認事項の節}', CaseSearch::defaultBody());
+        $this->assertStringNotContainsString('{確認事項}', CaseSearch::defaultBody());
         DB::table('cases')->where('id', $c->id)->update(['confirm_items' => null]);
         $c2 = DB::table('cases')->find($c->id);
         foreach ([CaseMail::defaultBody(), CaseSearch::defaultBody()] as $tpl) {

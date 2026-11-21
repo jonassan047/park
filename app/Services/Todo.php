@@ -72,6 +72,11 @@ class Todo
                 $out[] = self::item(($i->provider_name ?: 'プロバイダー')." から返信：{$i->case_title}", '読んで、先方の結果を登録する', "/inbound/{$i->id}");
                 continue;
             }
+            if (($i->sender_kind ?? 'eg') === 'extra') {
+                $who = ($i->extra_name ?? null) ?: '追加の宛先';
+                $out[] = self::item(($who === '追加の宛先' ? $who : "追加の宛先（{$who}）")." から返信メール：{$i->case_title}", '読んで、必要なら返事をする', "/inbound/{$i->id}");
+                continue;
+            }
             $out[] = self::item(Inbound::senderLabel((object) ['role' => 'ses', 'ses_id' => $sesId], $i)." さんから返信メール：{$i->case_title}", '読んで、必要なら返事を記録する', "/inbound/{$i->id}");
         }
         // プロバイダーへの返信の下書き（送るか取りやめるまで出す。v0.13.0）

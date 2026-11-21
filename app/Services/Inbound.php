@@ -134,11 +134,12 @@ class Inbound
             return self::linkFields('body', $t, null, $from);
         }
         // 3. 件名の [PARK-xxxxxxxxxx]（差出人が EG の登録アドレスのときだけ）
-        if (preg_match('/\[PARK-([a-z0-9]{'.ReplyTokens::TAG_LENGTH.'})\]/i', $p['subject'], $m) && ($t = self::tokenByTag(strtolower($m[1]), $from))) {
+        // （追加の宛先 v0.15.0：同じ印で、差出人がその宛先のアドレスのときだけ）
+        if (preg_match('/\[PARK-([a-z0-9]{'.ReplyTokens::TAG_LENGTH.'})\]/i', $p['subject'], $m) && ($t = self::tokenByTag(strtolower($m[1]), $from) ?: self::extraTokenByTag(strtolower($m[1]), $from))) {
             return self::linkFields('subject', $t, null, $from);
         }
         // 4. 本文
-        if (preg_match('/案内番号[:：]\s*PARK-([a-z0-9]{'.ReplyTokens::TAG_LENGTH.'})/iu', $body, $m) && ($t = self::tokenByTag(strtolower($m[1]), $from))) {
+        if (preg_match('/案内番号[:：]\s*PARK-([a-z0-9]{'.ReplyTokens::TAG_LENGTH.'})/iu', $body, $m) && ($t = self::tokenByTag(strtolower($m[1]), $from) ?: self::extraTokenByTag(strtolower($m[1]), $from))) {
             return self::linkFields('body', $t, null, $from);
         }
         // 返事のリンク /r/<32 桁>（v0.12.0 より前の案内メールへの返信も、これで拾える。128 ビットなので差出人は見ない）
@@ -186,6 +187,23 @@ class Inbound
         return $t->engineer_id && self::fromIsEngineer((int) $t->engineer_id, $from) ? $t : null;
     }
 
+    // 追加の宛先へ送ったメールのトークンで、頭 10 字が合うものが 1 件だけ、かつ差出人がその宛先のアドレスのとき
+    private static function extraTokenByTag(string $tag, string $from): ?object
+    {
+        $rows = DB::table('reply_tokens')->where('kind', ReplyTokens::KIND_EXTRA)->where('token', 'like', $tag.'%')->limit(2)->get();
+        if ($rows->count() !== 1) return null;
+        $t = $rows[0];
+        return self::fromIsExtra($t, $from) ? $t : null;
+    }
+
+    // 差出人が、そのトークンのメールを送った追加の宛先のアドレスか
+    private static function fromIsExtra(object $token, string $from): bool
+    {
+        if ($from === '' || !$token->search_extra_id) return false;
+        $mail = strtolower(trim((string) DB::table('case_search_extras')->where('id', $token->search_extra_id)->value('email')));
+        return $mail !== '' && strtolower($from) === $mail;
+    }
+
     // プロバイダーへ送ったメールのトークンで、頭 10 字が合うものが 1 件だけ、かつ差出人がそのプロバイダーのアドレスのとき
     private static function providerTokenByTag(string $tag, string $from): ?object
     {
@@ -221,6 +239,18 @@ class Inbound
                 'status' => 'linked', 'match_by' => $by, 'reply_token_id' => $token->id, 'case_mail_id' => $pm->case_mail_id ?? null,
                 'case_id' => $caseId, 'ses_id' => $ses ? (int) $ses : null, 'engineer_id' => $eid, 'sender_kind' => 'provider', 'provider_mail_id' => $token->provider_mail_id,
                 'from_mismatch' => !self::fromIsProvider($token, $from), 'linked_at' => now_str(),
+            ];
+        }
+        // 追加の宛先（PARK に登録していない人）への案内への返事：案内メール・エンジニアは無い
+        if ($token && $token->kind === ReplyTokens::KIND_EXTRA) {
+            $caseId = (int) ($token->case_id ?? 0);
+            if (!$caseId) return null;
+            $case = DB::table('cases')->find($caseId);
+            $ses = $token->ses_id ?: ($case->source_ses_id ?? null);
+            return [
+                'status' => 'linked', 'match_by' => $by, 'reply_token_id' => $token->id, 'case_mail_id' => null,
+                'case_id' => $caseId, 'ses_id' => $ses ? (int) $ses : null, 'engineer_id' => null, 'sender_kind' => 'extra', 'search_extra_id' => $token->search_extra_id,
+                'from_mismatch' => !self::fromIsExtra($token, $from), 'linked_at' => now_str(),
             ];
         }
         if (!$cm && $token && $token->case_mail_id) $cm = DB::table('case_mails')->find($token->case_mail_id);
@@ -286,6 +316,9 @@ class Inbound
         } elseif (self::fromStaff((string) $m->from_email, (int) $m->ses_id)) {
             // 差出人がその会社の担当者（担当者が EG への案内に「全員に返信」して、返信先が残った）：エンジニアからの返信ではないので、題を変える
             N::toSes((int) $m->ses_id, '担当者から案内メールへの返信'.$tail, mb_substr(trim((string) $m->body_text), 0, self::PREVIEW_LEN), "/inbound/$id", false, self::KIND);
+        } elseif (($m->sender_kind ?? 'eg') === 'extra') {
+            // 追加の宛先（PARK に登録していない人）の返事：返信先に担当者のアドレスもあるので、お知らせだけ（メールなし）
+            N::toSes((int) $m->ses_id, '追加の宛先から案内メールへの返信'.$tail, mb_substr(trim((string) $m->body_text), 0, self::PREVIEW_LEN), "/inbound/$id", false, self::KIND);
         } elseif ($e && (int) $e->ses_id === (int) $m->ses_id) {
             // 自社のエンジニア：本人のメールが担当者に直接届いているので、お知らせだけ
             N::toSes((int) $m->ses_id, "{$e->name} さんから案内メールへの返信".$tail, mb_substr(trim((string) $m->body_text), 0, self::PREVIEW_LEN).$draftNote, "/inbound/$id", false, self::KIND);
@@ -311,8 +344,9 @@ class Inbound
         $q = DB::table('inbound_mails as i')->leftJoin('cases as c', 'c.id', '=', 'i.case_id')->leftJoin('engineers as e', 'e.id', '=', 'i.engineer_id')
             ->leftJoin('ses_companies as es', 'es.id', '=', 'e.ses_id')->leftJoin('ses_companies as s', 's.id', '=', 'i.ses_id')
             ->leftJoin('providers as pv', 'pv.id', '=', 'c.provider_id')
+            ->leftJoin('case_search_extras as x', 'x.id', '=', 'i.search_extra_id')
             ->select('i.*', 'c.title as case_title', 'c.code as case_code', 'c.source_ses_id as case_source', 'e.name as eg_name', 'e.initials as eg_initials', 'e.code as eg_code',
-                'e.ses_id as eg_ses_id', 'es.name as eg_ses_name', 's.name as ses_name', 'pv.name as provider_name');
+                'e.ses_id as eg_ses_id', 'es.name as eg_ses_name', 's.name as ses_name', 'pv.name as provider_name', 'x.name as extra_name', 'x.email as extra_email');
         if ($u && $u->role === 'ses') $q->where('i.status', 'linked')->where('c.source_ses_id', (int) $u->ses_id);
         elseif (!$u || $u->role !== 'admin') $q->whereRaw('1 = 0');
         return $q;
@@ -328,6 +362,12 @@ class Inbound
     {
         // プロバイダーの返事：企業名（プロバイダー）。行が消えていれば「プロバイダー」
         if (($row->sender_kind ?? 'eg') === 'provider') return ($row->provider_name ?? null) ? $row->provider_name.'（プロバイダー）' : 'プロバイダー';
+        // 追加の宛先：名前（アドレス）。名前が無ければアドレス。行が消えていれば「追加の宛先」
+        if (($row->sender_kind ?? 'eg') === 'extra') {
+            $mail = (string) ($row->extra_email ?? '');
+            if ($mail === '') return '追加の宛先';
+            return ($row->extra_name ?? null) ? $row->extra_name.'（'.$mail.'）' : $mail;
+        }
         if (!$row->engineer_id || $row->eg_name === null) {
             return $u->role === 'admin' ? trim(($row->from_name ?: '').' '.$row->from_email) : 'エンジニア';
         }
@@ -343,6 +383,11 @@ class Inbound
         $out->sender = self::senderLabel($u, $row);
         $out->files = json_decode((string) $row->attachments, true) ?: [];
         if (!$u || $u->role !== 'ses') return $out;
+        // 追加の宛先は、自社が入れた宛先（エンジニアではない）。伏せない（見えるのは提案元 SES と管理者だけ）
+        // ただし、宛先と違うアドレスから届いた返信（第三者かもしれない）は、EG と同じに伏せる
+        $extra = ($row->sender_kind ?? 'eg') === 'extra';
+        if ($extra && empty($row->from_mismatch)) return $out;
+        if ($extra) $out->sender = '追加の宛先';
         // エンジニアが分からない（行が無い・紐付いていない）ときは、自社と確かめられないので、伏せる側に倒す
         $e = $row->engineer_id ? DB::table('engineers')->find($row->engineer_id) : null;
         if ($e && (int) $e->ses_id === (int) $u->ses_id) return $out;
@@ -512,7 +557,7 @@ class Inbound
         $done = DB::table('inbound_mails')->where('id', $id)->where('status', 'linked')->update([
             'status' => 'unlinked', 'match_by' => null, 'reply_token_id' => null, 'case_mail_id' => null, 'case_id' => null, 'ses_id' => null, 'engineer_id' => null,
             'from_mismatch' => false, 'linked_by' => null, 'linked_at' => null, 'notified_at' => null, 'ses_read_at' => null,
-            'sender_kind' => 'eg', 'provider_mail_id' => null,
+            'sender_kind' => 'eg', 'provider_mail_id' => null, 'search_extra_id' => null,
         ]);
         if (!$done) return ['type' => 'bad', 'msg' => '紐付いていません。'];
         // その受信メールから作った下書きは取りやめにする（送ったものは残す）

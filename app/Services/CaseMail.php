@@ -133,7 +133,9 @@ class CaseMail
             $sendSubject = str_contains($subject, $mark) ? $subject : rtrim($subject).' '.$mark;
             $outbox = N::queueMail($to, $e->name, $sendSubject, $body, 'case-mail', $replyTo, $u->role === 'admin' ? admin_sender($u) : null);
             $mailId = DB::table('case_mails')->insertGetId(['case_id' => $c->id, 'engineer_id' => $e->id, 'ses_id' => $sesId, 'sent_by' => $u->id, 'route' => $own ? 'own' : 'group', 'mode' => $mode,
-                'subject' => $subject, 'body' => $body, 'score' => $score['score'], 'suggest' => implode(' / ', self::suggestions($c, $e, $score)), 'outbox_id' => $outbox, 'sent_at' => now_str(), 'token' => $token]);
+                'subject' => $subject, 'body' => $body, 'score' => $score['score'], 'suggest' => implode(' / ', self::suggestions($c, $e, $score)), 'outbox_id' => $outbox, 'sent_at' => now_str(), 'token' => $token,
+                // 検索から送ったとき、メールの「ご確認ください」に入れた項目（返事の画面で、お答えを必須にするのに使う）
+                'confirm_items' => !empty($it['confirm']) ? implode("\n", $it['confirm']) : null]);
             ReplyTokens::attach($tokenId, ['case_mail_id' => $mailId, 'outbox_id' => $outbox, 'message_id' => $outbox ? DB::table('mail_outbox')->where('id', $outbox)->value('message_id') : null]);
             // 本人が PARK の画面からも見られるように（応募・見送りもできる）
             if (!DB::table('case_offers')->where('case_id', $c->id)->where('engineer_id', $e->id)->exists()) {

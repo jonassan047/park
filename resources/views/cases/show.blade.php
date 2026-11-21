@@ -1,117 +1,49 @@
-@php $u = auth()->user(); @endphp
+@php
+$u = auth()->user();
+// 新しい配置（v0.15.0）：提案元 SES の担当者だけ。ほかの人（管理者・ほかの SES・EG）は今までの配置
+$newLayout = $canMail;
+@endphp
 @extends('layouts.app', ['title' => $c->title, 'wide' => true])
 @section('content')
+@if($newLayout)
+{{-- 左：メール本文 → 案内メール → プロバイダーへの返信 → この案件への応募。右：AI の読み直し → 検索のキーワード --}}
+<div class="cols"><div>
+<x-card title="メール本文">
+<x-slot:actions>
+<span class="muted">ID <x-code :v="$c->code" />・状態 {{ badge('caseStatus', $c->status) }}・{{ man($c->price) }}</span>
+@if(\App\Support\Perms::caseEdit($u, $c))<a class="btn small" href="{{ url('/cases/'.$c->id.'/edit') }}">編集</a>@endif
+</x-slot:actions>
+@if(trim((string) $c->raw_text) !== '')<pre class="mailbody">{{ $c->raw_text }}</pre>
+@else<p class="muted">元のメールはありません。</p>
+<h3>作業内容</h3><p>{!! nl2br(e($c->description)) !!}</p>@endif
+<details><summary>案件票（読み取った項目）</summary>
+@include('cases._card_case')
+</details>
+</x-card>
+@include('cases._card_mails')
+@include('cases._card_provider')
+@include('cases._card_apps')
+@include('cases._card_threads')
+</div><div>
+@include('cases._card_ai')
+@include('cases._card_keywords')
+</div></div>
+@else
 <div class="cols"><div>
 <x-card title="案件票">
 <x-slot:actions>
 @if(\App\Support\Perms::caseEdit($u, $c))<a class="btn small" href="{{ url('/cases/'.$c->id.'/edit') }}">編集</a>@endif
 </x-slot:actions>
-<dl class="dl">
-<dt>ID</dt><dd><x-code :v="$c->code" /></dd>
-<dt>状態</dt><dd>{{ badge('caseStatus', $c->status) }}</dd>
-<dt>金額</dt><dd>{{ man($c->price) }} <span class="muted">{{ $c->price_note }}</span></dd>
-@if($u->role !== 'eg')<dt>元請け</dt><dd>{{ $c->client_label ?: '—' }}</dd><dt>提案元 SES</dt><dd>{{ $c->ses_name ?: '—' }}</dd>@endif
-<dt>必須</dt><dd><x-chips :list="skill_items($c->required_skills)" /></dd>
-<dt>尚可</dt><dd><x-chips :list="skill_items($c->preferred_skills)" /></dd>
-@php $expReq = \App\Support\CaseExp::split($c->required_exp ?? null); $expPref = \App\Support\CaseExp::split($c->preferred_exp ?? null); @endphp
-@if($expReq)<dt>必須の業務</dt><dd><x-chips :list="$expReq" /></dd>@endif
-@if($expPref)<dt>尚可の業務</dt><dd><x-chips :list="$expPref" /></dd>@endif
-{{-- EGに確認：マスタに無い条件。点数には使わない。全員に出す（元の必須・尚可の文は、直せる人だけ） --}}
-@php $confirmItems = array_values(array_filter(array_map('trim', preg_split('/\R/u', (string) ($c->confirm_items ?? ''))))); @endphp
-@if($confirmItems)<dt>{{ $u->role === 'eg' ? 'ご確認ください' : 'EGに確認' }}</dt><dd><ul>@foreach($confirmItems as $it)<li>{{ $it }}</li>@endforeach</ul></dd>@endif
-@if(\App\Support\Perms::caseEdit($u, $c) && ($c->required_lines || $c->preferred_lines))<dt>元の文</dt><dd><details><summary>元の必須・尚可の文</summary>
-@if($c->required_lines)<p><strong>必須</strong><br>{!! nl2br(e($c->required_lines)) !!}</p>@endif
-@if($c->preferred_lines)<p><strong>尚可</strong><br>{!! nl2br(e($c->preferred_lines)) !!}</p>@endif
-</details></dd>@endif
-<dt>経験年数</dt><dd>{{ $c->min_years ? num_disp($c->min_years).'年以上' : '—' }}</dd>
-<dt>働き方</dt><dd>{{ lbl('workStyle', $c->work_style) }}</dd><dt>場所</dt><dd>{{ $c->location ?: '—' }}</dd>
-<dt>開始</dt><dd>{{ fmt_date($c->start_date) }}</dd><dt>期間</dt><dd>{{ $c->period ?: '—' }}</dd>
-<dt>稼働</dt><dd>週{{ $c->days_per_week ?: 5 }}日</dd><dt>面談</dt><dd>{{ $c->interviews_count ?? 1 }}回</dd>
-<dt>募集人数</dt><dd>{{ $c->headcount ?: 1 }}名</dd><dt>締め切り</dt><dd>{{ fmt_date($c->deadline) }}</dd>
-</dl>
-<h3>作業内容</h3><p>{!! nl2br(e($c->description)) !!}</p>
-@if($c->conditions)<h3>その他の条件</h3><p>{!! nl2br(e($c->conditions)) !!}</p>@endif
+@include('cases._card_case')
 </x-card>
-@isset($ai)
-{{-- AI の読み直し（直せる人だけ。EG・ほかの会社の SES には、欄も AI の文も渡さない） --}}
-@php $aj = $ai['job']; $cmp = $ai['cmp']; $reasonText = ['count' => '規則と行数が違います', 'missing' => '本文に無い言い方があります', 'edited' => '登録の前か後に人が直したか、本文を変えた案件です', 'empty' => 'AI が必須も尚可も読めませんでした', 'offered' => 'もう案内・応募があります', 'closed' => '募集を終えた案件です']; @endphp
-<x-card title="AI の読み直し" id="ai">
-@if(!$aj)
-  @if($ai['block'])<p class="muted">{{ $ai['block'] }}</p>
-  @else<p>手元の AI に、必須・尚可を読み直してもらえます。</p><x-post :action="'/cases/'.$c->id.'/ai-parse'" label="AI に読み直してもらう" />@endif
-@elseif(in_array($aj->status, ['queued', 'running']))
-  <p>手元の AI が必須・尚可を読み直しています（1件 1分ほどかかります。手元の PC が止まっていると進みません）。今は規則で読んだ結果です。待たずに案内してもかまいません（案内したあとは、AI の結果は自動では入れません）。</p>
-@elseif($aj->status === 'applied')
-  @if($ai['auto'])<p>AI で読み直し、規則と同じ数だったので AI の結果にしました（{{ fmt_dt($aj->done_at) }}）。@if($ai['fixed'])本文の文に戻した項目：{{ $ai['fixed'] }}件。@endif</p>
-  @else<p>AI の結果を使いました（{{ fmt_dt($aj->done_at) }}）。</p>@endif
-@elseif($aj->status === 'done' && $ai['stale'])
-  <p>本文が変わりました。もう一度頼んでください。</p>
-  @if(!$ai['block'])<x-post :action="'/cases/'.$c->id.'/ai-parse'" label="もう一度頼む" />@else<p class="muted">{{ $ai['block'] }}</p>@endif
-@elseif($aj->status === 'done')
-  <h3>AI の読み直しの結果を確かめてください</h3>
-  <p>規則で読んだ結果とそのまま入れ替えず、確かめてもらうことにしました。理由：{{ implode('、', array_map(fn ($k) => $reasonText[$k] ?? $k, $cmp['reasons'])) ?: '—' }}。</p>
-  <div class="tablewrap"><table><thead><tr><th></th><th>今</th><th>AI</th></tr></thead><tbody>
-  @foreach([['必須', $ai['now']['req'], $cmp['req'], $ai['diff']['req']], ['尚可', $ai['now']['pref'], $cmp['pref'], $ai['diff']['pref']]] as [$name, $now, $aiRows, $df])
-  <tr><th>{{ $name }}</th>
-  <td>@forelse($now as $i => $t)<div>{{ $t }}@if($df['now'][$i]) <span class="badge warn">今だけ</span>@endif</div>@empty<span class="muted">—</span>@endforelse</td>
-  <td>@forelse($aiRows as $i => $x)<div>{{ $x['text'] }}@if($x['mark'] === 'fixed') <span class="badge info" title="AI の文：{{ $x['from'] }}">本文の文に戻した</span>@elseif($x['mark'] === 'missing') <span class="badge bad">本文に無い言い方</span>@endif @if($df['ai'][$i]) <span class="badge warn">AI だけ</span>@endif</div>@empty<span class="muted">—</span>@endforelse</td></tr>
-  @endforeach
-  </tbody></table></div>
-  <p class="muted">AI の結果を使うと、必須の業務：{{ $ai['exp']['req'] ? implode('、', $ai['exp']['req']) : '—' }}／尚可の業務：{{ $ai['exp']['pref'] ? implode('、', $ai['exp']['pref']) : '—' }}／EGに確認：{{ $ai['confirm'] ? implode('、', $ai['confirm']) : '—' }}</p>
-  @if(in_array('edited', $cmp['reasons']))<p class="bad-text">人が直したか、本文を変えた案件です。使うと、直した必須・尚可・業務も置き換わります。</p>@endif
-  <x-post :action="'/ai-jobs/'.$aj->id.'/apply-case'" label="AI の結果を使う" /> <x-post :action="'/ai-jobs/'.$aj->id.'/drop'" label="今のままにする" cls="ghost" />
-@else
-  @if($aj->status === 'failed')<p>AI で読めませんでした（{{ $aj->error }}）。規則の結果のまま使えます。</p>
-  @elseif($ai['same'])<p>AI も同じ読み方でした。</p>
-  @else<p>前の AI の結果は使っていません。規則の結果のまま使えます。</p>@endif
-  @if(!$ai['block'])<x-post :action="'/cases/'.$c->id.'/ai-parse'" label="もう一度頼む" />@else<p class="muted">{{ $ai['block'] }}</p>@endif
-@endif
-</x-card>
-@endisset
-{{-- 案内メールの記録：提案元 SES の担当者は操作もできる。管理者は読むだけ（v0.11.0） --}}
+@include('cases._card_ai')
 @if($canSeeMails)
-<x-card title="案内メール">
-<x-slot:actions>@if($canMail && $c->status === 'open')<a class="btn small" href="{{ url('/cases/'.$c->id.'/search') }}">エンジニアに提案する</a>@endif</x-slot:actions>
-<div id="mails"></div>
-<x-table :head="$canMail ? ['エンジニア', '送った日', '返事', '先方の結果', '記録する', '案件をくれた先へ返す書類'] : ['エンジニア', '送った日', '返事', '先方の結果']" :count="$mails->count()" :empty="$canMail ? 'まだ送っていません。「エンジニアに提案する」で、候補を絞ってメールを送れます。' : 'まだ送っていません。案内は、提案元 SES の担当者が行います。'">
-@foreach($mails as $m)<tr>
-<td>@if($m->route === 'own' || $u->role === 'admin'){{ $m->name }} <x-code :v="$m->eg_code" />@else{{ $m->initials ?: '—' }} <span class="muted">（{{ $m->ses_name }}・PARK から）</span>@endif<div class="muted">{{ $m->score }}点・{{ \App\Services\CaseMail::MODES[$m->mode] ?? '同じ内容' }}</div>
-@if(!empty($inboundN[$m->engineer_id]))<div><a href="{{ url('/inbound?case='.$c->id.'&eg='.$m->engineer_id) }}">返信メール {{ $inboundN[$m->engineer_id] }} 件</a></div>@endif
-@if($canMail)<div>@if(isset($pmByCm[$m->id]))<a class="btn ghost small" href="{{ url('/provider-mails/'.$pmByCm[$m->id]->id) }}">{{ $pmByCm[$m->id]->status === 'draft' ? '下書きを開く' : 'プロバイダーへの返信を見る' }}</a>@else<x-post :action="'/case-mails/'.$m->id.'/provider-draft'" label="プロバイダーへの返信を作る" cls="ghost small" />@endif</div>@endif</td>
-<td>{{ fmt_dt($m->sent_at) }}</td>
-<td>{{ \App\Services\CaseMail::REPLIES[$m->reply] ?? $m->reply }}@if($m->reply_note)<div class="muted">{{ $m->reply_note }}</div>@endif @if($m->reply_via === 'app')<div class="muted">（本人が画面で）</div>@endif</td>
-<td>@include('cases._result', ['m' => $m, 'canEdit' => $canMail])</td>
-@if($canMail)<td>@if($m->route === 'own')<form method="post" action="{{ url('/case-mails/'.$m->id.'/reply') }}" class="inline">@csrf
-<select name="reply">@foreach(\App\Services\CaseMail::REPLIES as $k => $t)<option value="{{ $k }}" @selected($m->reply === $k)>{{ $t }}</option>@endforeach</select>
-<input name="note" value="{{ $m->reply_note }}" placeholder="返信の要点"><button class="btn ghost small">記録</button></form>@else<span class="muted">本人が PARK の画面で返事します</span>@endif</td>
-<td>@if(isset($mailApps[$m->engineer_id]))<a class="btn small" href="{{ url('/applications/'.$mailApps[$m->engineer_id]) }}">応募・面談の画面へ</a><br>@elseif($m->route === 'own' && $m->reply === 'interested')<x-post :action="'/case-mails/'.$m->id.'/submitted'" label="書類を返した（応募した）" cls="small" /><br>@endif
-@if($m->route !== 'own' && !empty($m->canThread))<a class="btn ghost small" href="{{ url('/cases/'.$c->id.'/threads/'.$m->engineer_id) }}">やり取り</a><br>@endif
-@if($m->route === 'own')<a href="{{ url('/case-mails/'.$m->id.'/doc/resume') }}">履歴書</a>・<a href="{{ url('/case-mails/'.$m->id.'/doc/careersheet') }}">業務経歴書</a>・<a href="{{ url('/case-mails/'.$m->id.'/doc/careersheet-anon') }}">業務経歴書（名前を伏せる）</a>
-@elseif($m->reply === 'interested')<a href="{{ url('/case-mails/'.$m->id.'/doc/careersheet-anon') }}">業務経歴書（名前を伏せる）</a>@else<span class="muted">応募したいと返事が来たら出せます</span>@endif</td>@endif
-</tr>@endforeach
-</x-table>
-@if($canMail)<p class="muted">書類は、押したときの最新の内容で Excel を作ってダウンロードします。メールに添付して、案件をくれた先へ返信してください。</p>@endif
-</x-card>
-<x-card title="プロバイダーへの返信" id="provider-mails">
-<x-table :head="['エンジニア', '本人の意向', '状態', '日時', '']" :count="$providerMails->count()" empty="まだありません。エンジニアの返信が届くと、下書きが自動でできます。">
-@foreach($providerMails as $p)<tr><td>{{ $p->who }}</td><td>{{ \App\Services\CaseMail::REPLIES[$p->reply] ?? $p->reply }}</td><td>{{ \App\Services\ProviderReply::STATUSES[$p->status] ?? $p->status }}</td>
-<td>{{ fmt_dt($p->sent_at ?: $p->updated_at) }}</td><td><a class="btn small" href="{{ url('/provider-mails/'.$p->id) }}">開く</a></td></tr>@endforeach
-</x-table>
-</x-card>
+@include('cases._card_mails')
+@include('cases._card_provider')
 @endif
 @if($u->role !== 'eg')
-@if($caseThreads->count())
-<x-card title="エンジニアとのやり取り" id="threads">
-<x-table :head="array_values(array_filter(['エンジニア', $u->role === 'admin' ? '会社' : null, $u->role === 'admin' ? '相手' : null, '最後の発言', '未読', ''], fn ($h) => $h !== null))" :count="$caseThreads->count()">
-@foreach($caseThreads as $t)<tr><td>{{ \App\Services\CaseThread::egNameRow($u->role === 'ses' ? (int) $u->ses_id : null, $t) }} @if(\App\Services\CaseThread::isOwnEg($u, $t))<x-code :v="$t->eg_code" />@endif</td>@if($u->role === 'admin')<td>{{ $t->ses_name }}</td><td>{{ $t->partner_name }}</td>@endif<td>{{ fmt_dt($t->last_post_at) }}</td>
-<td>@if(\App\Services\CaseThread::isMine($u, $t))@if($t->unread)<b class="bad-text">{{ $t->unread }}</b>@endif @elseif($u->role === 'ses')<span class="muted">読むだけ（相手：{{ $t->partner_name }}）</span>@else<span class="muted">—</span>@endif</td>
-<td><a class="btn small" href="{{ url('/cases/'.$c->id.'/threads/'.$t->engineer_id) }}">開く</a></td></tr>@endforeach
-</x-table>
-</x-card>
-@endif
-<x-card title="この案件への応募"><x-table :head="['ID', 'エンジニア', 'SES', '状態', '応募日', '']" :count="$apps->count()">
-@foreach($apps as $a)<tr><td><x-code :v="$a->code" /></td><td>{{ $a->eg_name }} <x-code :v="($u->role !== 'ses' || (int) $a->eg_ses_id === (int) $u->ses_id) ? $a->eg_code : null" /></td><td>{{ $a->ses_name }}</td><td>{{ badge('appStatus', $a->status) }}</td><td>{{ fmt_date($a->applied_at) }}</td><td><a class="btn small" href="{{ url('/applications/'.$a->id) }}">詳細</a>@if($u->role === 'admin' || (int) $a->eg_ses_id === (int) $u->ses_id) <a class="btn ghost small" href="{{ url('/cases/'.$c->id.'/threads/'.$a->engineer_id) }}">やり取り</a>@endif</td></tr>@endforeach
-</x-table></x-card>
+@include('cases._card_threads')
+@include('cases._card_apps')
 @endif
 </div><div>
 
@@ -128,12 +60,11 @@
   <x-card title="状態の変更">@foreach(['open', 'filled', 'closed'] as $s)@if($s !== $c->status)<x-post :action="'/cases/'.$c->id.'/status'" :label="lbl('caseStatus', $s).'にする'" :fields="['status' => $s]" cls="ghost small" /> @endif @endforeach</x-card>
 
 @elseif($u->role === 'ses')
+  {{-- 提案元ではない会社の SES・担当者：自社の人との相性と、推薦（提案元 SES の担当者は、新しい配置の「検索のキーワード」から提案する） --}}
   <x-card title="エンジニアとの相性">
   @if($c->status !== 'open')<p class="muted">募集を終えた案件です。</p>
   @else
-  @if($canMail)<p class="muted">提案は「エンジニアに提案する」から、メールで送ります（返事のリンク付き。送った記録と返事は、左の「案内メール」に出ます）。</p>
-  <p><a class="btn" href="{{ url('/cases/'.$c->id.'/search') }}">エンジニアに提案する</a></p>
-  @else<p class="muted">{{ $c->ses_name ? 'この案件の提案元は、ほかの SES です。合う方がいれば「推薦する」で、提案元 SES に知らせます（名前は伏せて伝えます）。' : 'この案件は、提案元 SES がまだ決まっていません。合う方がいれば「推薦する」で、管理者に知らせます（名前は伏せて伝えます）。' }}</p>@endif
+  <p class="muted">{{ $c->ses_name ? 'この案件の提案元は、ほかの SES です。合う方がいれば「推薦する」で、提案元 SES に知らせます（名前は伏せて伝えます）。' : 'この案件は、提案元 SES がまだ決まっていません。合う方がいれば「推薦する」で、管理者に知らせます（名前は伏せて伝えます）。' }}</p>
   <x-table :head="['エンジニア', '点数', 'マッチした点', '']" :count="count($rows)" empty="登録しているエンジニアがいません。">
   @foreach($rows as $row)<tr><td><a href="{{ url('/engineers/'.$row['e']->id) }}">{{ $row['e']->name }}</a> <x-code :v="$row['e']->code" /><div class="muted">{{ lbl('engStatus', $row['e']->status) }}</div></td>
     <td><x-score :n="$row['score']" /></td><td><small>@php $rs = $row['reasons'] ?? []; $rq = []; $pf = []; $ot = [];
@@ -143,7 +74,7 @@
     @foreach($ot as $o){{ $o }}<br>@endforeach
     @if(!$rs)—@endif</small></td>
     <td>@if(in_array($row['e']->id, $applied))<span class="muted">応募済み</span>@elseif(isset($offered[$row['e']->id]))<span class="muted">案内済み</span>
-    @elseif(!$canMail)<x-post :action="'/cases/'.$c->id.'/recommend'" label="推薦する" :fields="['engineer_id' => $row['e']->id]" cls="ghost small" />@endif
+    @else<x-post :action="'/cases/'.$c->id.'/recommend'" label="推薦する" :fields="['engineer_id' => $row['e']->id]" cls="ghost small" />@endif
     @if(in_array($row['e']->id, $applied) || isset($offered[$row['e']->id]))<a class="btn ghost small" href="{{ url('/cases/'.$c->id.'/threads/'.$row['e']->id) }}">やり取り</a>@endif</td></tr>@endforeach
   </x-table>
   @endif
@@ -178,5 +109,6 @@
   </x-card>
 @endif
 </div></div>
+@endif
 <p class="backrow"><a class="btn ghost" href="{{ list_url('cases') }}">案件の一覧に戻る</a></p>
 @endsection
