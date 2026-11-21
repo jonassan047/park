@@ -15,7 +15,7 @@
 <x-table :head="['項目', '', '外す']" :count="count($cond[$side])" :empty="$label.'の項目はありません。'">
 @foreach($cond[$side] as $it)<tr>
 <td>{{ $it['name'] }}@if($it['kind'] === 'exp') <span class="muted">（業務）</span>@endif</td>
-<td><small class="muted">{{ $it['src'] === 'added' ? '足した' : 'メールから' }}</small></td>
+<td>@if($it['src'] === 'added')<small class="muted">足した</small>@endif</td>
 <td><input type="checkbox" name="off[{{ $side }}][]" value="{{ \App\Services\CaseSearch::key($it) }}" @checked(empty($it['on']))></td>
 </tr>@endforeach
 </x-table>
