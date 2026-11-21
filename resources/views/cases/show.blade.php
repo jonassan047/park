@@ -129,7 +129,12 @@
   @else<p class="muted">{{ $c->ses_name ? 'この案件の提案元は、ほかの SES です。合う方がいれば「推薦する」で、提案元 SES に知らせます（名前は伏せて伝えます）。' : 'この案件は、提案元 SES がまだ決まっていません。合う方がいれば「推薦する」で、管理者に知らせます（名前は伏せて伝えます）。' }}</p>@endif
   <x-table :head="['エンジニア', '点数', 'マッチした点', '']" :count="count($rows)" empty="登録しているエンジニアがいません。">
   @foreach($rows as $row)<tr><td><a href="{{ url('/engineers/'.$row['e']->id) }}">{{ $row['e']->name }}</a> <x-code :v="$row['e']->code" /><div class="muted">{{ lbl('engStatus', $row['e']->status) }}</div></td>
-    <td><x-score :n="$row['score']" /></td><td><small>{{ implode('、', $row['reasons'] ?? []) ?: '—' }}</small></td>
+    <td><x-score :n="$row['score']" /></td><td><small>@php $rs = $row['reasons'] ?? []; $rq = []; $pf = []; $ot = [];
+      foreach ($rs as $r) { if (str_starts_with($r, '必須 ')) $rq[] = substr($r, strlen('必須 ')); elseif (str_starts_with($r, '尚可 ')) $pf[] = substr($r, strlen('尚可 ')); else $ot[] = $r; } @endphp
+    @if($rq)<b>必須</b> {{ implode(' ', $rq) }}<br>@endif
+    @if($pf)<b>尚可</b> {{ implode('、', $pf) }}<br>@endif
+    @foreach($ot as $o){{ $o }}<br>@endforeach
+    @if(!$rs)—@endif</small></td>
     <td>@if(in_array($row['e']->id, $applied))<span class="muted">応募済み</span>@elseif(isset($offered[$row['e']->id]))<span class="muted">案内済み</span>
     @elseif(!$canMail)<x-post :action="'/cases/'.$c->id.'/recommend'" label="推薦する" :fields="['engineer_id' => $row['e']->id]" cls="ghost small" />@endif
     @if(in_array($row['e']->id, $applied) || isset($offered[$row['e']->id]))<a class="btn ghost small" href="{{ url('/cases/'.$c->id.'/threads/'.$row['e']->id) }}">やり取り</a>@endif</td></tr>@endforeach
