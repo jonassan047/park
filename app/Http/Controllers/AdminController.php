@@ -643,7 +643,8 @@ class AdminController extends Controller
         if ($q !== '') $query->where(fn ($w) => $w->where('name', 'like', "%$q%")->orWhere('aliases', 'like', "%$q%"));
         // 使っている人は、スキル表と経歴の両方から数える（同じ人は1回）
         return view('admin.skills', ['list' => $query->get(), 'used' => \App\Services\SkillTable::usedCounts(), 'q' => $q, 'cat' => $cat,
-            'unreviewed' => DB::table('skill_terms')->where('reviewed', false)->count(), 'all' => DB::table('skill_terms')->orderBy('name')->pluck('name', 'id')->all()]);
+            'unreviewed' => DB::table('skill_terms')->where('reviewed', false)->count(), 'all' => DB::table('skill_terms')->orderBy('name')->pluck('name', 'id')->all(),
+            'catCounts' => DB::table('skill_terms')->selectRaw('category, count(*) as n')->groupBy('category')->pluck('n', 'category')->all()]);
     }
 
     public function addSkill(Request $r)

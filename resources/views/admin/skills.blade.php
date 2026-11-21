@@ -2,6 +2,7 @@
 @section('content')
 <p class="muted">案件メールの技術とエンジニアのスキルを、同じ「正式な名前」にそろえて突き合わせるための辞書です。別名（例：Postgres → PostgreSQL）も一致として扱います。
 案件やスキルにマスタに無い言葉が出てくると、自動で追加され「確認待ち」になります。分類と別名を確かめて「確認済みにする」を押すか、同じ技術の言い換えなら「統合」で正式な技術の別名にまとめてください。</p>
+<p class="muted small">登録語数：全 {{ array_sum($catCounts) }} 語（@foreach(PARK_LABELS['skillCat'] as $k => $v){{ $v }} {{ $catCounts[$k] ?? 0 }}@if(!$loop->last)・@endif @endforeach）。この一覧は管理者だけが見られます。</p>
 @if($unreviewed)<div class="flash warn">確認待ちの技術が {{ $unreviewed }} 件あります（一覧の上に出ています）。</div>@endif
 <form method="get" class="filters"><x-field name="q" :value="$q" placeholder="名前・別名で探す" />
 <x-field name="cat" type="select" :options="PARK_LABELS['skillCat']" blank="すべての分類" :value="$cat" /><button class="btn ghost small">絞り込む</button></form>

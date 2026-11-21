@@ -17,7 +17,7 @@ const PARK_LABELS = [
     'invoiceStatus' => ['draft' => '下書き', 'issued' => '発行済み', 'paid' => '入金済み'],
     'mailStatus' => ['queued' => '送信待ち', 'sent' => '送信済み', 'failed' => '失敗', 'saved' => '保存のみ'],
     'skillCat' => ['lang' => '言語', 'fw' => 'フレームワーク', 'db' => 'DB', 'os' => 'OS', 'cloud' => 'クラウド', 'infra' => 'インフラ・ミドルウェア', 'tool' => 'ツール',
-        'method' => '工程・開発手法', 'domain' => '業種・業務', 'role' => '役割', 'other' => 'その他'],
+        'method' => '工程・開発手法', 'domain' => '業種・業務', 'role' => '役割', 'qual' => '資格', 'other' => 'その他'],
 ];
 const PARK_REJECT_REASONS = ['スキル・経験の不足', '経験年数', '単価が合わない', '開始日・稼働が合わない', '勤務地・働き方', '面談の受け答え', '他の候補者で決定', '案件の中止・延期', 'その他'];
 const PARK_FUNNEL = ['applied', 'submitted', 'doc_passed', 'interview', 'interviewed', 'won'];

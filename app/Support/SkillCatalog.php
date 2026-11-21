@@ -9,68 +9,11 @@ use Illuminate\Support\Facades\Schema;
 // 最初の辞書はここに書く（php artisan park:skills-sync で DB に入れる）。案件から見つかった新しい技術は DB に自動で足す。
 class SkillCatalog
 {
-    // 分類 => [正式な名前 => 別名（「、」区切り）]
-    const CATALOG = [
-        'lang' => [
-            'Java' => '', 'PHP' => '', 'JavaScript' => 'JS、ECMAScript', 'TypeScript' => 'TS', 'Python' => 'Python3', 'Ruby' => '', 'Go' => 'Golang',
-            'C' => 'C言語', 'C++' => 'CPP', 'C#' => 'CSharp、C＃', 'VB.NET' => 'VB.net', 'Visual Basic' => 'VB、VB6', 'VBA' => 'Excel VBA', 'Kotlin' => '', 'Swift' => '',
-            'Objective-C' => 'ObjC', 'Scala' => '', 'Rust' => '', 'Perl' => '', 'COBOL' => '', 'PL/SQL' => 'PLSQL', 'SQL' => '', 'HTML' => 'HTML5、XHTML',
-            'CSS' => 'CSS3', 'Sass' => 'SCSS', 'Shell' => 'Bash、シェルスクリプト、sh', 'PowerShell' => '', 'R' => 'R言語', 'Dart' => '', 'ABAP' => '', 'XML' => '', 'RPG' => '',
-            'Google Apps Script' => 'GAS',
-        ],
-        'fw' => [
-            'Laravel' => '', 'CakePHP' => '', 'CodeIgniter' => 'Codeigniter', 'Symfony' => '', 'Zend Framework' => 'ZendFramework、ZendFramework2、Zend', 'FuelPHP' => '',
-            'Ethna' => '', 'Slim' => '', 'Spring' => 'Spring Framework', 'Spring Boot' => 'SpringBoot', 'Struts' => 'Struts2', 'Seasar2' => '', 'MyBatis' => 'iBATIS',
-            'Hibernate' => '', 'JSF' => '', 'Ruby on Rails' => 'Rails、RoR', 'Django' => '', 'Flask' => '', 'FastAPI' => '', 'Express' => 'Express.js',
-            'NestJS' => 'Nest.js', 'Next.js' => 'Next', 'Nuxt.js' => 'Nuxt', 'React' => 'React.js、ReactJS', 'Vue.js' => 'Vue、Vue3、VueJS', 'Angular' => 'AngularJS',
-            'jQuery' => '', 'Svelte' => '', '.NET' => 'ASP.NET、.NET Framework、.NET Core', 'Unity' => '', 'Flutter' => '', 'React Native' => '',
-            'Drupal' => '', 'WordPress' => 'WP', 'EC-CUBE' => 'ECCUBE', 'Bootstrap' => '', 'Tailwind CSS' => 'Tailwind', 'Node.js' => 'Node、NodeJS', 'Electron' => '',
-            'Doctrine ORM' => 'Doctrine',
-        ],
-        'db' => [
-            'MySQL' => 'MySql', 'MariaDB' => '', 'PostgreSQL' => 'Postgres、psql', 'Oracle' => 'Oracle DB、Oracle Database', 'SQL Server' => 'SQLServer、MSSQL',
-            'SQLite' => '', 'DB2' => '', 'MongoDB' => '', 'Redis' => '', 'DynamoDB' => '', 'Elasticsearch' => '', 'Access' => 'MS Access', 'FileMaker' => '', 'BigQuery' => '', 'Snowflake' => '',
-            'Redshift' => 'Amazon Redshift', 'dbt' => '',
-        ],
-        'os' => [
-            'Linux' => '', 'Windows' => '', 'Windows Server' => '', 'macOS' => 'Mac', 'UNIX' => 'Unix', 'Solaris' => '', 'AIX' => '', 'CentOS' => '',
-            'Red Hat Enterprise Linux' => 'RHEL、Red Hat', 'Ubuntu' => '', 'Android' => '', 'iOS' => '',
-            'メインフレーム' => '汎用機',
-        ],
-        'cloud' => [
-            'AWS' => 'Amazon Web Services', 'Azure' => 'Microsoft Azure', 'GCP' => 'Google Cloud、Google Cloud Platform', 'Firebase' => '', 'Heroku' => '', 'Salesforce' => '',
-            'Amazon EC2' => 'EC2', 'Amazon S3' => 'S3', 'AWS Lambda' => 'Lambda',
-            'Amazon Athena' => 'Athena', 'Google Workspace' => '', 'Microsoft 365' => 'M365', 'ServiceNow' => '', 'Dify' => '', 'LINE Messaging API' => 'LIFF',
-        ],
-        'infra' => [
-            'Docker' => '', 'Kubernetes' => 'k8s', 'Terraform' => '', 'Ansible' => '', 'Apache' => 'Apache HTTP Server', 'Nginx' => '', 'Tomcat' => '', 'IIS' => '',
-            'Jenkins' => '', 'CircleCI' => '', 'GitHub Actions' => '', 'Zabbix' => '', 'VMware' => '', 'Cisco' => '', 'ネットワーク' => 'TCP/IP', 'JP1' => '',
-            'SSO' => 'シングルサインオン',
-        ],
-        'tool' => [
-            'Git' => '', 'GitHub' => '', 'GitLab' => '', 'Subversion' => 'SVN', 'Backlog' => '', 'Redmine' => '', 'Jira' => 'JIRA', 'Confluence' => '', 'Slack' => '',
-            'Excel' => '', 'Photoshop' => '', 'Illustrator' => '', 'Dreamweaver' => '', 'Flash' => '', 'Adobe Director' => 'Director、Macromedia Director', 'ToolBook' => '', 'AgileWorks' => '', 'Figma' => '',
-            'Eclipse' => '', 'Visual Studio' => '', 'Visual Studio Code' => 'VS Code、VSCode', 'IntelliJ IDEA' => 'IntelliJ', 'Selenium' => '', 'JUnit' => '', 'PHPUnit' => '', 'Postman' => '',
-            'Tableau' => '', 'Power BI' => 'PowerBI', 'Looker Studio' => '', 'QlikView' => '', 'PowerPoint' => '', 'Word' => '', 'Jest' => '', 'Genesys Cloud' => '',
-            'JUST.DB' => '', 'Dataiku' => '', 'Streamlit' => '', 'ERP' => '',
-        ],
-        'method' => [
-            '要件定義' => '', '基本設計' => '外部設計', '詳細設計' => '内部設計', '実装' => '製造、プログラミング', '単体テスト' => 'UT', '結合テスト' => 'IT、結合試験',
-            '総合テスト' => 'システムテスト、ST', '運用・保守' => '運用、保守', 'アジャイル' => 'スクラム、Scrum', 'ウォーターフォール' => '', 'SPA' => 'Single Page Application',
-            'REST API' => 'REST、API開発、WebAPI', 'オフショア開発' => 'オフショア', 'マネジメント' => '工程管理、進捗管理、プロジェクト管理', '設計書レビュー' => 'レビュー',
-        ],
-        'domain' => [
-            '金融' => '', '証券' => '', '保険' => '生保、損保', '銀行' => '', '物流' => '倉庫', '小売' => '流通', 'EC' => 'ECサイト、通販', '建設' => '', '製造業' => 'メーカー',
-            '医療' => '', '官公庁' => '中央省庁、自治体', '不動産' => '賃貸', '飲食' => '', '通信' => 'キャリア', 'エネルギー' => 'ガス、電力', '教育' => 'eラーニング',
-            'POS' => '', '予約システム' => '予約', '決済' => '', '顧客管理' => 'CRM、会員管理',
-        ],
-        'role' => [
-            'PM' => 'プロジェクトマネージャー', 'PL' => 'プロジェクトリーダー、リーダー', 'SE' => 'システムエンジニア', 'PG' => 'プログラマー', 'PMO' => '',
-            'アーキテクト' => '', 'テックリード' => '', 'インフラエンジニア' => '',
-        ],
-    ];
+    // 辞書の中身と書き方のルールは SkillCatalogData（分類 => [正式な名前 => 別名（「、」区切り）]）
+    const CATALOG = SkillCatalogData::CATALOG;
 
     // 文章から探すときは使わない言葉（言葉そのものを調べる find では、今までどおり使う）。例：「Director クラス」は役職のこと
+    // Director のほか、普通の英単語と区別がつかない言葉は SkillCatalogData::NO_DETECT
     const NO_DETECT = ['Director'];
 
     // 名前を変える行（古い名前 => 新しい名前）。sync の最初に行う。id は変わらない
@@ -197,7 +140,7 @@ class SkillCatalog
         $found = [];
         foreach (DB::table('skill_terms')->whereIn('category', ['lang', 'fw', 'db', 'os', 'cloud', 'infra', 'tool'])->get() as $t) {
             foreach (array_merge([$t->name], parse_list($t->aliases)) as $w0) {
-                if (in_array($w0, self::NO_DETECT, true)) continue;
+                if (in_array($w0, self::NO_DETECT, true) || in_array($w0, SkillCatalogData::NO_DETECT, true)) continue;
                 $w = mb_convert_kana($w0, 'as'); // 文章と同じく、全角の英数字は半角にそろえてから比べる
                 if (mb_strlen($w) < 2 && !preg_match('/^[A-Z]$/', $w)) continue;
                 if (preg_match('/^[\x20-\x7e]+$/', $w)) {

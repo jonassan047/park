@@ -244,12 +244,12 @@ class V050WorkExpTest extends TestCase
 
         // 知らない id・値は無視。技術マスタに業務の名前が足されない
         $before = DB::table('skill_terms')->count();
-        $this->as(self::ADMIN)->post('/cases', ['title' => 'T12 不正', 'status' => 'open', '_exp' => '1', 'exp' => ['nope-1' => 'required', $this->itemId('移行') => 'bogus', $this->itemId('品質管理') => 'preferred']])->assertRedirect();
+        $this->as(self::ADMIN)->post('/cases', ['title' => 'T12 不正', 'status' => 'open', '_exp' => '1', 'exp' => ['nope-1' => 'required', $this->itemId('移行') => 'bogus', $this->itemId('英語・海外') => 'preferred']])->assertRedirect();
         $c = DB::table('cases')->orderByDesc('id')->first();
         $this->assertNull($c->required_exp);
-        $this->assertSame('品質管理', $c->preferred_exp);
+        $this->assertSame('英語・海外', $c->preferred_exp);
         $this->assertSame($before, DB::table('skill_terms')->count());
-        $this->assertNull(DB::table('skill_terms')->where('name', '品質管理')->first());
+        $this->assertNull(DB::table('skill_terms')->where('name', '英語・海外')->first());
     }
 
     // ---------- T13 ----------
