@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use App\Services\Notifier as N;
 use App\Support\CaseExp;
+use App\Support\CaseKeywords;
 use App\Support\Requirements;
 use App\Support\SkillCatalog;
 
@@ -809,23 +810,31 @@ class Workflow
 
     // ---------- 案件 ----------
     const CASE_FIELDS = ['title', 'client_label', 'price', 'price_note', 'required_skills', 'preferred_skills', 'description', 'location', 'work_style', 'start_date', 'period',
-        'days_per_week', 'interviews_count', 'headcount', 'min_years', 'conditions', 'deadline', 'status', 'raw_text'];
+        'days_per_week', 'interviews_count', 'headcount', 'min_years', 'conditions', 'deadline', 'status', 'raw_text', 'confirm_items'];
 
-    // 必須・尚可の技術を正式な名前にそろえ、マスタに無いものは足して管理者に知らせる（案件の保存と、AI の結果の差し替えで使う）
+    // 必須・尚可の欄を、マスタの正式な名前だけにする（v0.14.0）。拾えない文は「EGに確認」の後ろに足す（重ねない）。
+    // ['v' => 欄を直した配列, 'new' => マスタに足してよい英数字1語の一覧]。DB には書かない
+    public static function keywordColumns(array $v): array
+    {
+        $k = CaseKeywords::split(CaseKeywords::items($v['required_skills'] ?? ''), CaseKeywords::items($v['preferred_skills'] ?? ''), true);
+        $trim = fn ($s) => preg_replace('/^[\s　]+|[\s　]+$/u', '', $s) ?? $s; // 全角の空白も取る
+        $confirm = array_values(array_filter(array_map($trim, preg_split('/\R/u', (string) ($v['confirm_items'] ?? ''))), fn ($x) => $x !== ''));
+        foreach ($k['confirm'] as $s) if (!in_array($s, $confirm, true)) $confirm[] = $s;
+        $v['required_skills'] = $k['required_skills'] ? implode('、', $k['required_skills']) : null;
+        $v['preferred_skills'] = $k['preferred_skills'] ? implode('、', $k['preferred_skills']) : null;
+        $v['confirm_items'] = $confirm ? implode("\n", $confirm) : null;
+        return ['v' => $v, 'new' => $k['new']];
+    }
+
+    // 必須・尚可の技術を正式な名前にそろえ、新しい英数字1語だけマスタに足して管理者に知らせる（案件の保存と、AI の結果の差し替えで使う）。
+    // 文はマスタに足さない
     public static function normalizeCaseSkills(array $v, string $title): array
     {
+        $r = self::keywordColumns($v);
         $added = [];
-        foreach (['required_skills', 'preferred_skills'] as $f) {
-            $list = [];
-            foreach (parse_list($v[$f] ?? '') as $w) {
-                if ($name = SkillCatalog::ensure($w)) $added[] = $name;
-                $t = SkillCatalog::find($w);
-                $list[] = $t[1] ?? $w;
-            }
-            $v[$f] = $list ? implode('、', array_unique($list)) : null;
-        }
+        foreach ($r['new'] as $w) if ($name = SkillCatalog::ensure($w)) $added[] = $name;
         if ($added) N::toAdmins('案件から新しい技術を技術マスタに追加しました', '「'.$title.'」に、マスタに無い技術がありました：'.implode('、', $added)."\n分類（言語・フレームワーク・DB など）と別名を確かめてください。", '/admin/skills', false);
-        return $v;
+        return $r['v'];
     }
 
     public static function saveCase(array $d, $user, ?int $id = null): int
@@ -840,6 +849,14 @@ class Workflow
         $v['work_style'] = $v['work_style'] ?: 'any';
         $v['status'] = $v['status'] ?: 'open';
         $v = self::normalizeCaseSkills($v, $v['title']);
+        // 元の必須・尚可の行：新しい案件と、本文を変えた保存だけ、規則で読み直す（AI が入れた行を、ほかの保存で消さない）
+        if (!$id || (string) DB::table('cases')->where('id', $id)->value('raw_text') !== (string) $v['raw_text']) {
+            $sec = $v['raw_text'] === null ? ['required' => [], 'preferred' => []] : CaseParser::ruleLines($v['raw_text']);
+            $req = CaseKeywords::cleanAll($sec['required']);
+            $pref = CaseKeywords::cleanAll($sec['preferred']);
+            $v['required_lines'] = $req ? implode("\n", $req) : null;
+            $v['preferred_lines'] = $pref ? implode("\n", $pref) : null;
+        }
         // 必須・尚可の業務（業務経験・業務領域）。技術マスタには通さない。画面（_exp）の保存のときだけ更新する。
         // 画面を通らない保存（見本など）では、新しい案件に限って、送られた文から入れる。更新では触らない
         if (array_key_exists('_exp', $d)) {

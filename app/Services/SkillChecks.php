@@ -506,8 +506,8 @@ class SkillChecks
     // 戻り値：marks＝[項目の id => 'required'|'preferred']、missing＝本人がチェックした項目のどれにも合わない必須（元の書き方のまま）、empty＝必須・尚可がどちらも空
     public static function caseMarks(array $state, object $c): array
     {
-        $req = parse_list($c->required_skills);
-        $pref = parse_list($c->preferred_skills);
+        $req = skill_items($c->required_skills);
+        $pref = skill_items($c->preferred_skills);
         $reqKeys = array_map('norm_skill', $req);
         $prefKeys = array_map('norm_skill', $pref);
         $any = function (array $keys, array $wants) {

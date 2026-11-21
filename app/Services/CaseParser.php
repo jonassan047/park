@@ -186,27 +186,29 @@ class CaseParser
     // 必須・尚可の行から、業務の拾い出しと本文の技術の追加をして、案件票の項目にそろえる（規則も AI の結果も同じ手順）
     public static function finishSkills(array $req, array $pref, string $text): array
     {
-        // 必須・尚可の各行から、業務経験・業務領域も拾う（技術の欄は変えない）
-        $exp = \App\Support\CaseExp::fromLines($req, $pref);
-        $reqS = implode('、', array_filter($req));
-        $prefS = implode('、', array_filter($pref));
+        // 必須・尚可の各行から、技術マスタの言葉と業務を拾う。拾えない文は「EGに確認」へ（v0.14.0。拾い出しは CaseKeywords）
+        $k = \App\Support\CaseKeywords::split($req, $pref);
+        $reqList = $k['required_skills'];
+        $prefList = $k['preferred_skills'];
         // 本文全体から、技術マスタにある技術を探す。必須に無いものは「尚可」の候補にする（管理者が登録の前に確かめる）
         $detected = \App\Support\SkillCatalog::detect($text);
-        $reqN = array_map('norm_skill', parse_list($reqS));
+        $reqN = array_map('norm_skill', $reqList);
         $extra = array_values(array_filter($detected, fn ($t) => !in_array(norm_skill($t), $reqN, true)));
-        if (empty($reqS) && $detected) $reqS = implode('、', $detected);
+        if (!$reqList && $detected) $reqList = $detected;
         elseif ($extra) {
-            $list = parse_list($prefS);
-            $listN = array_map('norm_skill', $list);
-            foreach ($extra as $t) if (!in_array(norm_skill($t), $listN, true)) $list[] = $t;
-            $prefS = implode('、', $list);
+            $listN = array_map('norm_skill', $prefList);
+            foreach ($extra as $t) if (!in_array(norm_skill($t), $listN, true)) $prefList[] = $t;
         }
         return [
-            'required_skills' => $reqS,
-            'preferred_skills' => $prefS,
-            'required_exp' => \App\Support\CaseExp::join($exp['required']),
-            'preferred_exp' => \App\Support\CaseExp::join($exp['preferred']),
+            'required_skills' => implode('、', $reqList),
+            'preferred_skills' => implode('、', $prefList),
+            'required_exp' => \App\Support\CaseExp::join($k['required_exp']),
+            'preferred_exp' => \App\Support\CaseExp::join($k['preferred_exp']),
             'detected' => $detected,
+            'confirm_items' => implode("\n", $k['confirm']),
+            'required_lines' => implode("\n", $k['required_lines']),
+            'preferred_lines' => implode("\n", $k['preferred_lines']),
+            'new_terms' => $k['new'],
         ];
     }
 

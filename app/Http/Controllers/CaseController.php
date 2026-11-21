@@ -51,11 +51,13 @@ class CaseController extends Controller
     {
         $c = (object) (CaseParser::parse($r->input('raw_text')) + ['raw_text' => $r->input('raw_text')]);
         $found = $c->detected ?? [];
+        $nConfirm = count(array_filter(preg_split('/\R/u', (string) ($c->confirm_items ?? '')), fn ($x) => trim($x) !== ''));
         $expText = [];
         if (!empty($c->required_exp)) $expText[] = implode('、', CaseExp::split($c->required_exp)).'（必須）';
         if (!empty($c->preferred_exp)) $expText[] = implode('、', CaseExp::split($c->preferred_exp)).'（尚可）';
         session()->now('flash', ['msg' => '取り込みました。内容を確かめて、足りないところを直してから登録してください。'.($found ? '本文から見つかった技術：'.implode('、', $found).'（必須に無いものは尚可に入れました）。' : '')
             .($expText ? '本文の必須・尚可から見つかった業務：'.implode('、', $expText).'。' : '')
+            .($nConfirm ? "マスタに当たらない文 {$nConfirm} 件は「EGに確認」に入れました。" : '')
             .(CaseAi::blocked((object) ['raw_text' => $r->input('raw_text')]) === null ? '登録すると、手元の AI が必須・尚可を読み直します（1件 1分ほど）。結果は案件の画面に出ます。' : ''), 'type' => 'ok']);
         return view('cases.form', ['c' => $c, 'action' => '/cases', 'submit' => '登録する', 'sesList' => $this->sesList($r), 'providers' => $this->providerList(), 'import' => false]);
     }
@@ -187,7 +189,7 @@ class CaseController extends Controller
     private function aiView(object $c): array
     {
         $job = AiJobs::latest('case', (int) $c->id, CaseAi::KIND);
-        $v = ['job' => $job, 'block' => CaseAi::blocked($c), 'cmp' => null, 'auto' => false, 'fixed' => 0, 'same' => false, 'now' => null, 'diff' => null, 'exp' => null, 'stale' => false];
+        $v = ['job' => $job, 'block' => CaseAi::blocked($c), 'cmp' => null, 'auto' => false, 'fixed' => 0, 'same' => false, 'now' => null, 'diff' => null, 'exp' => null, 'confirm' => [], 'stale' => false];
         if (!$job) return $v;
         $audit = fn (string $action) => DB::table('audit_log')->where('action', $action)->where('detail', 'like', "#{$job->id} %")->exists();
         if ($job->status === 'applied') {
@@ -197,12 +199,17 @@ class CaseController extends Controller
         } elseif ($job->status === 'done') {
             $cmp = CaseAi::compare($job, $c);
             if ($cmp['stale']) { $v['stale'] = true; return $v; } // 本文が変わったあとの結果は、表も使うボタンも出さない
-            $now = ['req' => parse_list($c->required_skills), 'pref' => parse_list($c->preferred_skills)];
+            // 「今」は、元の行があればその行どうしで比べる（無い古い案件は、必須・尚可の欄）
+            $lines = fn (?string $s) => array_values(array_filter(array_map('trim', preg_split('/\R/u', (string) $s)), fn ($x) => $x !== ''));
+            $hasLines = $c->required_lines !== null || $c->preferred_lines !== null;
+            $now = $hasLines ? ['req' => $lines($c->required_lines), 'pref' => $lines($c->preferred_lines)]
+                : ['req' => skill_items($c->required_skills), 'pref' => skill_items($c->preferred_skills)];
             $fin = CaseParser::finishSkills(array_column($cmp['req'], 'text'), array_column($cmp['pref'], 'text'), (string) $c->raw_text);
             $v['cmp'] = $cmp;
             $v['now'] = $now;
             $v['diff'] = ['req' => CaseAi::diff($now['req'], array_column($cmp['req'], 'text')), 'pref' => CaseAi::diff($now['pref'], array_column($cmp['pref'], 'text'))];
             $v['exp'] = ['req' => CaseExp::split($fin['required_exp'] ?? null), 'pref' => CaseExp::split($fin['preferred_exp'] ?? null)];
+            $v['confirm'] = $lines($fin['confirm_items']); // AI の結果を使うと、「EGに確認」もこの内容に置き換わる
         } elseif ($job->status === 'dropped') {
             $v['same'] = $audit('ai-case-same');
         }

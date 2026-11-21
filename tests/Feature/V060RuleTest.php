@@ -168,7 +168,9 @@ class V060RuleTest extends TestCase
 
         // 業務の拾い出しは今と同じ
         $p = CaseParser::parse("【案件】テスト取り込み\n■必須スキル\n・進捗管理の経験\n・AIX の運用\n■尚可スキル\n・英語での会話");
-        $this->assertSame('進捗管理の経験、AIX の運用', $p['required_skills']);
+        $this->assertStringContainsString('AIX', $p['required_skills']); // 技術の欄は名前だけ（v0.14.0）
+        $this->assertStringNotContainsString('AIX の運用', $p['required_skills']);
+        $this->assertSame("進捗管理の経験\nAIX の運用", $p['required_lines'], '元の行は残る');
         $this->assertSame('進捗・課題管理', $p['required_exp']);
         $this->assertSame('英語・海外', $p['preferred_exp']);
     }

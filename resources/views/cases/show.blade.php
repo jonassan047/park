@@ -11,11 +11,18 @@
 <dt>状態</dt><dd>{{ badge('caseStatus', $c->status) }}</dd>
 <dt>金額</dt><dd>{{ man($c->price) }} <span class="muted">{{ $c->price_note }}</span></dd>
 @if($u->role !== 'eg')<dt>元請け</dt><dd>{{ $c->client_label ?: '—' }}</dd><dt>提案元 SES</dt><dd>{{ $c->ses_name ?: '—' }}</dd>@endif
-<dt>必須</dt><dd><x-chips :list="parse_list($c->required_skills)" /></dd>
-<dt>尚可</dt><dd><x-chips :list="parse_list($c->preferred_skills)" /></dd>
+<dt>必須</dt><dd><x-chips :list="skill_items($c->required_skills)" /></dd>
+<dt>尚可</dt><dd><x-chips :list="skill_items($c->preferred_skills)" /></dd>
 @php $expReq = \App\Support\CaseExp::split($c->required_exp ?? null); $expPref = \App\Support\CaseExp::split($c->preferred_exp ?? null); @endphp
 @if($expReq)<dt>必須の業務</dt><dd><x-chips :list="$expReq" /></dd>@endif
 @if($expPref)<dt>尚可の業務</dt><dd><x-chips :list="$expPref" /></dd>@endif
+{{-- EGに確認：マスタに無い条件。点数には使わない。全員に出す（元の必須・尚可の文は、直せる人だけ） --}}
+@php $confirmItems = array_values(array_filter(array_map('trim', preg_split('/\R/u', (string) ($c->confirm_items ?? ''))))); @endphp
+@if($confirmItems)<dt>{{ $u->role === 'eg' ? 'ご確認ください' : 'EGに確認' }}</dt><dd><ul>@foreach($confirmItems as $it)<li>{{ $it }}</li>@endforeach</ul></dd>@endif
+@if(\App\Support\Perms::caseEdit($u, $c) && ($c->required_lines || $c->preferred_lines))<dt>元の文</dt><dd><details><summary>元の必須・尚可の文</summary>
+@if($c->required_lines)<p><strong>必須</strong><br>{!! nl2br(e($c->required_lines)) !!}</p>@endif
+@if($c->preferred_lines)<p><strong>尚可</strong><br>{!! nl2br(e($c->preferred_lines)) !!}</p>@endif
+</details></dd>@endif
 <dt>経験年数</dt><dd>{{ $c->min_years ? num_disp($c->min_years).'年以上' : '—' }}</dd>
 <dt>働き方</dt><dd>{{ lbl('workStyle', $c->work_style) }}</dd><dt>場所</dt><dd>{{ $c->location ?: '—' }}</dd>
 <dt>開始</dt><dd>{{ fmt_date($c->start_date) }}</dd><dt>期間</dt><dd>{{ $c->period ?: '—' }}</dd>
@@ -50,7 +57,7 @@
   <td>@forelse($aiRows as $i => $x)<div>{{ $x['text'] }}@if($x['mark'] === 'fixed') <span class="badge info" title="AI の文：{{ $x['from'] }}">本文の文に戻した</span>@elseif($x['mark'] === 'missing') <span class="badge bad">本文に無い言い方</span>@endif @if($df['ai'][$i]) <span class="badge warn">AI だけ</span>@endif</div>@empty<span class="muted">—</span>@endforelse</td></tr>
   @endforeach
   </tbody></table></div>
-  <p class="muted">AI の結果を使うと、必須の業務：{{ $ai['exp']['req'] ? implode('、', $ai['exp']['req']) : '—' }}／尚可の業務：{{ $ai['exp']['pref'] ? implode('、', $ai['exp']['pref']) : '—' }}</p>
+  <p class="muted">AI の結果を使うと、必須の業務：{{ $ai['exp']['req'] ? implode('、', $ai['exp']['req']) : '—' }}／尚可の業務：{{ $ai['exp']['pref'] ? implode('、', $ai['exp']['pref']) : '—' }}／EGに確認：{{ $ai['confirm'] ? implode('、', $ai['confirm']) : '—' }}</p>
   @if(in_array('edited', $cmp['reasons']))<p class="bad-text">人が直したか、本文を変えた案件です。使うと、直した必須・尚可・業務も置き換わります。</p>@endif
   <x-post :action="'/ai-jobs/'.$aj->id.'/apply-case'" label="AI の結果を使う" /> <x-post :action="'/ai-jobs/'.$aj->id.'/drop'" label="今のままにする" cls="ghost" />
 @else

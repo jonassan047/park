@@ -97,7 +97,11 @@ class SkillCatalog
 
     private static ?array $map = null;
 
-    public static function forget(): void { self::$map = null; }
+    public static function forget(): void
+    {
+        self::$map = null;
+        CaseKeywords::forget(); // 案件の拾い出し用の言葉の一覧も作り直す
+    }
 
     // 正規化した言葉 => [term id, 正式な名前, 分類]
     public static function map(): array

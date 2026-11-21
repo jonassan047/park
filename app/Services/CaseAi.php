@@ -74,7 +74,7 @@ TXT;
     private static function skillList($s): array
     {
         $list = [];
-        foreach (parse_list($s) as $w) {
+        foreach (skill_items($s) as $w) {
             $t = SkillCatalog::find($w);
             $list[] = $t[1] ?? $w;
         }
@@ -202,15 +202,20 @@ TXT;
     }
 
     // ---------- 届いたあと・差し替え ----------
-    // AI の結果で、必須・尚可・業務の4列だけを差し替える（ほかの列は変えない）
-    public static function apply(object $case, array $cmp): void
+    // AI の結果で、必須・尚可・業務・EGに確認・元の行の列だけを差し替える（ほかの列は変えない）。
+    // AI の読み直しは必須・尚可の読み直しなので、EGに確認も読み直したものにする（今の EGに確認は渡さない）
+    // $replaceAll：人が「AI の結果を使う」を押したときだけ true（「EGに確認」・元の行も置き換える）。
+    // 自動で入れるときは false（人が直した「EGに確認」・元の行は、そのまま残す）
+    public static function apply(object $case, array $cmp, bool $replaceAll = false): void
     {
         $fin = CaseParser::finishSkills(array_column($cmp['req'], 'text'), array_column($cmp['pref'], 'text'), (string) $case->raw_text);
-        $v = Workflow::normalizeCaseSkills(['required_skills' => $fin['required_skills'], 'preferred_skills' => $fin['preferred_skills']], (string) $case->title);
-        DB::table('cases')->where('id', $case->id)->update([
+        $v = Workflow::normalizeCaseSkills(['required_skills' => $fin['required_skills'], 'preferred_skills' => $fin['preferred_skills'], 'confirm_items' => $fin['confirm_items']], (string) $case->title);
+        $upd = [
             'required_skills' => $v['required_skills'], 'preferred_skills' => $v['preferred_skills'],
             'required_exp' => $fin['required_exp'], 'preferred_exp' => $fin['preferred_exp'], 'updated_at' => now_str(),
-        ]);
+        ];
+        if ($replaceAll) $upd += ['confirm_items' => $v['confirm_items'], 'required_lines' => $fin['required_lines'] ?: null, 'preferred_lines' => $fin['preferred_lines'] ?: null];
+        DB::table('cases')->where('id', $case->id)->update($upd);
     }
 
     // 結果が届いたとき（AiJobs::finish が done にしたあとに呼ぶ）

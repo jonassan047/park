@@ -47,7 +47,7 @@ class CaseSearch
         $out = [];
         foreach ($cols as $side => [$skillCol, $expCol]) {
             $items = [];
-            foreach (parse_list($c->$skillCol) as $w) $items[] = ['name' => self::skillName($w), 'kind' => 'skill', 'src' => 'case', 'on' => true];
+            foreach (skill_items($c->$skillCol) as $w) $items[] = ['name' => self::skillName($w), 'kind' => 'skill', 'src' => 'case', 'on' => true];
             foreach (CaseExp::split($c->$expCol ?? null) as $n) $items[] = ['name' => $n, 'kind' => 'exp', 'src' => 'case', 'on' => true];
             // 同じ項目は重ねない
             $seen = [];
@@ -318,7 +318,7 @@ class CaseSearch
     public static function defaultBody(): string
     {
         return "{呼び名} さん\n\nお疲れさまです。{送り主}です。\nあなたに合いそうな案件が届いたので、ご案内します。\n\n{全員へのメッセージ}\n\n"
-            ."■案件：{案件名}\n■案件 ID：{案件ID}\n■単価：{単価}\n■開始：{開始}\n■場所・働き方：{場所}／{働き方}\n■必須：{必須}\n■尚可：{尚可}\n■あなたに合う点：{合う点}\n\n"
+            ."■案件：{案件名}\n■案件 ID：{案件ID}\n■単価：{単価}\n■開始：{開始}\n■場所・働き方：{場所}／{働き方}\n■必須：{必須}\n■尚可：{尚可}\n■ご確認ください：{確認事項}\n■あなたに合う点：{合う点}\n\n"
             ."{個別メッセージ}\n\n"
             ."ご興味があれば、このメールに返信してください（条件で気になる点があれば、それも一緒に）。\n見送る場合も、理由をひとこと返信いただけると、次のご案内の参考にします。";
     }
@@ -342,7 +342,7 @@ class CaseSearch
             '{全員へのメッセージ}' => self::clean($s->message_all), '{個別メッセージ}' => self::clean($row['member']->message ?? null),
             '{必須}' => $names($items['req']) ?: '—', '{尚可}' => $names($items['pref']), '{合う点}' => implode('、', $fit) ?: '—',
         ];
-        $tpl = self::defaultBody();
+        $tpl = self::defaultBody(); // {確認事項} は、下の CaseMail::render が入れる（空なら ■ご確認ください の行ごと消す）
         if ($vals['{尚可}'] === '') $tpl = str_replace("■尚可：{尚可}\n", '', $tpl); // 尚可が無ければ、その行ごと無くす
         // 差し込みを目印にしておき、今の案内の差し込み（呼び名・案件名など）を先に済ませる。メッセージの中の {…} は差し込みにしない
         $marks = [];

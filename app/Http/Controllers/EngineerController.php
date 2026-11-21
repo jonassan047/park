@@ -365,7 +365,7 @@ class EngineerController extends Controller
         if ($c && !Perms::caseView($r->user(), $c)) $c = null;
         $display = SkillChecks::forDisplay($id); // 詳細・Excel と同じ表から、節ごとに出す
         $projects = DB::table('engineer_projects')->where('engineer_id', $id)->orderByDesc('period_from')->get()->all();
-        $want = $c ? array_map('norm_skill', array_merge(parse_list($c->required_skills), parse_list($c->preferred_skills))) : [];
+        $want = $c ? array_map('norm_skill', array_merge(skill_items($c->required_skills), skill_items($c->preferred_skills))) : [];
         $isHit = function ($t) use ($want) {
             $n = norm_skill($t);
             foreach ($want as $w) if ($w === $n || (mb_strlen($w) >= 3 && mb_strlen($n) >= 3 && loose_match($n, $w))) return true;
@@ -379,7 +379,7 @@ class EngineerController extends Controller
             });
         }
         $idx = Matcher::skillIndex($id);
-        $reqRows = $c ? array_map(fn ($r) => [$r, ($s = Matcher::hasSkill($idx, $r)) ? '○ '.($s['years'] ?: '経験あり') : '—'], parse_list($c->required_skills)) : [];
+        $reqRows = $c ? array_map(fn ($r) => [$r, ($s = Matcher::hasSkill($idx, $r)) ? '○ '.($s['years'] ?: '経験あり') : '—'], skill_items($c->required_skills)) : [];
         // 必須の業務（業務経験・業務領域）：本人がチェックしていれば ○
         if ($c) {
             $mine = SkillChecks::expMany([$id])[$id] ?? [];

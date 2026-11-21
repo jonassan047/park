@@ -202,9 +202,12 @@ class V050WorkExpTest extends TestCase
         $this->assertSame('preferred', $sel('英語・海外'));
         $this->assertSame('', $sel('AI 活用'), 'AIX は AI 活用にならない（K2）');
         $r->assertSee('見つかった業務');
-        // 技術の欄は今と同じ（業務の言い方で変わらない）
+        // 技術の欄は、マスタの名前だけ（v0.14.0）。業務の文は欄に入らず、元の行に残る
         $parsed = \App\Services\CaseParser::parse($text);
-        $this->assertSame('進捗管理の経験、AIX の運用', (string) $parsed['required_skills'], '技術の欄は今のまま（業務の文もそのまま入る）');
+        $this->assertStringContainsString('AIX', (string) $parsed['required_skills']);
+        $this->assertStringNotContainsString('進捗管理の経験', (string) $parsed['required_skills'], '文は技術の欄に入らない');
+        $this->assertStringNotContainsString('AIX の運用', (string) $parsed['required_skills']);
+        $this->assertSame("進捗管理の経験\nAIX の運用", $parsed['required_lines'], '元の行は残る');
         $this->assertSame("進捗・課題管理", $parsed['required_exp']);
         $this->assertSame("英語・海外", $parsed['preferred_exp']);
         $this->assertStringNotContainsString('AI 活用', (string) $parsed['required_exp']);

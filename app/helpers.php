@@ -232,6 +232,14 @@ function parse_list($s): array
     return array_values(array_filter(array_map('trim', preg_split('/[,、，\/／\n・;；|]+/u', (string) $s)), fn ($x) => $x !== ''));
 }
 
+// 案件の必須・尚可を項目に分ける（「運用・保守」「CI/CD」のように、「・」「/」を含むマスタの名前は割らない）
+if (!function_exists('skill_items')) {
+    function skill_items($s): array
+    {
+        return \App\Support\CaseKeywords::items($s);
+    }
+}
+
 const PARK_SKILL_ALIASES = [
     'js' => 'javascript', 'ecmascript' => 'javascript', 'ts' => 'typescript', 'postgres' => 'postgresql', 'psql' => 'postgresql',
     'golang' => 'go', 'k8s' => 'kubernetes', 'reactjs' => 'react', 'vuejs' => 'vue', 'vue3' => 'vue', 'node' => 'nodejs',

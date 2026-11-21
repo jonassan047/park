@@ -225,7 +225,7 @@ class V070SearchTest extends TestCase
         $this->assertSame(2, DB::table('case_search_members')->where('search_id', $sid)->count());
         $this->assertNotNull($f);
 
-        $cid2 = $this->mkCase(self::SES1, ['required_skills' => 'ZZ誰も持たない技術', 'preferred_skills' => '']);
+        $cid2 = $this->mkCase(self::SES1, ['required_skills' => 'ZZNobodyHas', 'preferred_skills' => '']);
         $sid2 = $this->search(self::SES1, $cid2);
         $this->as(self::SES1)->get("/searches/$sid2")->assertOk()->assertSee('条件に合うエンジニアがいません');
     }

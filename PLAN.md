@@ -1,3 +1,288 @@
+# PLAN：案件の必須・尚可をキーワードに分け、合わない文は「EGに確認」へ（v0.14.0。2026-11-21）
+
+> **これが今の計画**。前の計画（v0.13.0 以前）は、この節の下に続く（Leo が末尾に戻し済み。2026-11-21）。
+> 要求：TEZZO さん（2026-11-21）「案件を登録する際、全文を DB に格納」「必須・尚可のキーワード抽出は全文登録のタイミングで」「『アジャイルスクラムマスター』→アジャイル・スクラムマスター、『AI駆動開発経験』→AI、『PM機能を対応できる人材』→PM のように、技術マスタに合致させる」「分類は必須・尚可・EGに確認の3つ。マスタに合わない文（『技術的知見を有している人材』『社員相当としての活躍』）は EGに確認 として DB に入れる」「単価などは今までどおり」。
+> 方針は Leo（2026-11-21）。細部は planner が決め、4章に理由を書いた。
+> プレーヤー：管理者・SES・担当者・EG の4つ（担当者＝`users.role=ses`。今回の権限は SES と担当者で同じ）。
+> 外部のライブラリは足さない。手元の AI のプロンプトは変えない（AI の結果も同じ関数を通すだけ）。名前・メール・合言葉はこのファイルにもテストにも書かない（テストは架空の文、`@park.example`）。
+> 作る順：段階1 → 2 → 3 → 4 → 5（段階ごとに `php artisan test` を通して commit）→ park-reviewer → park-tester。commit・push・公開版への反映は Leo。**既存の案件の書き換え（段階5のコマンドの `--apply`）は、公開版では TEZZO さんの了承を取ってから**。
+
+## 0. コードで確かめた今の形
+
+- 全文：`cases.raw_text`（`Workflow::CASE_FIELDS`）。取り込み（`CaseController::import` → `CaseParser::parse`）→ 案件票のフォーム → 登録（`store` → `Workflow::saveCase`）で保存される。**全文の格納はもうできている**（今回は変えない。受け入れ条件 K1 で確かめるだけ）。
+- 必須・尚可の読み方：`CaseParser::ruleLines($text)` が必須・尚可の「行（文）」を返す → `CaseParser::finishSkills($req, $pref, $text)` が行を「、」でつないで `required_skills`・`preferred_skills` にし、`CaseExp::fromLines` で業務（`required_exp`・`preferred_exp`）を拾い、`SkillCatalog::detect`（本文全体、tech 分類だけ）で見つけた技術のうち必須に無いものを尚可に足す（必須が空なら必須に入れる）。
+- 保存：`Workflow::normalizeCaseSkills` が `parse_list` の各項目を `SkillCatalog::ensure`（マスタに無ければ **文ごと**「確認待ち」で足す）と `find`（正式名へ）に通す。→ 「AI駆動開発経験」のような文がマスタの新語になり、必須の欄にも文が残る。
+- AI：`CaseAi::queue`（登録・本文の変更で）→ 結果が届くと `compare` → `apply`（`finishSkills` → `normalizeCaseSkills`）。違いの表（`CaseController::aiView`）は「今」を `parse_list($c->required_skills)`、「AI」を AI の行で並べている。
+- 採点：`Matcher::score` は `parse_list(required_skills)` の各項目を `hasSkill`（`norm_skill` → 同じか、3文字以上でゆるく一致）で数える。業務は `CaseExp::split(required_exp)`。単価・経験年数・開始・働き方は別の列。
+- `parse_list` は `、 , / ・ ; |` と改行で分ける。マスタには「・」「/」を含む名前がある（`運用・保守`・`教育・育成`・`介護・福祉`・`CI/CD` など）。今は「教育・育成」が「教育」（業界）と「育成」に割れる。
+- マスタ：`SkillCatalogData`（809語。分類 lang・fw・db・os・cloud・infra・tool・method・domain・role・qual）。`アジャイル`（method。別名にスクラム）、`スクラムマスター`（role）、`PM`（role）はある。`AI` 単独は無い（`生成AI`・`LLM`・`AIエンジニア`（別名 AI開発）はある）。業務の `AI 活用`（skill_form.json の caseWords に `AI`）はある。
+- 案件の必須を使っている所：`Matcher`、`cases/show`（チップ）、`CaseMail::render`（`{必須}`）、`CaseSearch::conditions`・`body`、`CaseAi::skillList`、`Qa`（面談の想定質問）、`SkillChecks`（EG の「案件に合わせる」）、`EngineerController`（案件ごとのスキルシート）、`admin/cases`・`ses/cases` の一覧。
+- 公開版の反映（`park-deploy.sh`）は `park:skills-sync` も動かす（マスタに「AI」が1行入る）。
+
+## 1. 受け入れ条件
+
+| 番号 | 立場 | 条件 |
+|---|---|---|
+| K1 | 管理者・SES・担当者 | 案件を取り込み → 登録すると、貼り付けた全文が `cases.raw_text` にそのまま入る（今の動きを壊さない） |
+| K2 | システム | 必須・尚可の各行を、技術マスタの全分類（業務の項目も）に対して**最長一致**で分けて拾う。「アジャイルスクラムマスター」→ `アジャイル`・`スクラムマスター`、「AI駆動開発経験」→ `AI`、「PM機能を対応できる人材」→ `PM`、「Java経験3年以上」→ `Java` |
+| K3 | システム | マスタの語にも業務の項目にも当たらない行は「EGに確認」になる。「技術的知見を有している人材」「社員相当としての活躍」は `cases.confirm_items` に入り、必須・尚可には入らない |
+| K4 | システム | `required_skills`・`preferred_skills` にはマスタの正式名だけが入る（文は入らない）。必須にある名前は尚可に重ねない |
+| K5 | システム | 拾い出しは、取り込み（フォームに結果を出し、人が確かめる）と、保存（`saveCase`。画面を通らない保存も）と、AI の結果の差し替え（`CaseAi::apply`）で、同じ関数（`App\Support\CaseKeywords`）を通る |
+| K6 | システム | 文がマスタに新語として足されない。足すのは、項目そのものが空白の無い英数字1語（2〜30字。例：`Hotwire`）でマスタに無いときだけ（今のテストの動き）。そのときは今までどおり管理者に知らせる |
+| K7 | システム | 元の必須・尚可の行（文）は `cases.required_lines`・`preferred_lines` に残る（新しい案件と、本文を変えた保存と、AI の差し替えで入る） |
+| K8 | 管理者・SES・担当者 | 案件票のフォームに「EGに確認（1行に1つ）」の欄があり、取り込みの結果が入る。直して保存できる。必須・尚可の欄に文を書いて保存すると、拾える語は名前に、拾えない文は「EGに確認」に移る |
+| K9 | 全員（案件を見られる人） | 案件の画面に「EGに確認」が出る（空なら出ない）。元の行は、直せる人（管理者・持ち込み元の SES・担当者）にだけ「元の必須・尚可の文」として出る。EG には元の行も `raw_text` も出さない |
+| K10 | EG | 案内メール（案件の画面からの案内・検索からの案内）に「■ご確認ください：…」の行が出る（空なら行ごと出ない） |
+| K11 | システム | 「EGに確認」は採点しない。単価・経験年数・開始・働き方の採点は今のまま |
+| K12 | 管理者・SES・担当者 | AI の違いの表は「今の行」と「AI の行」を比べる（行が無い古い案件は今までどおり必須・尚可の欄で比べる）。AI の結果を使うと、必須・尚可・業務・EGに確認・元の行がまとめて置き換わる |
+| K13 | システム | マスタの名前に「・」「/」があっても（`運用・保守`・`教育・育成`・`CI/CD`）、必須・尚可を読む所で割れない |
+| K14 | システム | 既存の案件は migration で書き換わらない（列を足すだけ）。`php artisan park:case-keywords` は、何も書かずに変わる内容を出す。`--apply` を付けたときだけ書き換える |
+| K15 | 全員 | 今のテストが通る（今の動きを確かめていたテストのうち、文が必須に入ることを確かめていたもの＝8章の一覧は、新しい動きに書き直す） |
+
+## 2. データ（マイグレーション1本、足すだけ）
+
+`database/migrations/2026_11_21_000001_case_keywords.php`（`cases` に3列。`after('preferred_exp')`。`down()` は3列を消すだけ）。
+
+- `required_lines`（text、null 可）：必須の元の行。改行つなぎ。
+- `preferred_lines`（text、null 可）：尚可の元の行。改行つなぎ。
+- `confirm_items`（text、null 可）：EGに確認。改行つなぎ（1行1項目）。
+
+マスタ：`SkillCatalogData::CATALOG['method']` の「データ・AI」に `'AI' => 'AI駆動開発、AI活用、人工知能'` を足す（`AI開発` は `AIエンジニア` の別名なので入れない。sync の「ぶつかり」が出ないこと）。
+
+## 3. 仕様
+
+### 3-1. `App\Support\CaseKeywords`（新。拾い出しの正本）
+
+```php
+// 1行（文）から拾う。['skills' => [正式名…], 'exp' => [業務の項目名…], 'new' => ?string（足してよい英数字1語）]
+public static function line(string $line): array
+// 必須・尚可の行から、案件の列の形にする
+// ['required_skills' => [..], 'preferred_skills' => [..], 'required_exp' => [..], 'preferred_exp' => [..],
+//  'confirm' => [行…], 'new' => [語…], 'required_lines' => [..], 'preferred_lines' => [..]]
+public static function split(array $reqLines, array $prefLines): array
+// 「、」区切りなどの欄の文字列を項目に分ける（「・」「/」はマスタの名前なら割らない）。
+public static function items(?string $s): array
+```
+
+`line` の手順：
+
+1. 行の前後の空白・箇条書きの印を外す。空なら何も返さない。
+2. **行そのものがマスタの語**（`SkillCatalog::find`）なら、その正式名だけ（1文字の `C`・`R` や NO_DETECT の語も、ここで当たる）。
+3. 文章から拾う：比べる文字は `mb_convert_kana($s, 'as')`。マスタの全分類の名前・別名を、**左から最長一致**で拾う（ある位置で当たる語のうち一番長いものを取り、その長さだけ進む。当たらなければ1字進む）。
+   - 英数字だけの語は、前後が英数字でないときだけ当てる（`SkillCatalog::detect` と同じ前後の条件。大文字小文字は区別しない）。
+   - 使わない語：1字の語（英字1字も、かな・漢字1字も）、`SkillCatalog::NO_DETECT`・`SkillCatalogData::NO_DETECT`、`CaseKeywords::NO_PICK`（下）。
+   - 先に消す言い方：`CaseKeywords::SKIP = ['電気小売', 'PMワークベンチ', '可視化', '営業日']`（`SkillCatalog::STRIP` のうちマスタの語でないもの。`製造業`・`プロジェクトマネージャ試験` はマスタの語なので消さない。最長一致で `製造`・`PM` には当たらない）。
+4. 業務：`CaseExp::detectLine($line)`（今のまま）。
+5. `skills` も `exp` も空で、行が「空白の無い英数字1語・2〜30字・英字を含む」なら `new` にその語を入れ、`skills` にも入れる（保存のときに `ensure` する）。
+
+`NO_PICK`（文章からは拾わない。行そのものが語なら 2. で当たる）：普通の言葉と区別がつかない短い別名。最初は次の語にし、テストで足りなければ足す。
+`IT`（結合テスト）・`ST`・`EM`・`PO`・`カード`・`キャリア`・`株式`・`ガス`・`電力`・`予約`・`製造`・`運用`・`保守`・`監視`・`レビュー`・`リーダー`・`リーダ`・`パッケージ`・`公共`・`行政`・`交通`・`広告`・`宿泊`・`観光`・`賃貸`・`受託`・`基幹`・`流通`・`折衝`・`配送`・`倉庫`。
+（例：「IT業界の経験」で `結合テスト` を拾わない。「運用保守」は別名 `運用保守` が長いので `運用・保守` に当たる。）
+
+`split` の手順：
+
+- 必須の各行・尚可の各行を `line` に通す。名前は出た順で重なりを消す。必須にある名前は尚可から外す。
+- `skills` も `exp` も空の行 → `confirm`（同じ文は1つ。必須・尚可の順）。
+- 業務は `CaseExp::fromLines($req, $pref)` の結果を使う（今と同じ。両方にあれば必須だけ）。
+- `required_lines`・`preferred_lines` は、空でない元の行（印を外したもの）。
+
+`items` の手順：`[,、，;；|]` と改行で分け、前後の空白を取る。分けた1つが `find` で当たればそのまま。当たらず「・」「/」「／」を含むなら、さらにそこで分ける（今の `parse_list` と同じ結果になる）。空は捨てる。
+
+### 3-2. 読む所を `items` にそろえる（K13）
+
+`app/helpers.php` に `function skill_items($s): array { return \App\Support\CaseKeywords::items($s); }` を足し、案件の `required_skills`・`preferred_skills` を `parse_list` で読んでいる所を `skill_items` に替える：`Matcher::score`（74・88行）、`cases/show`（14・15行）、`CaseMail::render`、`CaseSearch::conditions`、`CaseAi::skillList`、`Qa`（58・70行）、`SkillChecks`（509・510行）、`EngineerController`（368・382行）、`admin/cases`・`ses/cases` の一覧。エンジニアのスキルなど、ほかの欄の `parse_list` は変えない。
+
+### 3-3. `CaseParser::finishSkills`（中身を差し替え。引数と戻り値の形は保つ）
+
+```php
+public static function finishSkills(array $req, array $pref, string $text): array
+// 戻り値：'required_skills'（「、」つなぎ）, 'preferred_skills', 'required_exp', 'preferred_exp'（改行つなぎ。今と同じ）,
+//         'detected'（今と同じ）, 'confirm_items'（改行つなぎ）, 'required_lines', 'preferred_lines'（改行つなぎ）, 'new_terms'（配列）
+```
+
+- `CaseKeywords::split($req, $pref)` の結果を使う。
+- 本文全体の技術（`SkillCatalog::detect($text)`）の扱いは今のまま：必須に無いものを尚可の後ろに足す。必須が空なら必須に入れる。
+- `parse` は今までどおり `finishSkills` を呼ぶので、取り込み（`import`）・`CaseAi::ruleSnapshot` にも効く。`parse` は DB に書かない（`ensure` しない）。
+
+### 3-4. `Workflow::saveCase`・`normalizeCaseSkills`
+
+- `CASE_FIELDS` に `confirm_items` を足す（`str_in`）。
+- `normalizeCaseSkills(array $v, string $title): array` を書き直す：
+  - `required_skills`・`preferred_skills` を `CaseKeywords::items` で項目にし、項目ごとに `CaseKeywords::line`。拾えた名前を欄に入れ、拾えない項目は `confirm_items` の後ろに足す（重ねない）。必須にある名前は尚可から外す。
+  - `new` の語だけ `SkillCatalog::ensure`（分類 `other`、確認待ち）し、今と同じ文で管理者に知らせる（`/admin/skills`）。**文ごとの `ensure` はしない**。
+  - 戻り値の `confirm_items` は改行つなぎ、空なら null。
+- `saveCase`：新しい案件、または `raw_text` が保存前と違うとき、`CaseParser::ruleLines(raw_text)` で `required_lines`・`preferred_lines` を入れ直す（本文が空なら null）。それ以外の保存では触らない（AI が入れた行を消さない）。
+- 業務（`_exp`）の扱いは今のまま。ただし `_exp` が無い新しい案件（見本・テスト）で `required_exp` が送られていないときは、今のまま空。
+
+### 3-5. AI（`CaseAi`）
+
+- `apply`：`finishSkills`（AI の行）→ `normalizeCaseSkills` のあと、`required_skills`・`preferred_skills`・`required_exp`・`preferred_exp` に加えて `confirm_items`・`required_lines`・`preferred_lines` も置き換える（AI の読み直しは必須・尚可の読み直しなので、EGに確認も読み直したものにする）。
+- `snapshot`・`ruleSnapshot`・`compare` は変えない（名前どうしで比べる。EGに確認は比べない）。プロンプトも変えない。
+- `CaseController::aiView`：`$now` を、`required_lines`・`preferred_lines` があればその行（改行で分ける）、無ければ今までどおり `skill_items(required_skills)`。表の下の「AI の結果を使うと」に「EGに確認：…」も出す（`$fin['confirm_items']`）。
+
+### 3-6. 画面
+
+- `cases/form`（登録・取り込み・編集）：
+  - 必須・尚可の欄の説明（hint）を「技術マスタの名前が入ります。文を書いて保存すると、マスタの語を拾い、拾えない文は『EGに確認』に移します。」に。
+  - その下に `<x-field label="EGに確認（1行に1つ）" name="confirm_items" type="textarea" rows="3" …>`。hint「マスタに無い条件です。点数には使いません。エンジニアの案件の画面と案内メールに、この文のまま出ます。会社名などは消してください。」
+  - 取り込みの後と編集で、`required_lines`・`preferred_lines` があれば「元の必須・尚可の文」（`<details>`、読むだけ。送らない）。
+- `CaseController::import` の知らせに「マスタに当たらない文 n 件は『EGに確認』に入れました。」を足す（n＞0 のとき）。
+- `cases/show`：「尚可の業務」の下に `<dt>EGに確認</dt>`（`x-chips` ではなく、1行ずつの箇条書き。空なら出さない）。元の行は `Perms::caseEdit` の人にだけ `<details>元の必須・尚可の文</details>`。
+- EG：`cases/show` の EG の表示にも「EGに確認」が出る（上の行は全員に出る）。`raw_text`・元の行は出さない（今も出していない。テストで確かめる）。
+
+### 3-7. 案内メール
+
+- `CaseMail`：`PLACEHOLDERS` に `{確認事項}`。`defaultBody` の `■必須：{必須}` の次の行に `■ご確認ください：{確認事項}`。`render` は `confirm_items` を「、」でつないで入れ、空なら `■ご確認ください：…` の行ごと消す（`CaseSearch::body` の尚可と同じやり方）。担当者が保存した文面（`{確認事項}` の無いもの）はそのまま。
+- `CaseSearch::defaultBody`・`body`：同じく `■尚可：{尚可}` の次に `■ご確認ください：{確認事項}`、空なら行ごと消す。
+- 入れるのは `confirm_items` だけ（`raw_text`・元の行は入れない）。
+
+### 3-8. 再抽出のコマンド（`app/Console/Commands/CaseKeywords.php`、`park:case-keywords`）
+
+- `php artisan park:case-keywords [--id=案件のid] [--apply]`。
+- 対象：`required_lines` が null の案件（今までの案件）。`--id` があればその1件（行があっても対象）。
+- 1件ごとに：今の `required_skills`・`preferred_skills` を元の行とみなして（`CaseKeywords::items` で分けたもの）`normalizeCaseSkills` と同じ手順で、必須・尚可・EGに確認を作る。`required_lines`・`preferred_lines` には今の項目を改行でつないで入れる。`raw_text` からは読み直さない（人が直した欄・AI の結果を壊さない）。業務の列は変えない。
+- `--apply` が無いとき：DB に書かず、案件ごとに「今 → 新しい」（必須・尚可・EGに確認）を出す。最後に件数。
+- `--apply`：書き換え、`audit_log` に `case-keywords`（案件のコード）を残す。マスタへの `ensure` は `new` の語だけ。メール・お知らせは出さない（管理者へのマスタのお知らせも、このコマンドではまとめて1件）。
+- 手元では Leo が試してよい。**公開版での `--apply` は TEZZO さんの了承が要る**（データの書き換え）。
+
+## 4. 決めたこと（planner。違えば Leo が直す）
+
+| 番号 | 決めたこと | 理由 |
+|---|---|---|
+| D1 | 全文の格納は今の `raw_text` のまま。新しい列は作らない | もう入っている（0章）。K1 で壊れていないことだけ確かめる |
+| D2 | 拾い出しの正本は `CaseKeywords` の1か所。取り込み・保存・AI・再抽出の全部が通る | 方針1・3。同じ文がどこから入っても同じ結果になる |
+| D3 | マスタの全分類を対象にする（tech だけでなく method・role・domain・qual も） | 「アジャイル」「スクラムマスター」「PM」は工程・役割にある。tech だけでは要求の例が拾えない |
+| D4 | 文章からは短い曖昧な別名を拾わない（`NO_PICK`）。行そのものが語なら拾う | 全分類にすると「IT」「運用」「カード」が普通の文に当たる。手で入れた語は今までどおり使える |
+| D5 | 「EGに確認」は行の単位。1語でも拾えた行は「EGに確認」にしない（拾い残しの部分は捨てる。元の行は `required_lines` に残る） | 要求の例（「PM機能を対応できる人材」→PM）どおり。行の残りを全部確認事項にすると、ほぼ全行が確認事項になる |
+| D6 | 「EGに確認」は1つの列（必須・尚可を分けない） | 要求は3分類（必須・尚可・EGに確認）。どちらの節の文だったかは元の行の列でわかる |
+| D7 | 新語の自動追加は「空白の無い英数字1語」だけ残す | 新しい技術名（例：Hotwire）は今までどおり拾いたい。文・日本語・複数語は追加しない（今のテスト EngineerDetailTest の動きを保つ） |
+| D8 | 元の行は保存する（`required_lines`・`preferred_lines`） | 文を必須の欄から外すと、条件の文が消える。AI の違いの表も行どうしで比べないと、毎回全部違って見える |
+| D9 | 「EGに確認」は EG の案件の画面と案内メールに出す。出すのは人が確かめた `confirm_items` だけで、`raw_text`・元の行は出さない。フォームに「会社名などは消して」と書く | 「EGに確認」は担当者が EG に確かめる項目なので、EG が見えないと意味が無い。SH の名前の漏れは、元の文を出さないことと、担当者の目で防ぐ |
+| D10 | 「その他」の分類は作らない | 単価・経験年数・開始・働き方・期間・場所はもう別の列にあり、「今までどおり」の要求どおり。マスタに当たらない条件は「EGに確認」で受けられる |
+| D11 | 「EGに確認」は採点しない。Matcher は読む所を `skill_items` に替えるだけ | 要求どおり。「AI」（2字）は今の `sameSkill` では完全一致だけになるので、`生成AI` の人には当たらない（今の「AI駆動開発経験」も誰にも当たっていなかったので、悪くはならない） |
+| D12 | マスタの「AI」は分類 `method`（データ・AI の並び）。別名は `AI駆動開発、AI活用、人工知能` | 生成AI・機械学習と同じ並び。tech 分類にしないので、本文全体の `detect` には入らない（本文の「OpenAI」などで尚可が増えない） |
+| D13 | 業務（`AI 活用` など）は今のまま並べて拾う。マスタの語と業務の両方に入ってもよい | 業務は別の重みで数えている（v0.5.0 の決定）。重ねないようにすると、業務の点数が変わる |
+| D14 | 読む所で「・」「/」を含むマスタの名前を割らない（`skill_items`） | 全分類にすると `運用・保守`・`教育・育成` が必須に入る。今の `parse_list` では「教育」（業界）と「育成」に割れる |
+| D15 | 既存の案件はコマンドで直す。`raw_text` からではなく、今の欄から作り直す | 人が直した欄・AI の結果を壊さない。公開版の書き換えは了承の後 |
+| D16 | 版は `v0.14.0` | 案件の項目と画面が変わる |
+
+## 5. 画面と操作（プレーヤーごと）
+
+| 立場 | 画面 | 見える・使う所 |
+|---|---|---|
+| 管理者 | 案件の登録（取り込み → 案件票）・編集 | 必須・尚可は名前、「EGに確認」の欄、「元の必須・尚可の文」。直して登録・保存 |
+| 管理者 | 案件の画面 | 必須・尚可・業務・EGに確認・元の文。AI の違いの表は行どうし |
+| 管理者 | 技術マスタ（`/admin/skills`） | 案件の文が「確認待ち」に増えなくなる。新しく入るのは英数字1語だけ（お知らせは今と同じ）。「AI」が増える（`park:skills-sync`） |
+| 管理者 | コマンド | `park:case-keywords`（手元で確かめる。公開版の `--apply` は了承の後） |
+| SES・担当者 | 案件の登録・編集（自社が持ち込み元の案件。`Perms::caseEdit`） | 管理者と同じ |
+| SES・担当者 | 案件の画面 | 管理者と同じ（他社の案件で編集できないときは、元の文は出ない） |
+| SES・担当者 | 案内メール（案件の画面・検索から） | 本文に「■ご確認ください：…」（空なら無し）。点数・「合う点」は必須・尚可・業務だけ |
+| EG | 案件の画面（`cases/show` の EG の表示） | 必須・尚可（名前）・業務・「EGに確認」。元の文・本文は出ない。相性の点数に「EGに確認」は入らない |
+| EG | 案内メール | 「■ご確認ください：…」。返信で答える（受信の紐付けは v0.12.0 のまま） |
+| EG | スキルの編集の「案件に合わせる」 | 必須・尚可が名前になるので、印が付きやすくなる（画面は変えない） |
+
+## 6. 境界の挙動
+
+| 場面 | 挙動 |
+|---|---|
+| 必須・尚可の節が無い本文 | 今と同じ（必須が空なら本文の技術を必須に）。行は空、EGに確認も空 |
+| 1行に複数の語（「Java、Spring、SQL」） | 全部拾う。重なりは1つ |
+| 同じ語が必須と尚可に | 必須だけ |
+| 「生成AIの活用経験」 | 最長一致で `生成AI`（`AI` は出ない） |
+| 「OpenAI API」 | `OpenAI API`（英数字の前後の条件で `AI` は当たらない） |
+| 「IT業界の経験3年」 | 何も拾わない → EGに確認（`IT` は NO_PICK） |
+| 手で「C」「R」「Julia」を必須に入れる | 行そのものが語なので、そのまま名前になる |
+| 手で「コミュニケーション能力」を必須に入れて保存 | 必須から外れて EGに確認へ |
+| 手で「Hotwire」 | マスタに確認待ちで足し、必須に残る。管理者にお知らせ（今と同じ） |
+| 「Good communication skills」 | 複数語なので足さない → EGに確認 |
+| EGに確認が空 | 画面に出ない。メールの行も無い |
+| 古い案件（行が無い・必須に文） | 画面はそのまま（文がチップで出る）。採点も今と同じ。コマンドで直すまで変わらない |
+| 本文を変えずに編集を保存 | 元の行は変えない（AI の行を残す） |
+| 本文を変えて保存 | 元の行を規則で読み直す。必須・尚可の欄は人の入力のまま（今と同じ）。AI の読み直しが入る（今と同じ） |
+| 権限が無い人が案件の画面 | 今と同じ（`Perms::caseView`）。元の文は `caseEdit` の人だけ |
+| AI の結果が何も読めない | 今と同じ（自動では入れない） |
+| 二重の送信・二重の保存 | 結果は同じ（拾い出しは何度通しても同じ。EGに確認は重ねない） |
+
+## 7. 了承・警告（Leo が TEZZO さんに）
+
+- W1（了承が要る）：公開版での `php artisan park:case-keywords --apply`（既存の案件の必須・尚可・EGに確認を書き換える）。先に `--apply` 無しの出力を見せる。
+- W2（報告）：公開版の反映（常時了承の範囲）で、`park:skills-sync` が技術マスタに「AI」を1行足す。全社のマスタが変わる（グループ単位の変更）。
+- W3（報告）：反映の後に登録・保存した案件は、必須・尚可が名前だけになり、文は「EGに確認」に移る。他社の担当者が案内する案件の点数・案内メールの文面も変わる（グループ単位の変更）。
+- W4（報告）：反映の時点で AI が作業中の案件は、結果の置き換えが新しい形になる（行・EGに確認も置き換わる）。
+
+## 8. 作業の手順（implementer 向け）
+
+段階1（データとマスタ）
+- マイグレーション `2026_11_21_000001_case_keywords.php`（2章）。
+- `SkillCatalogData` に `AI`（2章）。`php artisan park:skills-sync` のぶつかりが出ないことを確かめる。
+
+段階2（拾い出し）
+- `app/Support/CaseKeywords.php`（3-1）。`NO_PICK`・`SKIP` は定数。語の一覧は `SkillCatalog::map()` の元（`skill_terms` の名前・別名）から、長い順に並べて1回だけ作る（`SkillCatalog::forget` で一緒に消す）。
+- `app/helpers.php` に `skill_items`（3-2）。
+- `tests/Feature/V0140CaseKeywordsTest.php` の「拾い出し」のテストを先に書いて通す。
+
+段階3（取り込み・保存・AI）
+- `CaseParser::finishSkills`（3-3）。`Workflow::CASE_FIELDS`・`normalizeCaseSkills`・`saveCase`（3-4）。`CaseAi::apply`、`CaseController::aiView`・`import`（3-5・3-6）。
+- 今のテストのうち、文が必須に入ることを確かめていたものを新しい動きに書き直す（下の一覧）。テストの目的（R9・R10・業務の拾い出し・AI の自動差し替え）は変えない。
+  - `V050WorkExpTest`（207行）：`required_skills` は名前（例 `マネジメント、AIX` など、実際の結果で）、`required_lines` 相当（`finishSkills` の `required_lines`）に「進捗管理の経験」「AIX の運用」。
+  - `V060RuleTest`（171行）：同じ。158・163・167行は今のままで通るはず。
+  - `V060CaseAiTest`（220〜222行）：`required_lines` に「AWS の利用経験」、`preferred_lines` に「SQL の基本的な知識」、`required_skills` に `AWS`、`preferred_skills` に `SQL`、`required_skills` に `SQL` が無い。
+  - `V060ExtraTest`・`EngineerDetailTest`：今のままで通るか確かめ、通らなければ理由を見て、目的を変えずに直す。
+
+段階4（読む所・画面・メール）
+- `parse_list` → `skill_items` の置き換え（3-2 の一覧）。
+- `cases/form`・`cases/show`（3-6）。`CaseMail`・`CaseSearch`（3-7）。
+
+段階5（コマンドとマニュアル）
+- `park:case-keywords`（3-8）。
+- マニュアル（`resources/manuals/`。直したら Leo が 41_Park-Project の `04_Manuals` の写しを直す）：
+  - `admin.md`：156〜157行（マスタへの自動追加は英数字1語だけ、文は「EGに確認」）、201〜209行（取り込み・案件票の表に「EGに確認」「元の必須・尚可の文」）、212〜217行（AI の結果は EGに確認・元の文も置き換える）。
+  - `admin-steps.md`（111行あたり）・`ses.md`・`ses-steps.md`：同じ内容（案件の登録・編集の手順に「EGに確認を確かめ、会社名などを消す」）。
+  - `engineer.md`（110行）・`engineer-steps.md`（95行）：案件票と案内メールに「ご確認ください」があり、返信で答えること。点数には入らないこと。
+- `README.md`：コマンド `park:case-keywords` の説明（`--apply` は了承の後）。
+
+## 9. テスト（`tests/Feature/V0140CaseKeywordsTest.php`）
+
+拾い出し（`CaseKeywords::line`・`split`。`park:skills-sync` 済みの DB で）
+- K2：「アジャイルスクラムマスター」→ skills が `['アジャイル', 'スクラムマスター']`。「AI駆動開発経験」→ `AI` を含む（業務 `AI 活用` も出てよい）。「PM機能を対応できる人材」→ `PM`。「Java経験3年以上」→ `Java`。
+- K3：「技術的知見を有している人材」「社員相当としての活躍」→ skills・exp とも空。`split([...], [])` の `confirm` に2つとも入る。
+- 境界：「生成AIの活用経験」→ `生成AI` を含み `AI` を含まない。「OpenAI API を使う」→ `AI` を含まない。「IT業界の経験」→ skills 空。「運用保守の経験」→ `運用・保守`。行「C」→ `C`。
+- K13：`skill_items('教育・育成、CI/CD、Java/Spring')` → `['教育・育成', 'CI/CD', 'Java', 'Spring']`。
+
+取り込み（管理者で `/cases/import` に POST）
+- 本文「【案件名】テスト案件\n【必須】\n・アジャイルスクラムマスター\n・技術的知見を有している人材\n【尚可】\n・AI駆動開発経験\n・社員相当としての活躍」→ 画面の必須の欄に `アジャイル、スクラムマスター`、尚可に `AI`、「EGに確認」の欄に2行、知らせに「EGに確認」。DB は変わらない（`cases`・`skill_terms` の件数が同じ）。
+
+保存（K1・K4〜K8）
+- 管理者で `/cases` に POST（提案元 SES・プロバイダー・`raw_text`＝上の本文・`required_skills`＝`アジャイル、スクラムマスター、PM機能を対応できる人材`・`confirm_items`＝`技術的知見を有している人材`）→ `cases.raw_text` が本文と同じ。`required_skills` が `アジャイル、スクラムマスター、PM`。`confirm_items` に「技術的知見を有している人材」。`required_lines` に「アジャイルスクラムマスター」。`skill_terms` に「PM機能を対応できる人材」「技術的知見を有している人材」が無い（`source=auto` が増えない）。
+- SES（担当者）で同じ POST → 同じ結果（提案元は自社）。
+- `required_skills`＝`PHP、Hotwire、コミュニケーション能力` → `skill_terms` に `Hotwire`（auto）、必須は `PHP、Hotwire`、`confirm_items` に「コミュニケーション能力」、管理者にお知らせ（Hotwire だけ）。
+- 本文を変えずに編集を保存 → `required_lines` が変わらない。本文を変えて保存 → 新しい本文の行になる。
+
+AI（K5・K12）
+- `CaseAi::apply` に AI の行「AI駆動開発経験」「社員相当としての活躍」を渡す → `preferred_skills`（または必須）に `AI`、`confirm_items` に「社員相当としての活躍」、行の列が AI の行。
+- 結果が `done` の案件の画面（作った担当者）で、違いの表の「今」が `required_lines` の行。
+
+画面と権限（K9・K10）
+- EG（案内を受けた人）で `/cases/{id}` → 「EGに確認」と項目が出る。`required_lines` の文・`raw_text` の固有の文（本文にだけ書いた架空の会社名）が出ない。
+- 他社の SES で開ける場合（`caseView`）でも「元の必須・尚可の文」が出ない。
+- 担当者が案内メールを送る（`CaseMail`）→ `outbox` の本文に「■ご確認ください：技術的知見を有している人材」。`confirm_items` が空の案件では「ご確認ください」の行が無い。検索からの案内（`CaseSearch::body`）も同じ。
+
+採点（K11）
+- 同じエンジニアで、`confirm_items` だけ違う2つの案件の `Matcher::score` が同じ点。単価・経験年数・開始・働き方の点が今と同じ（今のテストが通る）。
+
+コマンド（K14）
+- 必須に文が入った古い形の案件を作り、`park:case-keywords` → DB が変わらず、出力に「今 → 新しい」。`--apply` → 必須が名前、EGに確認に文、`required_lines` に今の項目、`audit_log` に `case-keywords`。`required_lines` がある案件は対象外（`--id` を除く）。
+- migration の後、既存の案件の `required_skills` が変わっていない。
+
+全体（K15）：`php artisan test` が全部通る。
+
+## 10. 次の版（今回は作らない）
+
+- 「EGに確認」への EG の答えを画面で記録する（今は返信メールで受ける）。
+- 面談の想定質問（`Qa`）に「EGに確認」を入れる。
+- 「AI」2字と `生成AI` などをゆるく突き合わせる（`sameSkill` の見直し）。
+- 手元の AI のプロンプトで、必須・尚可・EGに確認を直接分けてもらう。
+
 # PLAN：プロバイダーへの返信（R16）と、合否の登録（R17 の最小）（v0.13.0。2026-11-20）
 
 > **これが今の計画**。前の計画（v0.12.0 以前）は、この節の下に続く。**Leo が `git show HEAD:PLAN.md >> PLAN.md` で、このファイルの末尾に戻す**（planner は編集の道具が無く、全体を書き直さなかったため）。戻したあと `git diff --stat PLAN.md` が「追加だけ（削除 0）」になることを確かめる。

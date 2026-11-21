@@ -50,6 +50,15 @@ class Matcher
         $k = norm_skill($name);
         if (isset($idx[$k])) return $idx[$k];
         foreach ($idx as $key => $s) if (self::sameSkill((string) $key, $k)) return $s;
+        // 案件の名前が「運用・保守」のように「・」「/」を含むときは、断片でも探す（経歴側の parse_list と同じ割り方）
+        if (preg_match('/[・\/／]/u', $name)) {
+            foreach (parse_list($name) as $part) {
+                $pk = norm_skill($part);
+                if ($pk === $k || $pk === '') continue;
+                if (isset($idx[$pk])) return $idx[$pk];
+                foreach ($idx as $key => $s) if (self::sameSkill((string) $key, $pk)) return $s;
+            }
+        }
         return null;
     }
 
@@ -71,7 +80,7 @@ class Matcher
         $prefExp = CaseExp::split($c->preferred_exp ?? null);
         if ($reqExp || $prefExp) $exp ??= SkillChecks::expMany([$e->id])[$e->id] ?? [];
 
-        $req = parse_list($c->required_skills);
+        $req = skill_items($c->required_skills);
         if ($req || $reqExp) {
             $hit = 0;
             foreach ($req as $r) {
@@ -85,7 +94,7 @@ class Matcher
             $score += $W['required'] * $hit / (count($req) + count($reqExp));
         } else $score += $W['required'] * 0.5;
 
-        $pref = parse_list($c->preferred_skills);
+        $pref = skill_items($c->preferred_skills);
         if ($pref || $prefExp) {
             $hit = 0;
             foreach ($pref as $r) if (self::hasSkill($idx, $r)) { $hit++; $reasons[] = "尚可 $r"; }

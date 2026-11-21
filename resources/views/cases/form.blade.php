@@ -15,8 +15,16 @@
 @if($sesList && (!isset($c->id) || empty($c->source_ses_id)))<x-field label="提案元 SES（必須）" name="source_ses_id" type="select" :options="$sesList" blank="（選んでください）" :value="$c->source_ses_id ?? null" required hint="案内は、ここで選んだ SES の担当者が行います。管理者は案件を発信しません。" />@else<div></div>@endif
 <x-field label="金額（万円／月）" name="price" type="number" step="0.5" :value="num_disp($c->price ?? null)" hint="SES が元請けから受け取る月額。成功報酬の基準になります。" />
 <x-field label="金額のメモ" name="price_note" :value="$c->price_note ?? null" placeholder="例：スキル見合い、精算 140-180h" />
-<x-field label="必須スキル" name="required_skills" type="textarea" rows="2" :value="$c->required_skills ?? null" placeholder="Java、Spring Boot、SQL（「、」区切り）" />
-<x-field label="尚可スキル" name="preferred_skills" type="textarea" rows="2" :value="$c->preferred_skills ?? null" placeholder="AWS、Docker" />
+<x-field label="必須スキル" name="required_skills" type="textarea" rows="2" :value="$c->required_skills ?? null" placeholder="Java、Spring Boot、SQL（「、」区切り）" hint="技術マスタの名前が入ります。文を書いて保存すると、マスタの語を拾い、拾えない文は「EGに確認」に移します。" />
+<x-field label="尚可スキル" name="preferred_skills" type="textarea" rows="2" :value="$c->preferred_skills ?? null" placeholder="AWS、Docker" hint="必須と同じです。" />
+<x-field label="EGに確認（1行に1つ）" name="confirm_items" type="textarea" rows="3" :value="$c->confirm_items ?? null" cls="span2" hint="マスタに無い条件です。点数には使いません。エンジニアの案件の画面と案内メールに、この文のまま出ます。会社名などは消してください。" />
+@if(!empty($c->required_lines) || !empty($c->preferred_lines))
+{{-- 取り込み・保存のときに読んだ、元の必須・尚可の文（読むだけ。送らない） --}}
+<details class="span2"><summary>元の必須・尚可の文</summary>
+@if(!empty($c->required_lines))<p><b>必須</b><br>{!! nl2br(e($c->required_lines)) !!}</p>@endif
+@if(!empty($c->preferred_lines))<p><b>尚可</b><br>{!! nl2br(e($c->preferred_lines)) !!}</p>@endif
+</details>
+@endif
 @php
     // 業務経験・業務領域（必須・尚可）。今の選び方：項目の名前 → required／preferred
     $expReq = \App\Support\CaseExp::split($c->required_exp ?? null);

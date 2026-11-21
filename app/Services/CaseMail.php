@@ -13,7 +13,7 @@ class CaseMail
     const REPLIES = ['none' => '返事なし', 'interested' => '応募したい', 'question' => '質問あり', 'declined' => '見送り'];
     // 送り方（case_mails.mode）：same 同じ内容／each 個別／search エンジニア検索（v0.7.0）
     const MODES = ['same' => '同じ内容', 'each' => '個別', 'search' => 'エンジニア検索'];
-    const PLACEHOLDERS = ['{呼び名}', '{案件名}', '{単価}', '{開始}', '{場所}', '{働き方}', '{必須}', '{合う点}', '{送り主}', '{案件ID}'];
+    const PLACEHOLDERS = ['{呼び名}', '{案件名}', '{単価}', '{開始}', '{場所}', '{働き方}', '{必須}', '{確認事項}', '{合う点}', '{送り主}', '{案件ID}'];
 
     // 誰が案内できるか：提案元 SES の担当者だけ（v0.11.0 から、管理者は案内できない。
     // 管理者が担当者を兼ねているときは、担当者の立場でだけ案内できる）
@@ -61,16 +61,21 @@ class CaseMail
 
     public static function defaultBody(): string
     {
-        return "{呼び名} さん\n\nお疲れさまです。{送り主}です。\nあなたに合いそうな案件が届いたので、ご案内します。\n\n■案件：{案件名}\n■案件 ID：{案件ID}\n■単価：{単価}\n■開始：{開始}\n■場所・働き方：{場所}／{働き方}\n■必須：{必須}\n■あなたに合う点：{合う点}\n\nご興味があれば、このメールに返信してください（条件で気になる点があれば、それも一緒に）。\n見送る場合も、理由をひとこと返信いただけると、次のご案内の参考にします。";
+        return "{呼び名} さん\n\nお疲れさまです。{送り主}です。\nあなたに合いそうな案件が届いたので、ご案内します。\n\n■案件：{案件名}\n■案件 ID：{案件ID}\n■単価：{単価}\n■開始：{開始}\n■場所・働き方：{場所}／{働き方}\n■必須：{必須}\n■ご確認ください：{確認事項}\n■あなたに合う点：{合う点}\n\nご興味があれば、このメールに返信してください（条件で気になる点があれば、それも一緒に）。\n見送る場合も、理由をひとこと返信いただけると、次のご案内の参考にします。";
     }
 
     public static function render(string $tpl, object $c, object $e, array $score, bool $own, string $from): string
     {
-        return strtr($tpl, [
+        // 「EGに確認」（人が確かめた文だけ。本文・元の行は入れない）。無ければ、■ご確認ください の行ごと消す
+        $confirm = implode('、', array_filter(array_map('trim', preg_split('/\R/u', (string) ($c->confirm_items ?? '')))));
+        $out = strtr($tpl, [
             '{呼び名}' => self::callName($e, $own), '{案件名}' => $c->title, '{単価}' => $c->price ? man($c->price) : '相談',
             '{開始}' => $c->start_date ? fmt_date($c->start_date) : '相談', '{場所}' => $c->location ?: '—', '{働き方}' => lbl('workStyle', $c->work_style),
-            '{必須}' => implode('、', parse_list($c->required_skills)) ?: '—', '{合う点}' => implode('、', array_slice($score['reasons'], 0, 4)) ?: '—', '{送り主}' => $from, '{案件ID}' => ($c->code ?? null) ?: '—',
+            '{必須}' => implode('、', skill_items($c->required_skills)) ?: '—', '{合う点}' => implode('、', array_slice($score['reasons'], 0, 4)) ?: '—', '{送り主}' => $from, '{案件ID}' => ($c->code ?? null) ?: '—',
+            '{確認事項}' => $confirm,
         ]);
+        if ($confirm === '') $out = preg_replace('/^■ご確認ください：[ \x{3000}]*(?:\R|$)/mu', '', $out) ?? $out;
+        return $out;
     }
 
     // 送る前の提案（送り過ぎ・条件のずれ・ほかの候補）

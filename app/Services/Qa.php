@@ -55,7 +55,7 @@ class Qa
                 self::projLine($latest).'。担当工程：'.($latest->phases ?: '（経験票に工程を書いておく）').'。'
                 .($latest->achievements ? '成果は数字で：'.$latest->achievements : '成果を数字で1つ言えるようにしておく（件数・時間・割合など）。'));
         }
-        foreach (parse_list($c->required_skills) as $r) {
+        foreach (skill_items($c->required_skills) as $r) {
             $s = Matcher::hasSkill($idx, $r);
             $ps = self::projectsUsing($projects, $r);
             if ($s) {
@@ -67,7 +67,7 @@ class Qa
                     '経験が無い・浅い場合は、正直に答える。近い技術の経験と、自分で学んでいること（期間・内容）を具体的に言う。盛らない。');
             }
         }
-        foreach (parse_list($c->preferred_skills) as $r) {
+        foreach (skill_items($c->preferred_skills) as $r) {
             if (Matcher::hasSkill($idx, $r)) {
                 $ps = self::projectsUsing($projects, $r);
                 $add("尚可：$r", "$r はどの程度触っていますか。", '経験した範囲を短く。'.($ps ? self::projLine($ps[0]) : ''));

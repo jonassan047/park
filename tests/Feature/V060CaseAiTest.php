@@ -217,9 +217,13 @@ class V060CaseAiTest extends TestCase
         $id = $this->answer(...$this->sameCountAnswer());
         $this->assertSame('applied', $this->jobStatus($id));
         $c = DB::table('cases')->find($cid);
-        $this->assertStringContainsString('AWS の利用経験', $c->required_skills);
-        $this->assertStringContainsString('SQL の基本的な知識', $c->preferred_skills);
-        $this->assertStringNotContainsString('SQL の基本的な知識', $c->required_skills);
+        // 必須・尚可の欄は AI の結果（技術マスタの名前）。自動では、元の文（行の列）は置き換えず、登録のときのまま（v0.14.0）
+        $this->assertStringContainsString('Java での開発経験が3年以上', $c->required_lines);
+        $this->assertStringContainsString('SQL の基本的な知識', $c->required_lines);
+        $this->assertStringContainsString('AWS の利用経験', $c->preferred_lines);
+        $this->assertStringContainsString('AWS', $c->required_skills);
+        $this->assertStringContainsString('SQL', $c->preferred_skills);
+        $this->assertStringNotContainsString('SQL', $c->required_skills);
         $this->assertEquals($price, $c->price);
         $this->assertDatabaseHas('audit_log', ['action' => 'ai-case-auto']);
         $this->assertSame(0, $this->aiNotices($cid)->count());
@@ -240,7 +244,9 @@ class V060CaseAiTest extends TestCase
         // 担当者が「AI の結果を使う」
         $this->as($this->staff())->post("/ai-jobs/$id/apply-case")->assertRedirect("/cases/$cid#ai");
         $this->assertSame('applied', $this->jobStatus($id));
-        $this->assertStringContainsString('AWS の利用経験', DB::table('cases')->where('id', $cid)->value('required_skills'));
+        $n = DB::table('cases')->find($cid);
+        $this->assertStringContainsString('AWS', $n->required_skills); // 欄は名前だけ（v0.14.0）
+        $this->assertStringContainsString('AWS の利用経験', $n->required_lines); // 人が選ぶ経路は、元の行も置き換わる
         $this->assertDatabaseHas('audit_log', ['action' => 'ai-case-apply']);
 
         // 別の案件で「今のままにする」
