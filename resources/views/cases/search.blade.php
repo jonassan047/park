@@ -8,9 +8,10 @@
 </x-card>
 </div><div>
 <form method="post" action="{{ url('/cases/'.$c->id.'/search') }}">@csrf
-<p class="muted">メールから抜き出した条件です。いらない項目は「外す」にチェック、足したい項目は下の欄に書いてください。ここで変えても、案件そのものの必須・尚可は変わりません（この検索にだけ使います）。</p>
 @foreach(['req' => '必須', 'pref' => '尚可'] as $side => $label)
 <x-card :title="$label">
+<p class="muted">検索条件から外す項目にチェックを入れてください。足したい項目は下の欄に書いてください。ここで変えても、案件そのものの必須・尚可は変わりません（この検索にだけ使います）。</p>
+<p><label><input type="checkbox" onchange="var c=this.checked;this.form.querySelectorAll('input[name=&quot;off[{{ $side }}][]&quot;]').forEach(function(x){x.checked=c})"> すべて外す</label></p>
 <x-table :head="['項目', '', '外す']" :count="count($cond[$side])" :empty="$label.'の項目はありません。'">
 @foreach($cond[$side] as $it)<tr>
 <td>{{ $it['name'] }}@if($it['kind'] === 'exp') <span class="muted">（業務）</span>@endif</td>
