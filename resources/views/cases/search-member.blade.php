@@ -1,6 +1,7 @@
 @php $u = auth()->user(); $e = $row['e']; $j = $row['j']; @endphp
 @extends('layouts.app', ['title' => 'エンジニアの詳細：'.$row['name'], 'wide' => true])
 @section('content')
+<p class="muted">案件ID：<x-code :v="$c->code" />　{{ $c->title }}</p>
 <div class="cols"><div>
 <x-card :title="$row['name']">
 <x-slot:actions><a class="btn ghost small" href="{{ url('/searches/'.$s->id) }}">一覧に戻る</a></x-slot:actions>

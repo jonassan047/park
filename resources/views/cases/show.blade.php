@@ -64,9 +64,9 @@
 {{-- 案内メールの記録：提案元 SES の担当者は操作もできる。管理者は読むだけ（v0.11.0） --}}
 @if($canSeeMails)
 <x-card title="案内メール">
-<x-slot:actions>@if($canMail && $c->status === 'open')<a class="btn small" href="{{ url('/cases/'.$c->id.'/search') }}">エンジニアに案内する</a>@endif</x-slot:actions>
+<x-slot:actions>@if($canMail && $c->status === 'open')<a class="btn small" href="{{ url('/cases/'.$c->id.'/search') }}">エンジニアに提案する</a>@endif</x-slot:actions>
 <div id="mails"></div>
-<x-table :head="$canMail ? ['エンジニア', '送った日', '返事', '先方の結果', '記録する', '案件をくれた先へ返す書類'] : ['エンジニア', '送った日', '返事', '先方の結果']" :count="$mails->count()" :empty="$canMail ? 'まだ送っていません。「エンジニアに案内する」で、候補を絞ってメールを送れます。' : 'まだ送っていません。案内は、提案元 SES の担当者が行います。'">
+<x-table :head="$canMail ? ['エンジニア', '送った日', '返事', '先方の結果', '記録する', '案件をくれた先へ返す書類'] : ['エンジニア', '送った日', '返事', '先方の結果']" :count="$mails->count()" :empty="$canMail ? 'まだ送っていません。「エンジニアに提案する」で、候補を絞ってメールを送れます。' : 'まだ送っていません。案内は、提案元 SES の担当者が行います。'">
 @foreach($mails as $m)<tr>
 <td>@if($m->route === 'own' || $u->role === 'admin'){{ $m->name }} <x-code :v="$m->eg_code" />@else{{ $m->initials ?: '—' }} <span class="muted">（{{ $m->ses_name }}・PARK から）</span>@endif<div class="muted">{{ $m->score }}点・{{ \App\Services\CaseMail::MODES[$m->mode] ?? '同じ内容' }}</div>
 @if(!empty($inboundN[$m->engineer_id]))<div><a href="{{ url('/inbound?case='.$c->id.'&eg='.$m->engineer_id) }}">返信メール {{ $inboundN[$m->engineer_id] }} 件</a></div>@endif
@@ -121,15 +121,15 @@
   <x-card title="状態の変更">@foreach(['open', 'filled', 'closed'] as $s)@if($s !== $c->status)<x-post :action="'/cases/'.$c->id.'/status'" :label="lbl('caseStatus', $s).'にする'" :fields="['status' => $s]" cls="ghost small" /> @endif @endforeach</x-card>
 
 @elseif($u->role === 'ses')
-  <x-card title="貴社のエンジニアとの相性">
+  <x-card title="エンジニアとの相性">
   @if($c->status !== 'open')<p class="muted">募集を終えた案件です。</p>
   @else
-  @if($canMail)<p class="muted">案内は「エンジニアに案内する」から、メールで送ります（返事のリンク付き。送った記録と返事は、左の「案内メール」に出ます）。</p>
-  <p><a class="btn" href="{{ url('/cases/'.$c->id.'/search') }}">エンジニアに案内する</a></p>
+  @if($canMail)<p class="muted">提案は「エンジニアに提案する」から、メールで送ります（返事のリンク付き。送った記録と返事は、左の「案内メール」に出ます）。</p>
+  <p><a class="btn" href="{{ url('/cases/'.$c->id.'/search') }}">エンジニアに提案する</a></p>
   @else<p class="muted">{{ $c->ses_name ? 'この案件の提案元は、ほかの SES です。合う方がいれば「推薦する」で、提案元 SES に知らせます（名前は伏せて伝えます）。' : 'この案件は、提案元 SES がまだ決まっていません。合う方がいれば「推薦する」で、管理者に知らせます（名前は伏せて伝えます）。' }}</p>@endif
-  <x-table :head="['エンジニア', '点数', '足りない点', '']" :count="count($rows)" empty="登録しているエンジニアがいません。">
+  <x-table :head="['エンジニア', '点数', 'マッチした点', '']" :count="count($rows)" empty="登録しているエンジニアがいません。">
   @foreach($rows as $row)<tr><td><a href="{{ url('/engineers/'.$row['e']->id) }}">{{ $row['e']->name }}</a> <x-code :v="$row['e']->code" /><div class="muted">{{ lbl('engStatus', $row['e']->status) }}</div></td>
-    <td><x-score :n="$row['score']" /></td><td><small class="bad-text">{{ implode('、', $row['missing']) }}</small></td>
+    <td><x-score :n="$row['score']" /></td><td><small>{{ implode('、', $row['reasons'] ?? []) ?: '—' }}</small></td>
     <td>@if(in_array($row['e']->id, $applied))<span class="muted">応募済み</span>@elseif(isset($offered[$row['e']->id]))<span class="muted">案内済み</span>
     @elseif(!$canMail)<x-post :action="'/cases/'.$c->id.'/recommend'" label="推薦する" :fields="['engineer_id' => $row['e']->id]" cls="ghost small" />@endif
     @if(in_array($row['e']->id, $applied) || isset($offered[$row['e']->id]))<a class="btn ghost small" href="{{ url('/cases/'.$c->id.'/threads/'.$row['e']->id) }}">やり取り</a>@endif</td></tr>@endforeach

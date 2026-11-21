@@ -1,5 +1,6 @@
 @extends('layouts.app', ['title' => 'エンジニア検索：'.$c->title, 'wide' => true])
 @section('content')
+<p class="muted">案件ID：<x-code :v="$c->code" />　{{ $c->title }}</p>
 <div class="cols wideside"><div>
 <x-card title="元のメール">
 @if(trim((string) $c->raw_text) !== '')<pre class="mailbody">{{ $c->raw_text }}</pre>

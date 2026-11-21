@@ -1,5 +1,6 @@
 @extends('layouts.app', ['title' => 'エンジニアの一覧：'.$c->title, 'wide' => true])
 @section('content')
+<p class="muted">案件ID：<x-code :v="$c->code" />　{{ $c->title }}</p>
 @unless($canSend)<p class="note">いまはメールを「保存のみ」にしています。送った記録は残りますが、実際には届きません。</p>@endunless
 <form method="post" action="{{ url('/searches/'.$s->id) }}">@csrf
 <x-card>
