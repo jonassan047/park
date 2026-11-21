@@ -1,7 +1,7 @@
 @php $u = auth()->user(); @endphp
 @extends('layouts.app', ['title' => $c->title, 'wide' => true])
 @section('content')
-<div class="cols {{ $u->role === 'eg' ? '' : 'wideside' }}"><div>
+<div class="cols"><div>
 <x-card title="案件票">
 <x-slot:actions>
 @if(\App\Support\Perms::caseEdit($u, $c))<a class="btn small" href="{{ url('/cases/'.$c->id.'/edit') }}">編集</a>@endif
