@@ -1,5 +1,5 @@
 @php $u = auth()->user(); $yes = fn ($v) => $v ? '○' : new \Illuminate\Support\HtmlString('<span class="bad-text">要確認</span>'); @endphp
-@extends('layouts.app', ['title' => '選考：'.$a->title, 'wide' => true])
+@extends('layouts.app', ['title' => '選考：'.trim($a->case_code.' '.$a->title), 'wide' => true])
 @section('content')
 <div class="cols"><div>
 <x-card title="応募の内容"><dl class="dl">
@@ -14,6 +14,12 @@
 <dt>スキルシート</dt><dd><a href="{{ $sheetUrl }}" target="_blank">この案件に合わせたスキルシート</a></dd>
 @if($contract)<dt>契約</dt><dd><a href="{{ url('/contracts/'.$contract->id) }}">{{ fmt_date($contract->start_date) }}〜{{ fmt_date($contract->end_date) }}（{{ man($contract->price) }}）</a> <x-code :v="$contract->code" /></dd>@endif
 </dl></x-card>
+
+@if($cm)<x-card title="プロバイダーへの返信">
+<p class="muted">応募したことを、案件をくれたプロバイダーにメールで伝えます。下書きを確かめてから送ります（この画面の記録だけでは、先方には届きません）。</p>
+@if($pm)<a class="btn small" href="{{ url('/provider-mails/'.$pm->id) }}">{{ $pm->status === 'draft' ? '下書きを開く' : 'プロバイダーへの返信を見る' }}</a>@else<x-post :action="'/case-mails/'.$cm->id.'/provider-draft'" label="プロバイダーへの返信を作る" />@endif
+</x-card>
+@endif
 
 <x-card title="面談"><x-table :head="['回', '日時', '場所', '結果', '']" :count="$ivs->count()" empty="まだ面談はありません。">
 @foreach($ivs as $iv)<tr><td>{{ $iv->round }}回目</td><td>{{ fmt_dt($iv->scheduled_at) }}</td><td>{{ $iv->place }}</td><td>{{ badge('ivResult', $iv->result) }}</td><td><a href="{{ url('/interviews/'.$iv->id) }}">Q&A・結果</a></td></tr>@endforeach

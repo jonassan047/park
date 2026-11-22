@@ -25,7 +25,13 @@ class PipelineController extends Controller
     public function show(Request $r, int $id)
     {
         $a = $this->app($r, $id);
+        // この応募のもとになった案内メール（あれば）。提案元の担当者には、そこからプロバイダーへの返信を作るボタンを出す
+        $cm = DB::table('case_mails')->where('case_id', $a->case_id)->where('engineer_id', $a->engineer_id)->orderByDesc('id')->first();
+        $case = $cm ? DB::table('cases')->find($a->case_id) : null;
+        $canProvider = $cm && $case && \App\Services\CaseMail::canSend($r->user(), $case);
         return view('pipeline.application', [
+            'cm' => $canProvider ? $cm : null,
+            'pm' => $canProvider ? DB::table('provider_mails')->where('case_mail_id', $cm->id)->orderByDesc('id')->first() : null,
             'a' => $a, 'open' => in_array($a->status, self::OPEN),
             'events' => DB::table('application_events as ev')->leftJoin('users as u', 'u.id', '=', 'ev.user_id')->where('application_id', $id)->select('ev.*', 'u.name')->orderBy('ev.id')->get(),
             'ivs' => DB::table('interviews')->where('application_id', $id)->orderBy('round')->get(),
