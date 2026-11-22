@@ -77,7 +77,7 @@ class CaseMailController extends Controller
         }
         if (!$items) return $this->go("/cases/$id/mail", '送る相手がいません。', 'bad');
         $n = CM::send($u, $c, $items, $r->input('mode') === 'each' ? 'each' : 'same');
-        return $this->go("/cases/$id", "{$n}名に案内メールを送りました。返事が来たら、下の「案内メール」に記録してください。");
+        return $this->go("/cases/$id", "{$n}名に案内メールを送りました。返事が来たら、下の「案内済メール」に記録してください。");
     }
 
     // 5. 返事の記録（SES に直接来た返信を入れる）

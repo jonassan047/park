@@ -6,7 +6,7 @@ $newLayout = $canMail;
 @extends('layouts.app', ['title' => $c->title, 'wide' => true])
 @section('content')
 @if($newLayout)
-{{-- 左：メール本文 → 案内メール → プロバイダーへの返信 → この案件への応募。右：AI の読み直し → エンジニアを検索 --}}
+{{-- 上：左＝メール本文 → エンジニアとのやり取り、右＝AI の読み直し → エンジニアを検索。その下に、左右にまたがって 案内済メール → プロバイダーへの返信 → この案件への応募（記録ができてから出る） --}}
 <div class="cols"><div>
 <x-card title="メール本文">
 <x-slot:actions>
@@ -20,14 +20,14 @@ $newLayout = $canMail;
 @include('cases._card_case')
 </details>
 </x-card>
-@include('cases._card_mails')
-@include('cases._card_provider')
-@include('cases._card_apps')
 @include('cases._card_threads')
 </div><div>
 @include('cases._card_ai')
 @include('cases._card_keywords')
 </div></div>
+@include('cases._card_mails')
+@include('cases._card_provider')
+@include('cases._card_apps')
 @else
 <div class="cols"><div>
 <x-card title="案件票">
@@ -37,13 +37,8 @@ $newLayout = $canMail;
 @include('cases._card_case')
 </x-card>
 @include('cases._card_ai')
-@if($canSeeMails)
-@include('cases._card_mails')
-@include('cases._card_provider')
-@endif
 @if($u->role !== 'eg')
 @include('cases._card_threads')
-@include('cases._card_apps')
 @endif
 </div><div>
 
@@ -109,6 +104,13 @@ $newLayout = $canMail;
   </x-card>
 @endif
 </div></div>
+@if($canSeeMails)
+@include('cases._card_mails')
+@include('cases._card_provider')
+@endif
+@if($u->role !== 'eg')
+@include('cases._card_apps')
+@endif
 @endif
 <p class="backrow"><a class="btn ghost" href="{{ list_url('cases') }}">案件の一覧に戻る</a></p>
 @endsection

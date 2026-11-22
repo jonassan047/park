@@ -130,7 +130,7 @@ class V0150CaseDetailSelectTest extends TestCase
         $cid = $this->mkCase();
         foreach ([self::SES1, self::STAFF] as $who) {
             $r = $this->as($who)->get("/cases/$cid")->assertOk();
-            $r->assertSee('メール本文')->assertSee('架空のメール本文ABC')->assertSee('案件票（読み取った項目）')->assertDontSee('案内メール')->assertDontSee('プロバイダーへの返信')->assertDontSee('この案件への応募') // 送る前・返信前・応募前は出さない
+            $r->assertSee('メール本文')->assertSee('架空のメール本文ABC')->assertSee('案件票（読み取った項目）')->assertDontSee('案内済メール')->assertDontSee('プロバイダーへの返信')->assertDontSee('この案件への応募') // 送る前・返信前・応募前は出さない
                 ->assertSee('AI の読み直し')->assertSee('エンジニアを検索')->assertSee('id="keywords"', false)->assertSee('エンジニアを検索')
                 ->assertSee('エンジニアに確認')->assertSee('稼働開始はいつからですか')->assertSee('追加');
             $html = $r->getContent();
