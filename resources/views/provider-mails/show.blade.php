@@ -50,8 +50,8 @@ $mailState = ['saved' => '保存のみ（送信の設定が無い）', 'queued' 
 </x-card>
 @endif
 
-@if($cm)
-<x-card title="先方の結果" id="result">
+@if($cm && $pm->status === 'sent')
+<x-card title="プロバイダーからの結果報告" id="result">
 @include('cases._result', ['m' => $cm, 'canEdit' => $canEdit, 'back' => 'pm', 'backId' => $pm->id])
 </x-card>
 @endif
