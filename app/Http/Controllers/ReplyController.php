@@ -14,7 +14,7 @@ class ReplyController extends Controller
     private function load(string $token)
     {
         $m = DB::table('case_mails as m')->join('cases as c', 'c.id', '=', 'm.case_id')->join('engineers as e', 'e.id', '=', 'm.engineer_id')
-            ->where('m.token', $token)->select('m.*', 'c.title', 'c.status as case_status', 'e.name as eg_name', 'e.nickname', 'e.status as eg_status', 'e.suspended_at as eg_suspended_at')->first();
+            ->where('m.token', $token)->select('m.*', 'c.title', 'c.code as case_code', 'c.status as case_status', 'e.name as eg_name', 'e.nickname', 'e.status as eg_status', 'e.suspended_at as eg_suspended_at')->first();
         abort_unless($m, 404);
         return $m;
     }

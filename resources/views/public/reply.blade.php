@@ -3,7 +3,7 @@
 @section('content')
 <x-card><form method="post" action="{{ url('/r/'.$token) }}" class="narrow">@csrf
 @if($m->case_status !== 'open')<p class="note">この案件は、すでに募集を終えています。ご返事は担当者に届きます。</p>@endif
-<p>案件：<b>{{ $m->title }}</b></p>
+<p>案件：<b>{{ $m->case_code }} {{ $m->title }}</b></p>
 @if($answer === 'question')<p class="note">PARK にログインすると、<a href="{{ url('/cases/'.$m->case_id) }}">案件の画面</a>から、担当者とやり取りできます（案件についての質問は、そちらが早く届きます）。</p>@endif
 @if($confirm)
 {{-- 検索から送った案内の「ご確認ください」：お答えが必須 --}}
