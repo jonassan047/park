@@ -2,14 +2,14 @@
 {{-- 案内メールの記録：提案元 SES の担当者は操作もできる。管理者は読むだけ（v0.11.0）。追加の宛先は v0.15.0 --}}
 <x-card title="案内済メール">
 <div id="mails"></div>
-<x-table :head="$canMail ? ['エンジニア', '送った日', '返事', '先方の結果', '記録する', '案件をくれた先へ返す書類'] : ['エンジニア', '送った日', '返事', '先方の結果']" :count="$mails->count()" :empty="$canMail ? 'まだ送っていません。右の「エンジニアを検索」から、候補を絞ってメールを送れます。' : 'まだ送っていません。案内は、提案元 SES の担当者が行います。'">
+<x-table :head="$canMail ? ['エンジニア', '送った日', '返事', 'プロバイダーからの結果報告', '記録する', '案件をくれた先へ返す書類'] : ['エンジニア', '送った日', '返事', 'プロバイダーからの結果報告']" :count="$mails->count()" :empty="$canMail ? 'まだ送っていません。右の「エンジニアを検索」から、候補を絞ってメールを送れます。' : 'まだ送っていません。案内は、提案元 SES の担当者が行います。'">
 @php $replyLabels = array_merge(\App\Services\CaseMail::REPLIES, ['interested' => '応募する']); @endphp
 @foreach($mails as $m)<tr>
 <td>@if($m->route === 'own' || $u->role === 'admin'){{ $m->name }} <x-code :v="$m->eg_code" />@else{{ $m->initials ?: '—' }} <span class="muted">（{{ $m->ses_name }}・PARK から）</span>@endif<div class="muted">{{ $m->score }}点・{{ \App\Services\CaseMail::MODES[$m->mode] ?? '同じ内容' }}</div>
 @if(!empty($inboundN[$m->engineer_id]))<div><a href="{{ url('/inbound?case='.$c->id.'&eg='.$m->engineer_id) }}">返信メール {{ $inboundN[$m->engineer_id] }} 件</a></div>@endif</td>
 <td>{{ fmt_dt($m->sent_at) }}</td>
 <td>{{ $replyLabels[$m->reply] ?? $m->reply }}@if($m->reply_note)<div class="muted">{{ $m->reply_note }}</div>@endif @if($m->reply_via === 'app')<div class="muted">（本人が画面で）</div>@endif</td>
-<td>@include('cases._result', ['m' => $m, 'canEdit' => $canMail])</td>
+<td>@if(isset($providerMails) && $providerMails->where('case_mail_id', $m->id)->where('status', 'sent')->count())@include('cases._result', ['m' => $m, 'canEdit' => $canMail])@else<span class="muted">プロバイダーへの返信を送ると、登録できます。</span>@endif</td>
 @if($canMail)<td>@if($m->route === 'own')<form method="post" action="{{ url('/case-mails/'.$m->id.'/reply') }}" class="inline">@csrf
 <select name="reply" autocomplete="off">@foreach($replyLabels as $k => $t)<option value="{{ $k }}" @selected($m->reply === $k)>{{ $t }}</option>@endforeach</select>
 <input name="note" value="{{ $m->reply_note }}" placeholder="返信の要点"><button class="btn ghost small">記録</button></form>@else<span class="muted">本人が PARK の画面で返事します</span>@endif</td>

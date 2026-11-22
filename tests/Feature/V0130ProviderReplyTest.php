@@ -470,7 +470,7 @@ class V0130ProviderReplyTest extends TestCase
     public function test_case_page_shows_provider_card_and_result_for_staff_and_admin(): void
     {
         $this->sendMail(self::SES1, $this->eg1);
-        $this->as(self::SES1)->get("/cases/{$this->caseId}")->assertOk()->assertDontSee('応募を確定させる')->assertSee('先方の結果');
-        $this->as(self::ADMIN)->get("/cases/{$this->caseId}")->assertOk()->assertSee('先方の結果');
+        $this->as(self::SES1)->get("/cases/{$this->caseId}")->assertOk()->assertDontSee('応募を確定させる')->assertSee('プロバイダーからの結果報告');
+        $this->as(self::ADMIN)->get("/cases/{$this->caseId}")->assertOk()->assertSee('プロバイダーからの結果報告');
     }
 }

@@ -31,7 +31,7 @@
 @if($isProvider)
 <x-card title="プロバイダーからの返信">
 <p>プロバイダー（{{ $providerName ?: '—' }}）からの返信です。@if($pm)<a href="{{ url('/provider-mails/'.$pm->id) }}">送ったメール</a>に対する返事です。@endif</p>
-@if($cm)<h3>先方の結果</h3>@include('cases._result', ['m' => $cm, 'canEdit' => $canResult, 'back' => 'inbound', 'backId' => $m->id])@endif
+@if($cm && \Illuminate\Support\Facades\DB::table('provider_mails')->where('case_mail_id', $cm->id)->where('status', 'sent')->exists())<h3>プロバイダーからの結果報告</h3>@include('cases._result', ['m' => $cm, 'canEdit' => $canResult, 'back' => 'inbound', 'backId' => $m->id])@endif
 </x-card>
 @elseif(($m->sender_kind ?? 'eg') === 'eg') {{-- 追加の宛先（extra）の返信からは、プロバイダーへの返信の下書きを作らない --}}
 <x-card title="プロバイダーへの返信">
