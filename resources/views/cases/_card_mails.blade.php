@@ -12,7 +12,7 @@
 <td>{{ $replyLabels[$m->reply] ?? $m->reply }}@if($m->reply_note)<div class="muted">{{ $m->reply_note }}</div>@endif @if($m->reply_via === 'app')<div class="muted">（本人が画面で）</div>@endif</td>
 <td>@include('cases._result', ['m' => $m, 'canEdit' => $canMail])</td>
 @if($canMail)<td>@if($m->route === 'own')<form method="post" action="{{ url('/case-mails/'.$m->id.'/reply') }}" class="inline">@csrf
-<select name="reply">@foreach($replyLabels as $k => $t)<option value="{{ $k }}" @selected($m->reply === $k)>{{ $t }}</option>@endforeach</select>
+<select name="reply" autocomplete="off">@foreach($replyLabels as $k => $t)<option value="{{ $k }}" @selected($m->reply === $k)>{{ $t }}</option>@endforeach</select>
 <input name="note" value="{{ $m->reply_note }}" placeholder="返信の要点"><button class="btn ghost small">記録</button></form>@else<span class="muted">本人が PARK の画面で返事します</span>@endif</td>
 <td>@if(isset($mailApps[$m->engineer_id]))<a class="btn small" href="{{ url('/applications/'.$mailApps[$m->engineer_id]) }}">応募・面談の画面へ</a><br>@elseif($m->route === 'own' && $m->reply === 'interested')<x-post :action="'/case-mails/'.$m->id.'/submitted'" label="応募あり" cls="small" /><br>@endif
 @if(!empty($m->canThread))<a class="btn ghost small" href="{{ url('/cases/'.$c->id.'/threads/'.$m->engineer_id) }}">やり取り</a><br>@endif
