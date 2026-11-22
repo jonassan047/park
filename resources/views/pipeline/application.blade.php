@@ -26,7 +26,7 @@
 
 @if($cm)<x-card title="応募を確定させる">
 <p class="muted">応募をプロバイダーにメールで伝えて、確定させます。下書きを確かめてから送ります。送るまでは、面談・次の手順は出ません。</p>
-@if($pm)<a class="btn small" href="{{ url('/provider-mails/'.$pm->id) }}">{{ $pm->status === 'draft' ? '下書きを開く' : 'プロバイダーへの返信を見る' }}</a>@else<x-post :action="'/case-mails/'.$cm->id.'/provider-draft'" label="応募を確定させる" />@endif
+@if($pm)<a class="btn small" href="{{ url('/provider-mails/'.$pm->id) }}">{{ $pm->status === 'draft' ? '応募を確定させる' : 'プロバイダーへの返信を見る' }}</a>@else<x-post :action="'/case-mails/'.$cm->id.'/provider-draft'" label="応募を確定させる" />@endif
 </x-card>
 @endif
 
