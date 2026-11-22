@@ -87,6 +87,7 @@ table.edit td { padding: 4px; }
 .findbar input { width: 130px; padding: 1px 6px; font-size: 12px; }
 .findbar button { font-size: 12px; padding: 1px 8px; }
 .bad-text { color: var(--bad); }
+.hit-text { color: #1f5fbf; }  /* エンジニアを選択：マッチした点（青。テーマの --blue は緑なので別の色） */
 .clamp { max-height: 3.4em; overflow: hidden; font-size: 12px; }
 .r { text-align: right; }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--blue); }

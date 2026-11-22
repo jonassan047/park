@@ -23,7 +23,7 @@ $jlist = function (array $items, bool $hit) {
 @if(!$row['pass'])<div><small class="muted">条件に届いていません</small></div>@endif</td>
 <td><x-score :n="$row['score']" /></td>
 @foreach([true, false] as $hit)@php $rq = $jlist($j['req'], $hit); $pf = $jlist($j['pref'], $hit); @endphp
-<td><small>@if($rq)<b>必須</b> {{ implode('、', $rq) }}<br>@endif @if($pf)<b>尚可</b> {{ implode('、', $pf) }}<br>@endif @if(!$rq && !$pf)—@endif</small></td>
+<td class="{{ $hit ? 'hit-text' : 'bad-text' }}"><small>@if($rq)<b>必須</b> {{ implode('、', $rq) }}<br>@endif @if($pf)<b>尚可</b> {{ implode('、', $pf) }}<br>@endif @if(!$rq && !$pf)—@endif</small></td>
 @endforeach
 <td>必須 {{ $j['h'] }}/{{ $j['n'] }}　尚可 {{ $j['k'] }}/{{ $j['m'] }}</td>
 </tr>@endforeach
