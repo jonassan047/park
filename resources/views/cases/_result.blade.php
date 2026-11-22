@@ -1,4 +1,4 @@
-{{-- 先方の結果（合否）とメモ。$m＝案内メールの行（id・result・result_note）、$canEdit＝登録できる人（持ち込み元の担当者）。管理者は読むだけ。$back・$backId＝登録のあとに戻る画面（inbound／pm）、$primary＝「登録」を緑地にする（応募を確定させたあと。案件詳細） --}}
+{{-- 先方の結果（合否）とメモ。$m＝案内メールの行（id・result・result_note）、$canEdit＝登録できる人（持ち込み元の担当者）。管理者は読むだけ。$back・$backId＝登録のあとに戻る画面（inbound／pm）、$primary＝「登録」を緑地にする（応募を確定させたあと、合格・不合格を登録するまで。案件詳細） --}}
 @php $results = \App\Services\CaseResult::RESULTS; @endphp
 <div>@if($m->result === 'passed')<span class="result-passed">{{ $results['passed'] ?? '合格' }}</span>@elseif($m->result)<b>{{ $results[$m->result] ?? $m->result }}</b>@else<span class="muted">未登録</span>@endif
 @if($m->result_note)<div class="muted">メモ：{{ $m->result_note }}</div>@endif

@@ -9,7 +9,7 @@
 @if(!empty($inboundN[$m->engineer_id]))<div><a href="{{ url('/inbound?case='.$c->id.'&eg='.$m->engineer_id) }}">返信メール {{ $inboundN[$m->engineer_id] }} 件</a></div>@endif</td>
 <td>{{ fmt_dt($m->sent_at) }}</td>
 <td>{{ $replyLabels[$m->reply] ?? $m->reply }}@if($m->reply_note)<div class="muted">{{ $m->reply_note }}</div>@endif @if($m->reply_via === 'app')<div class="muted">（本人が画面で）</div>@endif</td>
-<td>@if($sent)@include('cases._result', ['m' => $m, 'canEdit' => $canMail, 'primary' => true])@else<span class="muted">プロバイダーへの返信を送ると、登録できます。</span>@endif</td>
+<td>@if($sent)@include('cases._result', ['m' => $m, 'canEdit' => $canMail, 'primary' => !in_array($m->result, ['passed', 'failed'], true)])@else<span class="muted">プロバイダーへの返信を送ると、登録できます。</span>@endif</td>
 @if($canMail)<td>@if($m->route === 'own')<form method="post" action="{{ url('/case-mails/'.$m->id.'/reply') }}" class="inline">@csrf
 <select name="reply" autocomplete="off">@foreach($replyLabels as $k => $t)<option value="{{ $k }}" @selected($m->reply === $k)>{{ $t }}</option>@endforeach</select>
 <input name="note" value="{{ $m->reply_note }}" placeholder="返信の要点"><button class="btn ghost small">記録</button></form>@else<span class="muted">本人が PARK の画面で返事します</span>@endif</td>
