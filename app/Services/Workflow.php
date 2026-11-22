@@ -960,7 +960,8 @@ class Workflow
         if ($e->status === 'left') throw new \RuntimeException('このエンジニアは退会済のため、応募できません。');
         if ($e->suspended_at) throw new \RuntimeException('このエンジニアは停止中のため、応募できません。');
         if (!$e->registered_at) throw new \RuntimeException('このエンジニアは、本登録がまだ済んでいないため、応募できません。');
-        if (!$e->self_confirmed_at) throw new \RuntimeException('エンジニアご本人が、まだ登録の内容を確認していません。ご本人がホームの「登録の内容の確認」を済ませてから応募してください');
+        // 案内メールの返事で本人が「応募したい」と言っているとき（SES の「応募あり」ボタン）は、登録の内容の確認を待たない
+        if (!$e->self_confirmed_at && empty($d['skip_confirm'])) throw new \RuntimeException('エンジニアご本人が、まだ登録の内容を確認していません。ご本人がホームの「登録の内容の確認」を済ませてから応募してください');
         // GP の中での二重応募は受け付けない（同じ人が別の SES 経由で出るのを防ぐ）
         if (DB::table('applications')->where('case_id', $caseId)->where('engineer_id', $engineerId)->exists()) throw new \RuntimeException('この案件には応募済みです');
         $code = Ids::next('AP');

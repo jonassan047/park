@@ -303,7 +303,9 @@ class ParkTest extends TestCase
         $this->as('admin@park.example')->get('/admin')->assertSee('今やること');
 
         // 書類を返した（応募した）→ 面談依頼が来た → 面談スクリプト → 結果 → 成約（SES だけで進められる）
+        DB::table('engineers')->where('id', 1)->update(['self_confirmed_at' => null]); // 本人が登録の内容を確認していなくても、「応募したい」の返事があれば応募を記録できる
         $this->as('ses1@park.example')->post("/case-mails/{$m->id}/submitted")->assertRedirect();
+        $this->assertSame(1, DB::table('applications')->where('case_id', $cid)->where('engineer_id', 1)->count());
         $appId = DB::table('applications')->where('case_id', $cid)->where('engineer_id', 1)->value('id');
         $this->assertDatabaseHas('applications', ['id' => $appId, 'status' => 'submitted']);
         $this->get("/cases/$cid")->assertSee('応募・面談の画面へ');

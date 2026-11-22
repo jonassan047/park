@@ -111,7 +111,7 @@ class CaseMailController extends Controller
         $c = $this->load($r, $m->case_id);
         abort_unless($this->ownEngineer($r, $m), 403);
         try {
-            $appId = \App\Services\Workflow::apply($c->id, $m->engineer_id, ['start_ok' => 1, 'price_ok' => 1, 'style_ok' => 1, 'condition_note' => $m->reply_note ?: 'SES が本人に確認のうえ応募'], $r->user());
+            $appId = \App\Services\Workflow::apply($c->id, $m->engineer_id, ['start_ok' => 1, 'price_ok' => 1, 'style_ok' => 1, 'skip_confirm' => 1, 'condition_note' => $m->reply_note ?: 'SES が本人に確認のうえ応募'], $r->user());
             \App\Services\Workflow::setStatus($appId, 'submitted', $r->user(), '', '案件をくれた先へ書類を返した');
             CM::reply($c->id, $m->engineer_id, 'interested', $m->reply_note, $m->reply_via ?: 'ses');
             return $this->go("/applications/$appId", '応募したことを記録しました。面談依頼が来たら、この画面の「面談依頼が来た」に入れてください。');
