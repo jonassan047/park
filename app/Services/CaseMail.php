@@ -66,7 +66,7 @@ class CaseMail
 
     public static function render(string $tpl, object $c, object $e, array $score, bool $own, string $from): string
     {
-        // 「EGに確認」（人が確かめた文だけ。本文・元の行は入れない）。無ければ、■ご確認ください の行ごと消す
+        // 「エンジニアに確認」（人が確かめた文だけ。本文・元の行は入れない）。無ければ、■ご確認ください の行ごと消す
         $confirm = implode('、', array_filter(array_map('trim', preg_split('/\R/u', (string) ($c->confirm_items ?? '')))));
         $out = strtr($tpl, [
             '{呼び名}' => self::callName($e, $own), '{案件名}' => $c->title, '{単価}' => $c->price ? man($c->price) : '相談',

@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\DB;
 class CaseSearch
 {
     const MAX_ITEM_LEN = 60;   // 手で足す項目の長さ
-    const MAX_CONFIRM_LEN = 200; // 「EGに確認」に足す文の長さ
+    const MAX_CONFIRM_LEN = 200; // 「エンジニアに確認」に足す文の長さ
     const MAX_ADD = 30;        // 1回に足せる数
     const MAX_EXTRA_ADD = 10;  // 追加の宛先：1回に足せる数
     const MAX_EXTRAS = 30;     // 追加の宛先：1つの検索に置ける数
@@ -40,7 +40,7 @@ class CaseSearch
     // 条件の項目の同じ・違いを見る鍵（技術は表記ゆれをそろえる）
     public static function key(array $it): string
     {
-        if ($it['kind'] === 'text') return 'text:'.trim((string) $it['name']); // EGに確認の文は、そのままの文で見分ける
+        if ($it['kind'] === 'text') return 'text:'.trim((string) $it['name']); // エンジニアに確認の文は、そのままの文で見分ける
         return $it['kind'].':'.($it['kind'] === 'skill' ? norm_skill($it['name']) : $it['name']);
     }
 
@@ -78,7 +78,7 @@ class CaseSearch
         return $out;
     }
 
-    // 「EGに確認」の項目：案件の確認事項の行（空行は捨て、同じ文は1つ）→ 前の検索で足した文。外した印は引き継ぐ
+    // 「エンジニアに確認」の項目：案件の確認事項の行（空行は捨て、同じ文は1つ）→ 前の検索で足した文。外した印は引き継ぐ
     private static function confirmConditions(object $c, array $prev): array
     {
         $items = [];
@@ -169,7 +169,7 @@ class CaseSearch
         });
     }
 
-    // 「EGに確認」に足す。改行だけで区切る（文の中の「、」では割らない）。技術マスタには通さない
+    // 「エンジニアに確認」に足す。改行だけで区切る（文の中の「、」では割らない）。技術マスタには通さない
     private static function addConfirm(array $cond, ?string $text): array
     {
         $n = 0;
@@ -187,7 +187,7 @@ class CaseSearch
         return $cond;
     }
 
-    // 判定に使う（外していない）項目。confirm（EGに確認）はメールに入れるだけで、点数・合否には使わない
+    // 判定に使う（外していない）項目。confirm（エンジニアに確認）はメールに入れるだけで、点数・合否には使わない
     public static function activeItems(array $cond): array
     {
         $f = fn ($list) => array_values(array_filter($list, fn ($it) => !empty($it['on'])));
@@ -411,7 +411,7 @@ class CaseSearch
             ."ご興味があれば、このメールに返信してください（条件で気になる点があれば、それも一緒に）。\n見送る場合も、理由をひとこと返信いただけると、次のご案内の参考にします。";
     }
 
-    // 「EGに確認」の節（チェックした項目だけ。0件なら空）。返事が必須であることを書く
+    // 「エンジニアに確認」の節（チェックした項目だけ。0件なら空）。返事が必須であることを書く
     // $byLink：返信が届かない（受信が使えない他社のエンジニアあて）ので、返事のリンクの「ひとこと」で答えてもらうとき
     public static function confirmBlock(array $names, bool $byLink = false): string
     {
@@ -521,7 +521,7 @@ class CaseSearch
             if (mb_strlen($addr) > 254 || !filter_var($addr, FILTER_VALIDATE_EMAIL)) { $skipped[] = "「{$line}」はメールアドレスの形ではありません。"; continue; }
             if (in_array($addr, $seen, true)) { $skipped[] = "{$addr} は、この検索にもうあります。"; continue; }
             if (in_array($addr, $sentBefore, true)) { $skipped[] = "{$addr} には、この案件でもう送っています。"; continue; }
-            if (self::isEngineerEmail($addr)) { $skipped[] = "{$addr} は、登録しているエンジニアです。「EGを追加」から足してください。"; continue; }
+            if (self::isEngineerEmail($addr)) { $skipped[] = "{$addr} は、登録しているエンジニアです。「エンジニアを追加」から足してください。"; continue; }
             if (self::isParkAddress($addr)) { $skipped[] = "{$addr} は、PARK のアドレスなので足せません。"; continue; }
             if ($added >= self::MAX_EXTRA_ADD || $have + $added >= self::MAX_EXTRAS) { $over++; continue; }
             try {

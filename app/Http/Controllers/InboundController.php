@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Storage;
 
 // 案内メールへの返信メール（v0.12.0）。
 // SES・担当者：自社が提案元 SES の案件への返信だけを読む（見える範囲は Inbound::query が決める。見られない人には 404）。
-// 管理者：受信したメールをすべて読み、紐付かなかったものを手で紐付ける。EG は入れない（ルートで 403）。
+// 管理者：受信したメールをすべて読み、紐付かなかったものを手で紐付ける。エンジニアは入れない（ルートで 403）。
 class InboundController extends Controller
 {
     const TABS = ['unlinked' => '未紐付け', 'linked' => '紐付け済み', 'ignored' => '対象外', 'all' => 'すべて'];
@@ -55,7 +55,7 @@ class InboundController extends Controller
         Inbound::markRead($u, $row);
         $data = ['m' => Inbound::masked($u, $row), 'isAdmin' => $u->role === 'admin', 'c' => $row->case_id ? DB::table('cases')->find($row->case_id) : null,
             'cm' => $row->case_mail_id ? DB::table('case_mails')->find($row->case_mail_id) : null, 'search' => null, 'sourceName' => null, 'notifyName' => null];
-        // プロバイダーへの返信（v0.13.0）：EG の返信ならその下書き、プロバイダーの返事なら送ったメール。結果の登録は持ち込み元の担当者だけ
+        // プロバイダーへの返信（v0.13.0）：エンジニアの返信ならその下書き、プロバイダーの返事なら送ったメール。結果の登録は持ち込み元の担当者だけ
         $isProv = ($row->sender_kind ?? 'eg') === 'provider';
         $data['pm'] = $isProv ? ($row->provider_mail_id ? DB::table('provider_mails')->find($row->provider_mail_id) : null)
             : DB::table('provider_mails')->where('inbound_mail_id', $id)->first();

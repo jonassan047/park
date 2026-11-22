@@ -15,7 +15,7 @@ class CaseThread
     const MAX_LEN = 2000;           // 1回の発言の長さ（字）
     const DUP_SECONDS = 60;         // 同じ人が同じ文を送り直したと見なす秒数（二重押しの守り）
     const PREVIEW_LEN = 200;        // お知らせに載せる、発言の頭の字数
-    const STALE_DAYS = 3;           // park:status：EG の発言に返事がないまま過ぎた日数
+    const STALE_DAYS = 3;           // park:status：エンジニアの発言に返事がないまま過ぎた日数
 
     // エンジニアの今の所属の会社
     public static function partnerSesId(object $e): int
@@ -118,7 +118,7 @@ class CaseThread
         return $q->orderByRaw('ses_id = ? desc', [(int) $e->ses_id])->orderByDesc('id')->get();
     }
 
-    // 一覧用の元の問い合わせ：1本ごとに、案件・エンジニア・会社の名前と、未読（EG の発言で、相手側がまだ読んでいないもの）の数を付ける。見える範囲の絞りは呼ぶ側で
+    // 一覧用の元の問い合わせ：1本ごとに、案件・エンジニア・会社の名前と、未読（エンジニアの発言で、相手側がまだ読んでいないもの）の数を付ける。見える範囲の絞りは呼ぶ側で
     public static function listQuery()
     {
         $unread = DB::table('case_thread_posts as p')->whereColumn('p.thread_id', 't.id')->where('p.from_side', 'eg')->where('p.read_by_side', false)->selectRaw('count(*)');
@@ -232,7 +232,7 @@ class CaseThread
         return ['type' => 'ok', 'msg' => '送りました。'];
     }
 
-    // お知らせとメール（R8）。EG → 相手の担当者／担当者 → EG（管理者は書けない）。$partnerId は相手の会社。所属の会社には、発言ごとの知らせは出さない
+    // お知らせとメール（R8）。エンジニア → 相手の担当者／担当者 → エンジニア（管理者は書けない）。$partnerId は相手の会社。所属の会社には、発言ごとの知らせは出さない
     private static function notify($u, object $c, object $e, int $partnerId, string $body): void
     {
         $sesId = $partnerId;
@@ -254,7 +254,7 @@ class CaseThread
         }
     }
 
-    // 開いた人の分の既読をつける（D7）。EG は相手側の発言を、担当者は EG の発言を既読にする。管理者は読むだけなので、既読にしない
+    // 開いた人の分の既読をつける（D7）。エンジニアは相手側の発言を、担当者は エンジニアの発言を既読にする。管理者は読むだけなので、既読にしない
     public static function markRead($u, object $t): void
     {
         if (!self::visible($u, $t)) return;
@@ -265,7 +265,7 @@ class CaseThread
         }
     }
 
-    // 未読の1本ごとの数（案件・エンジニアの名前つき）。$fromEg が true なら EG の発言、false なら相手側の発言を数える
+    // 未読の1本ごとの数（案件・エンジニアの名前つき）。$fromEg が true なら エンジニアの発言、false なら相手側の発言を数える
     private static function unreadRows(bool $fromEg)
     {
         $q = DB::table('case_thread_posts as p')->join('case_threads as t', 't.id', '=', 'p.thread_id')->join('cases as c', 'c.id', '=', 't.case_id')->join('engineers as e', 'e.id', '=', 't.engineer_id')
@@ -281,7 +281,7 @@ class CaseThread
         return self::unreadRows(false)->where('t.engineer_id', $engineerId)->get();
     }
 
-    // 担当者あて：未読の EG の発言がある1本（自社のものだけ）。$exceptEngineerId は、本人（兼任）のエンジニアの分を除く
+    // 担当者あて：未読の エンジニアの発言がある1本（自社のものだけ）。$exceptEngineerId は、本人（兼任）のエンジニアの分を除く
     public static function unreadForSes(int $sesId, ?int $exceptEngineerId = null)
     {
         $q = self::unreadRows(true)->whereRaw('coalesce(t.partner_ses_id, t.ses_id) = ?', [$sesId]); // 相手が自社の1本だけ（読むだけの1本は数えない）
@@ -301,7 +301,7 @@ class CaseThread
             ->count();
     }
 
-    // park:status 用：最後の発言が EG で、N 日以上たっている1本の数（返事がないまま）
+    // park:status 用：最後の発言が エンジニアで、N 日以上たっている1本の数（返事がないまま）
     public static function staleCount(): int
     {
         $limit = date('Y-m-d H:i:s', time() - self::STALE_DAYS * 86400);

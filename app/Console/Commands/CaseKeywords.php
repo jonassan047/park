@@ -9,13 +9,13 @@ use App\Support\SkillCatalog;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
-// 今までの案件の必須・尚可を、新しい形（名前だけ＋「EGに確認」）に作り直す（v0.14.0）。
+// 今までの案件の必須・尚可を、新しい形（名前だけ＋「エンジニアに確認」）に作り直す（v0.14.0）。
 // 本文（raw_text）からは読み直さず、今の欄を元の行とみなす（人が直した欄・AI の結果を壊さないため）。
 // --apply が無いときは、DB に書かずに変わる内容だけを出す。公開版の --apply は TEZZO の了承を取ってから
 class CaseKeywords extends Command
 {
     protected $signature = 'park:case-keywords {--id= : 案件の id（行があっても、この1件を作り直す）} {--apply : 書き換える（付けないときは、変わる内容を出すだけ）}';
-    protected $description = '今までの案件の必須・尚可を、技術マスタの名前だけにして、拾えない文を「EGに確認」へ移す（--apply を付けたときだけ書き換える）';
+    protected $description = '今までの案件の必須・尚可を、技術マスタの名前だけにして、拾えない文を「エンジニアに確認」へ移す（--apply を付けたときだけ書き換える）';
 
     public function handle(): int
     {
@@ -41,7 +41,7 @@ class CaseKeywords extends Command
             if (!$same) {
                 $this->line('  必須　　：'.($c->required_skills ?: '—').' → '.($new['required_skills'] ?: '—'));
                 $this->line('  尚可　　：'.($c->preferred_skills ?: '—').' → '.($new['preferred_skills'] ?: '—'));
-                $this->line('  EGに確認：'.($c->confirm_items ? str_replace("\n", ' / ', $c->confirm_items) : '—').' → '.($new['confirm_items'] ? str_replace("\n", ' / ', $new['confirm_items']) : '—'));
+                $this->line('  エンジニアに確認：'.($c->confirm_items ? str_replace("\n", ' / ', $c->confirm_items) : '—').' → '.($new['confirm_items'] ? str_replace("\n", ' / ', $new['confirm_items']) : '—'));
             }
             if (!$apply) continue;
             // マスタに足すのは、空白の無い英数字1語だけ（文は足さない）

@@ -132,7 +132,7 @@ class V0150CaseDetailSelectTest extends TestCase
             $r = $this->as($who)->get("/cases/$cid")->assertOk();
             $r->assertSee('メール本文')->assertSee('架空のメール本文ABC')->assertSee('案件票（読み取った項目）')->assertDontSee('案内メール')->assertDontSee('プロバイダーへの返信')->assertDontSee('この案件への応募') // 送る前・返信前・応募前は出さない
                 ->assertSee('AI の読み直し')->assertSee('エンジニアを検索')->assertSee('id="keywords"', false)->assertSee('エンジニアを検索')
-                ->assertSee('EGに確認')->assertSee('稼働開始はいつからですか')->assertSee('追加');
+                ->assertSee('エンジニアに確認')->assertSee('稼働開始はいつからですか')->assertSee('追加');
             $html = $r->getContent();
             $this->assertLessThan(strpos($html, 'エンジニアを検索'), strpos($html, 'AI の読み直し'), 'AI がキーワードより上');
             $this->assertStringNotContainsString('エンジニアとの相性', $html); // A8
@@ -253,7 +253,7 @@ class V0150CaseDetailSelectTest extends TestCase
         $sid = $this->propose($cid);
         $r = $this->as(self::SES1)->get("/searches/$sid")->assertOk();
         $r->assertSee('エンジニアを選択')->assertSee('すべてを選択')->assertSee('id="pickall"', false)->assertSee('マッチした点')->assertSee('マッチしなかった点')
-            ->assertSee('点数')->assertSee('必須 2/2')->assertSee('尚可 1/1')->assertSee('メールアドレスを追加')->assertSee('EGを追加')
+            ->assertSee('点数')->assertSee('必須 2/2')->assertSee('尚可 1/1')->assertSee('メールアドレスを追加')->assertSee('エンジニアを追加')
             ->assertSee('エンジニアへメールを送信');
         $this->assertMatchesRegularExpression('/<b>必須<\/b> Java、SQL/', $r->getContent());
         foreach ([self::ADMIN, self::SES2, self::EG1] as $who) $this->as($who)->get("/searches/$sid")->assertForbidden();

@@ -186,7 +186,7 @@ class CaseParser
     // 必須・尚可の行から、業務の拾い出しと本文の技術の追加をして、案件票の項目にそろえる（規則も AI の結果も同じ手順）
     public static function finishSkills(array $req, array $pref, string $text): array
     {
-        // 必須・尚可の各行から、技術マスタの言葉と業務を拾う。拾えない文は「EGに確認」へ（v0.14.0。拾い出しは CaseKeywords）
+        // 必須・尚可の各行から、技術マスタの言葉と業務を拾う。拾えない文は「エンジニアに確認」へ（v0.14.0。拾い出しは CaseKeywords）
         $k = \App\Support\CaseKeywords::split($req, $pref);
         $reqList = $k['required_skills'];
         $prefList = $k['preferred_skills'];

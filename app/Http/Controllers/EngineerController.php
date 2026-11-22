@@ -263,7 +263,7 @@ class EngineerController extends Controller
     public function skills(Request $r, int $id)
     {
         $e = $this->loadForEdit($r, $id);
-        // 案件に合わせてチェックする欄は、EG 本人だけ。選べるのは、案内が届いた案件・応募した案件（下書きを除く）
+        // 案件に合わせてチェックする欄は、エンジニア 本人だけ。選べるのは、案内が届いた案件・応募した案件（下書きを除く）
         $pickable = $pick = null;
         if ($r->user()->role === 'eg') {
             $pickable = $this->pickableCases($id);

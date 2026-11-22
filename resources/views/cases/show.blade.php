@@ -1,6 +1,6 @@
 @php
 $u = auth()->user();
-// 新しい配置（v0.15.0）：提案元 SES の担当者だけ。ほかの人（管理者・ほかの SES・EG）は今までの配置
+// 新しい配置（v0.15.0）：提案元 SES の担当者だけ。ほかの人（管理者・ほかの SES・エンジニア）は今までの配置
 $newLayout = $canMail;
 @endphp
 @extends('layouts.app', ['title' => $c->title, 'wide' => true])

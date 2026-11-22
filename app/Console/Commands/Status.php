@@ -107,7 +107,7 @@ class Status extends Command
             '案件：提案元 SES の無い案件（0 のはず）' => DB::table('cases')->whereNull('source_ses_id')->count(),
             '直属の付け替え先の候補（id・状態・使える担当者の数）' => collect(DirectMerge::candidates())->map(fn ($c) => "#{$c['id']} {$c['status']} {$c['staff']}人")->implode(' / ') ?: 'なし',
             '案内メール：返事なし（3日以上）' => DB::table('case_mails')->where('reply', 'none')->where('sent_at', '<', $ago('-3 days'))->count(),
-            '案件のやり取り：返事のない EG の発言（'.CaseThread::STALE_DAYS.'日以上）' => $this->staleThreads(),
+            '案件のやり取り：返事のない エンジニアの発言（'.CaseThread::STALE_DAYS.'日以上）' => $this->staleThreads(),
             '案件のやり取り：v0.10.1 より前の形で続く1本（提案元 SES と相手が違う）' => $this->legacyThreads(),
             '案内メール：応募したいのに応募になっていない' => DB::table('case_mails as m')->where('m.reply', 'interested')
                 ->whereNotExists(fn ($q) => $q->select(DB::raw(1))->from('applications as a')->whereColumn('a.case_id', 'm.case_id')->whereColumn('a.engineer_id', 'm.engineer_id'))->count(),

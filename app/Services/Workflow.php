@@ -812,7 +812,7 @@ class Workflow
     const CASE_FIELDS = ['title', 'client_label', 'price', 'price_note', 'required_skills', 'preferred_skills', 'description', 'location', 'work_style', 'start_date', 'period',
         'days_per_week', 'interviews_count', 'headcount', 'min_years', 'conditions', 'deadline', 'status', 'raw_text', 'confirm_items'];
 
-    // 必須・尚可の欄を、マスタの正式な名前だけにする（v0.14.0）。拾えない文は「EGに確認」の後ろに足す（重ねない）。
+    // 必須・尚可の欄を、マスタの正式な名前だけにする（v0.14.0）。拾えない文は「エンジニアに確認」の後ろに足す（重ねない）。
     // ['v' => 欄を直した配列, 'new' => マスタに足してよい英数字1語の一覧]。DB には書かない
     public static function keywordColumns(array $v): array
     {

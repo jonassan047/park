@@ -58,7 +58,7 @@ class CaseController extends Controller
         if (!empty($c->preferred_exp)) $expText[] = implode('、', CaseExp::split($c->preferred_exp)).'（尚可）';
         session()->now('flash', ['msg' => '取り込みました。内容を確かめて、足りないところを直してから登録してください。'.($found ? '本文から見つかった技術：'.implode('、', $found).'（必須に無いものは尚可に入れました）。' : '')
             .($expText ? '本文の必須・尚可から見つかった業務：'.implode('、', $expText).'。' : '')
-            .($nConfirm ? "マスタに当たらない文 {$nConfirm} 件は「EGに確認」に入れました。" : '')
+            .($nConfirm ? "マスタに当たらない文 {$nConfirm} 件は「エンジニアに確認」に入れました。" : '')
             .(CaseAi::blocked((object) ['raw_text' => $r->input('raw_text')]) === null ? '登録すると、手元の AI が必須・尚可を読み直します（1件 1分ほど）。結果は案件の画面に出ます。' : ''), 'type' => 'ok']);
         return view('cases.form', ['c' => $c, 'action' => '/cases', 'submit' => '登録する', 'sesList' => $this->sesList($r), 'providers' => $this->providerList(), 'import' => false]);
     }
@@ -221,7 +221,7 @@ class CaseController extends Controller
             $v['now'] = $now;
             $v['diff'] = ['req' => CaseAi::diff($now['req'], array_column($cmp['req'], 'text')), 'pref' => CaseAi::diff($now['pref'], array_column($cmp['pref'], 'text'))];
             $v['exp'] = ['req' => CaseExp::split($fin['required_exp'] ?? null), 'pref' => CaseExp::split($fin['preferred_exp'] ?? null)];
-            $v['confirm'] = $lines($fin['confirm_items']); // AI の結果を使うと、「EGに確認」もこの内容に置き換わる
+            $v['confirm'] = $lines($fin['confirm_items']); // AI の結果を使うと、「エンジニアに確認」もこの内容に置き換わる
         } elseif ($job->status === 'dropped') {
             $v['same'] = $audit('ai-case-same');
         }

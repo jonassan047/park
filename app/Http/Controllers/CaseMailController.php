@@ -92,8 +92,8 @@ class CaseMailController extends Controller
         return $this->go("/cases/{$c->id}#mails", '返事を記録しました。');
     }
 
-    // 先方の結果（結果待ち・合格・不合格）とメモの登録（v0.13.0）。持ち込み元の担当者だけ（管理者・ほかの会社・EG は 403）。
-    // 自社の EG だけでなく、案内した他社の EG の分も登録できる（ownEngineer は見ない）
+    // 先方の結果（結果待ち・合格・不合格）とメモの登録（v0.13.0）。持ち込み元の担当者だけ（管理者・ほかの会社・エンジニアは 403）。
+    // 自社の エンジニアだけでなく、案内した他社の エンジニアの分も登録できる（ownEngineer は見ない）
     public function result(Request $r, int $mid)
     {
         $m = DB::table('case_mails')->find($mid);

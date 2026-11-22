@@ -9,9 +9,9 @@
 @php $expReq = \App\Support\CaseExp::split($c->required_exp ?? null); $expPref = \App\Support\CaseExp::split($c->preferred_exp ?? null); @endphp
 @if($expReq)<dt>必須の業務</dt><dd><x-chips :list="$expReq" /></dd>@endif
 @if($expPref)<dt>尚可の業務</dt><dd><x-chips :list="$expPref" /></dd>@endif
-{{-- EGに確認：マスタに無い条件。点数には使わない。全員に出す（元の必須・尚可の文は、直せる人だけ） --}}
+{{-- エンジニアに確認：マスタに無い条件。点数には使わない。全員に出す（元の必須・尚可の文は、直せる人だけ） --}}
 @php $confirmItems = array_values(array_filter(array_map('trim', preg_split('/\R/u', (string) ($c->confirm_items ?? ''))))); @endphp
-@if($confirmItems)<dt>{{ $u->role === 'eg' ? 'ご確認ください' : 'EGに確認' }}</dt><dd><ul>@foreach($confirmItems as $it)<li>{{ $it }}</li>@endforeach</ul></dd>@endif
+@if($confirmItems)<dt>{{ $u->role === 'eg' ? 'ご確認ください' : 'エンジニアに確認' }}</dt><dd><ul>@foreach($confirmItems as $it)<li>{{ $it }}</li>@endforeach</ul></dd>@endif
 @if(\App\Support\Perms::caseEdit($u, $c) && ($c->required_lines || $c->preferred_lines))<dt>元の文</dt><dd><details><summary>元の必須・尚可の文</summary>
 @if($c->required_lines)<p><strong>必須</strong><br>{!! nl2br(e($c->required_lines)) !!}</p>@endif
 @if($c->preferred_lines)<p><strong>尚可</strong><br>{!! nl2br(e($c->preferred_lines)) !!}</p>@endif

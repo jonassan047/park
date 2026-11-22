@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Schema;
 
 // 案件の必須・尚可の文から、技術マスタの言葉（キーワード）を拾う（v0.14.0。拾い出しの正本）。
 // 取り込み・保存・AI の結果の差し替え・既存案件の読み直しは、どれもここを通る。
-// マスタの言葉にも業務の項目にも当たらない文は、「EGに確認」にする。
+// マスタの言葉にも業務の項目にも当たらない文は、「エンジニアに確認」にする。
 class CaseKeywords
 {
     // 文章の中からは拾わない言葉（普通の言葉と区別がつかない短い別名）。行そのものがこの言葉なら、拾う
@@ -117,7 +117,7 @@ class CaseKeywords
     }
 
     // 必須・尚可の行から、案件の列の形にする
-    // $expToConfirm：欄に書かれた項目から作るとき（保存・再抽出）は、業務にだけ当たった項目も「EGに確認」へ回す（業務の欄は画面で選ぶので、捨てると条件が消える）
+    // $expToConfirm：欄に書かれた項目から作るとき（保存・再抽出）は、業務にだけ当たった項目も「エンジニアに確認」へ回す（業務の欄は画面で選ぶので、捨てると条件が消える）
     public static function split(array $reqLines, array $prefLines, bool $expToConfirm = false): array
     {
         $reqLines = self::cleanAll($reqLines);

@@ -202,10 +202,10 @@ TXT;
     }
 
     // ---------- 届いたあと・差し替え ----------
-    // AI の結果で、必須・尚可・業務・EGに確認・元の行の列だけを差し替える（ほかの列は変えない）。
-    // AI の読み直しは必須・尚可の読み直しなので、EGに確認も読み直したものにする（今の EGに確認は渡さない）
-    // $replaceAll：人が「AI の結果を使う」を押したときだけ true（「EGに確認」・元の行も置き換える）。
-    // 自動で入れるときは false（人が直した「EGに確認」・元の行は、そのまま残す）
+    // AI の結果で、必須・尚可・業務・エンジニアに確認・元の行の列だけを差し替える（ほかの列は変えない）。
+    // AI の読み直しは必須・尚可の読み直しなので、エンジニアに確認も読み直したものにする（今の エンジニアに確認は渡さない）
+    // $replaceAll：人が「AI の結果を使う」を押したときだけ true（「エンジニアに確認」・元の行も置き換える）。
+    // 自動で入れるときは false（人が直した「エンジニアに確認」・元の行は、そのまま残す）
     public static function apply(object $case, array $cmp, bool $replaceAll = false): void
     {
         $fin = CaseParser::finishSkills(array_column($cmp['req'], 'text'), array_column($cmp['pref'], 'text'), (string) $case->raw_text);

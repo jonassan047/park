@@ -6,13 +6,13 @@ use App\Services\Notifier as N;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 
-// EG の返事を、案件のプロバイダーに伝える（v0.13.0。R16）。
-// EG の返信が案内メールに紐付くと、プロバイダーあての「下書き」が自動でできる。担当者が確かめて［送信］を押したときだけ送る（勝手には送らない）。
-// プロバイダー（PARK の外）に出る EG は、イニシャルだけ。氏名・ふりがな・メール・電話は伏せ、残っていれば送る前に止める。
+// エンジニアの返事を、案件のプロバイダーに伝える（v0.13.0。R16）。
+// エンジニアの返信が案内メールに紐付くと、プロバイダーあての「下書き」が自動でできる。担当者が確かめて［送信］を押したときだけ送る（勝手には送らない）。
+// プロバイダー（PARK の外）に出る エンジニアは、イニシャルだけ。氏名・ふりがな・メール・電話は伏せ、残っていれば送る前に止める。
 class ProviderReply
 {
     const KIND = 'provider-mail';              // お知らせ・メールの種類
-    const MAX_QUOTE = 2000;                    // 下書きに入れる、EG の返信の字数
+    const MAX_QUOTE = 2000;                    // 下書きに入れる、エンジニアの返信の字数
     const MAX_SUBJECT = 200;
     const MAX_BODY = 20000;
     const NO_COMMENT = '（本人のコメントはありません）';
@@ -26,7 +26,7 @@ class ProviderReply
 
     // ---------- 見える・直せる ----------
 
-    // 見えるか：管理者は全社、SES・担当者は案件の今の持ち込み元が自社のとき。EG は見えない
+    // 見えるか：管理者は全社、SES・担当者は案件の今の持ち込み元が自社のとき。エンジニアは見えない
     public static function canView($u, object $pm): bool
     {
         if (!$u) return false;
@@ -44,7 +44,7 @@ class ProviderReply
 
     // ---------- 文面 ----------
 
-    // 件名と本文をルールで作る。$quote は、EG の返信から取り出して伏せたもの（空なら「コメントなし」）
+    // 件名と本文をルールで作る。$quote は、エンジニアの返信から取り出して伏せたもの（空なら「コメントなし」）
     public static function compose(object $case, ?object $provider, string $sesName, ?object $e, string $reply, string $quote): array
     {
         [$intent, $closing] = self::INTENTS[$reply] ?? self::INTENTS['interested'];
@@ -61,7 +61,7 @@ class ProviderReply
         return ['subject' => '【ご返事】'.$case->title, 'body' => $body];
     }
 
-    // EG の返信の本文から、本人が書いた要点だけを取り出す（引用・署名・案内メールの写し・返事のリンク・URL を取り除き、EG の氏名・連絡先を伏せる）
+    // エンジニアの返信の本文から、本人が書いた要点だけを取り出す（引用・署名・案内メールの写し・返事のリンク・URL を取り除き、エンジニアの氏名・連絡先を伏せる）
     // $inbound があれば、その差出人の名前・アドレスも伏せる
     public static function extract(string $body, ?object $e, ?object $inbound = null): string
     {
@@ -90,7 +90,7 @@ class ProviderReply
         return $text;
     }
 
-    // EG の所属の会社名（持ち込み元が自社でも伏せる）。「株式会社」などを除いた形も含む
+    // エンジニアの所属の会社名（持ち込み元が自社でも伏せる）。「株式会社」などを除いた形も含む
     private static function companyWords(object $e): array
     {
         $name = trim((string) DB::table('ses_companies')->where('id', $e->ses_id ?? 0)->value('name'));
@@ -118,7 +118,7 @@ class ProviderReply
         return false;
     }
 
-    // 本文に残っている、EG の登録の値の種類（「氏名」「ふりがな」「メール」「電話」「会社名」）
+    // 本文に残っている、エンジニアの登録の値の種類（「氏名」「ふりがな」「メール」「電話」「会社名」）
     public static function leaks(object $e, string $text): array
     {
         $kinds = Inbound::leakKinds($e, $text);
@@ -132,7 +132,7 @@ class ProviderReply
 
     // ---------- 下書きを作る ----------
 
-    // 受信メール（EG の返信）から、下書きを 1 つ作る。作らないときは null。戻り：作った行の id
+    // 受信メール（エンジニアの返信）から、下書きを 1 つ作る。作らないときは null。戻り：作った行の id
     public static function draftFromInbound(int $inboundId): ?int
     {
         $m = DB::table('inbound_mails')->find($inboundId);

@@ -1,5 +1,5 @@
 @isset($ai)
-{{-- AI の読み直し（直せる人だけ。EG・ほかの会社の SES には、欄も AI の文も渡さない） --}}
+{{-- AI の読み直し（直せる人だけ。エンジニア・ほかの会社の SES には、欄も AI の文も渡さない） --}}
 @php $aj = $ai['job']; $cmp = $ai['cmp']; $reasonText = ['count' => '規則と行数が違います', 'missing' => '本文に無い言い方があります', 'edited' => '登録の前か後に人が直したか、本文を変えた案件です', 'empty' => 'AI が必須も尚可も読めませんでした', 'offered' => 'もう案内・応募があります', 'closed' => '募集を終えた案件です']; @endphp
 <x-card title="AI の読み直し" id="ai">
 @if(!$aj)
@@ -23,7 +23,7 @@
   <td>@forelse($aiRows as $i => $x)<div>{{ $x['text'] }}@if($x['mark'] === 'fixed') <span class="badge info" title="AI の文：{{ $x['from'] }}">本文の文に戻した</span>@elseif($x['mark'] === 'missing') <span class="badge bad">本文に無い言い方</span>@endif @if($df['ai'][$i]) <span class="badge warn">AI だけ</span>@endif</div>@empty<span class="muted">—</span>@endforelse</td></tr>
   @endforeach
   </tbody></table></div>
-  <p class="muted">AI の結果を使うと、必須の業務：{{ $ai['exp']['req'] ? implode('、', $ai['exp']['req']) : '—' }}／尚可の業務：{{ $ai['exp']['pref'] ? implode('、', $ai['exp']['pref']) : '—' }}／EGに確認：{{ $ai['confirm'] ? implode('、', $ai['confirm']) : '—' }}</p>
+  <p class="muted">AI の結果を使うと、必須の業務：{{ $ai['exp']['req'] ? implode('、', $ai['exp']['req']) : '—' }}／尚可の業務：{{ $ai['exp']['pref'] ? implode('、', $ai['exp']['pref']) : '—' }}／エンジニアに確認：{{ $ai['confirm'] ? implode('、', $ai['confirm']) : '—' }}</p>
   @if(in_array('edited', $cmp['reasons']))<p class="bad-text">人が直したか、本文を変えた案件です。使うと、直した必須・尚可・業務も置き換わります。</p>@endif
   <x-post :action="'/ai-jobs/'.$aj->id.'/apply-case'" label="AI の結果を使う" /> <x-post :action="'/ai-jobs/'.$aj->id.'/drop'" label="今のままにする" cls="ghost" />
 @else

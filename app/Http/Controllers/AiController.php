@@ -123,7 +123,7 @@ class AiController extends Controller
         if ($cmp['stale']) return $this->go("/cases/{$c->id}#ai", '本文が変わったので使えません。もう一度頼んでください。', 'bad');
         // 二重押しの守り：まだ done のときだけ applied にする（0件なら、もう片付いている）
         if (!DB::table('ai_jobs')->where('id', $id)->where('status', 'done')->update(['status' => 'applied'])) abort(400);
-        CaseAi::apply($c, $cmp, true); // 人が押したときは、「EGに確認」・元の行も置き換える
+        CaseAi::apply($c, $cmp, true); // 人が押したときは、「エンジニアに確認」・元の行も置き換える
         N::audit($r->user()->id, 'ai-case-apply', "#$id {$c->title}");
         return $this->go("/cases/{$c->id}#ai", 'AI の結果を使いました。必須・尚可・業務を置き換えました。');
     }

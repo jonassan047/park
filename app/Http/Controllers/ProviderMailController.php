@@ -10,7 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 // プロバイダーへの返信（v0.13.0）。
-// 持ち込み元の SES・担当者：読む・直す・送る・取りやめる・作り直す。管理者：全社を読むだけ（操作は 403）。ほかの会社の SES・担当者は 404。EG は入れない（ルートで 403）。
+// 持ち込み元の SES・担当者：読む・直す・送る・取りやめる・作り直す。管理者：全社を読むだけ（操作は 403）。ほかの会社の SES・担当者は 404。エンジニアは入れない（ルートで 403）。
 class ProviderMailController extends Controller
 {
     private function load(int $id): object
@@ -49,7 +49,7 @@ class ProviderMailController extends Controller
         $inboundN = DB::table('inbound_mails')->where('provider_mail_id', $pm->id)->where('status', 'linked')->count();
         return view('provider-mails.show', [
             'pm' => $pm, 'c' => $case, 'pv' => $pv, 'e' => $e, 'cm' => $cm, 'canEdit' => $canEdit, 'isAdmin' => $u->role === 'admin',
-            // 画面に出す EG の名前：自社は氏名、他社の SES・担当者は「イニシャル（会社名）」、管理者は氏名
+            // 画面に出す エンジニアの名前：自社は氏名、他社の SES・担当者は「イニシャル（会社名）」、管理者は氏名
             'egLabel' => $e ? CaseThread::egName($u, $e) : 'エンジニア', 'initials' => ($e->initials ?? null) ?: 'エンジニア',
             'ownEg' => $e && ($u->role !== 'ses' || (int) $e->ses_id === (int) $u->ses_id),
             'leaks' => $canEdit && $pm->status === 'draft' && $e ? PR::leaks($e, $pm->subject."\n".$pm->body) : [],
@@ -92,7 +92,7 @@ class ProviderMailController extends Controller
         return $this->go("/provider-mails/$id", $res['msg'], $res['type']);
     }
 
-    // 受信メール（EG の返信）から下書きを作る。見える人（持ち込み元の担当者）だけ。すでにあれば、それを開く
+    // 受信メール（エンジニアの返信）から下書きを作る。見える人（持ち込み元の担当者）だけ。すでにあれば、それを開く
     public function fromInbound(Request $r, int $id)
     {
         $u = $r->user();

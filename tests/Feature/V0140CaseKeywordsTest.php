@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
-// v0.14.0：案件の必須・尚可を、技術マスタの名前（キーワード）に分け、合わない文は「EGに確認」へ（PLAN.md の K1〜K15）。
+// v0.14.0：案件の必須・尚可を、技術マスタの名前（キーワード）に分け、合わない文は「エンジニアに確認」へ（PLAN.md の K1〜K15）。
 // 本文・会社名はすべて架空。メールは @park.example
 class V0140CaseKeywordsTest extends TestCase
 {
@@ -113,7 +113,7 @@ class V0140CaseKeywordsTest extends TestCase
         preg_match('#<textarea name="confirm_items"[^>]*>(.*?)</textarea>#s', $html, $m);
         $this->assertStringContainsString('技術的知見を有している人材', $m[1] ?? '');
         $this->assertStringContainsString('社員相当としての活躍', $m[1] ?? '');
-        $r->assertSee('EGに確認');
+        $r->assertSee('エンジニアに確認');
         $r->assertSee('元の必須・尚可の文');
         $this->assertSame($cases, DB::table('cases')->count());
         $this->assertSame($terms, DB::table('skill_terms')->count());
@@ -182,7 +182,7 @@ class V0140CaseKeywordsTest extends TestCase
         $this->postJson("/ai/worker/{$job['id']}/result", ['output' => $out, 'engine' => 'test'], $h)->assertOk();
         $r = $this->as(self::ADMIN)->get("/cases/{$c->id}")->assertOk();
         $r->assertSee('AI の読み直しの結果を確かめてください');
-        $r->assertSee('EGに確認：');
+        $r->assertSee('エンジニアに確認：');
         $r->assertDontSee('今だけ'); // 「今」は元の行なので、AI の行と同じ文は「今だけ」にならない
     }
 
@@ -198,7 +198,7 @@ class V0140CaseKeywordsTest extends TestCase
         $this->postJson("/ai/worker/{$job['id']}/result", ['output' => $out, 'engine' => 'test'], $h)->assertOk();
         $this->assertSame('applied', DB::table('ai_jobs')->where('id', $job['id'])->value('status'));
         $n = DB::table('cases')->find($c->id);
-        $this->assertSame('人が書いた確認の文', $n->confirm_items, '自動では、人が直した「EGに確認」を置き換えない');
+        $this->assertSame('人が書いた確認の文', $n->confirm_items, '自動では、人が直した「エンジニアに確認」を置き換えない');
         $this->assertSame($lines, $n->required_lines);
         $this->assertStringContainsString('AWS', $n->required_skills); // 名前の欄は AI の結果になる
     }
@@ -237,7 +237,7 @@ class V0140CaseKeywordsTest extends TestCase
         $c = $this->register(self::ADMIN, ['raw_text' => self::RAW."\n架空の株式会社ゼロの案件です"]);
         DB::table('case_offers')->insert(['case_id' => $c->id, 'engineer_id' => $this->engId(self::EG1), 'score' => 50, 'sent_at' => now_str()]);
         $r = $this->as(self::EG1)->get("/cases/{$c->id}")->assertOk();
-        $r->assertSee('ご確認ください'); // EG の画面の見出し（管理者・SES・担当者は「EGに確認」）
+        $r->assertSee('ご確認ください'); // EG の画面の見出し（管理者・SES・担当者は「エンジニアに確認」）
         $r->assertSee('技術的知見を有している人材');
         $r->assertDontSee('架空の株式会社ゼロ');
         $r->assertDontSee('元の必須・尚可の文');
@@ -250,7 +250,7 @@ class V0140CaseKeywordsTest extends TestCase
         $this->as(self::ADMIN)->get("/cases/{$c->id}")->assertSee('元の必須・尚可の文');
         $this->as(self::SES1)->get("/cases/{$c->id}")->assertSee('元の必須・尚可の文');
         $r = $this->as(self::SES2)->get("/cases/{$c->id}")->assertOk(); // ほかの会社の SES は、見られても直せない
-        $r->assertSee('EGに確認');
+        $r->assertSee('エンジニアに確認');
         $r->assertDontSee('元の必須・尚可の文');
     }
 
