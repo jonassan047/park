@@ -1,6 +1,7 @@
 @php $u = auth()->user(); $yes = fn ($v) => $v ? '○' : new \Illuminate\Support\HtmlString('<span class="bad-text">要確認</span>'); @endphp
 @extends('layouts.app', ['title' => '選考：'.trim($a->case_code.' '.$a->title), 'wide' => true])
 @section('content')
+@php $staff = in_array($u->role, ['admin', 'ses']); $confirmed = !$cm || ($pm && $pm->status === 'sent'); @endphp
 <div class="cols"><div>
 <x-card title="応募の内容"><dl class="dl">
 <dt>ID</dt><dd><x-code :v="$a->code" /></dd>
@@ -15,17 +16,26 @@
 @if($contract)<dt>契約</dt><dd><a href="{{ url('/contracts/'.$contract->id) }}">{{ fmt_date($contract->start_date) }}〜{{ fmt_date($contract->end_date) }}（{{ man($contract->price) }}）</a> <x-code :v="$contract->code" /></dd>@endif
 </dl></x-card>
 
-@if($cm)<x-card title="プロバイダーへの返信">
-<p class="muted">応募したことを、案件をくれたプロバイダーにメールで伝えます。下書きを確かめてから送ります（この画面の記録だけでは、先方には届きません）。</p>
-@if($pm)<a class="btn small" href="{{ url('/provider-mails/'.$pm->id) }}">{{ $pm->status === 'draft' ? '下書きを開く' : 'プロバイダーへの返信を見る' }}</a>@else<x-post :action="'/case-mails/'.$cm->id.'/provider-draft'" label="プロバイダーへの返信を作る" />@endif
+</div><div>
+<x-card title="経過"><ol class="timeline">@foreach($events as $ev)<li><b>{{ lbl('appStatus', $ev->status) }}</b> <small>{{ fmt_dt($ev->at) }}・{{ $ev->name }}</small>@if($ev->note)<div>{{ $ev->note }}</div>@endif</li>@endforeach</ol></x-card>
+@if($staff)
+<x-card title="メモ・フィードバックを残す"><form method="post" action="{{ url('/applications/'.$a->id.'/note') }}">@csrf
+<x-field name="note" type="textarea" rows="2" placeholder="元請けからの印象、落ちた理由など（次の応募・面談に活かす）" /><button class="btn ghost small">残す</button></form></x-card>
+@endif
+</div></div>
+
+@if($cm)<x-card title="応募を確定させる">
+<p class="muted">応募をプロバイダーにメールで伝えて、確定させます。下書きを確かめてから送ります。送るまでは、面談・次の手順は出ません。</p>
+@if($pm)<a class="btn small" href="{{ url('/provider-mails/'.$pm->id) }}">{{ $pm->status === 'draft' ? '下書きを開く' : 'プロバイダーへの返信を見る' }}</a>@else<x-post :action="'/case-mails/'.$cm->id.'/provider-draft'" label="応募を確定させる" />@endif
 </x-card>
 @endif
 
+
+@if($confirmed)
 <x-card title="面談"><x-table :head="['回', '日時', '場所', '結果', '']" :count="$ivs->count()" empty="まだ面談はありません。">
 @foreach($ivs as $iv)<tr><td>{{ $iv->round }}回目</td><td>{{ fmt_dt($iv->scheduled_at) }}</td><td>{{ $iv->place }}</td><td>{{ badge('ivResult', $iv->result) }}</td><td><a href="{{ url('/interviews/'.$iv->id) }}">Q&A・結果</a></td></tr>@endforeach
 </x-table></x-card>
 
-@php $staff = in_array($u->role, ['admin', 'ses']); @endphp
 @if($staff && $open)
 <x-card title="次の手順">
 @if($a->status === 'applied')
@@ -59,12 +69,6 @@
 <x-card title="応募の取り下げ"><form method="post" action="{{ url('/applications/'.$a->id.'/withdraw') }}" onsubmit="return confirm('応募を取り下げますか？')">@csrf
 <x-field label="理由" name="note" required /><button class="btn ghost">取り下げる</button></form></x-card>
 @endif
-</div><div>
-<x-card title="経過"><ol class="timeline">@foreach($events as $ev)<li><b>{{ lbl('appStatus', $ev->status) }}</b> <small>{{ fmt_dt($ev->at) }}・{{ $ev->name }}</small>@if($ev->note)<div>{{ $ev->note }}</div>@endif</li>@endforeach</ol></x-card>
-@if($staff)
-<x-card title="メモ・フィードバックを残す"><form method="post" action="{{ url('/applications/'.$a->id.'/note') }}">@csrf
-<x-field name="note" type="textarea" rows="2" placeholder="元請けからの印象、落ちた理由など（次の応募・面談に活かす）" /><button class="btn ghost small">残す</button></form></x-card>
 @endif
-</div></div>
 <p class="backrow"><a class="btn ghost" href="{{ list_url('applications') }}">応募・選考の一覧に戻る</a></p>
 @endsection

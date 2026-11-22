@@ -7,7 +7,7 @@
 @foreach($mails as $m)<tr>
 <td>@if($m->route === 'own' || $u->role === 'admin'){{ $m->name }} <x-code :v="$m->eg_code" />@else{{ $m->initials ?: '—' }} <span class="muted">（{{ $m->ses_name }}・PARK から）</span>@endif<div class="muted">{{ $m->score }}点・{{ \App\Services\CaseMail::MODES[$m->mode] ?? '同じ内容' }}</div>
 @if(!empty($inboundN[$m->engineer_id]))<div><a href="{{ url('/inbound?case='.$c->id.'&eg='.$m->engineer_id) }}">返信メール {{ $inboundN[$m->engineer_id] }} 件</a></div>@endif
-@if($canMail)<div>@if(isset($pmByCm[$m->id]))<a class="btn ghost small" href="{{ url('/provider-mails/'.$pmByCm[$m->id]->id) }}">{{ $pmByCm[$m->id]->status === 'draft' ? '下書きを開く' : 'プロバイダーへの返信を見る' }}</a>@else<x-post :action="'/case-mails/'.$m->id.'/provider-draft'" label="プロバイダーへの返信を作る" cls="ghost small" />@endif</div>@endif</td>
+@if($canMail)<div>@if(isset($pmByCm[$m->id]))<a class="btn ghost small" href="{{ url('/provider-mails/'.$pmByCm[$m->id]->id) }}">{{ $pmByCm[$m->id]->status === 'draft' ? '下書きを開く' : 'プロバイダーへの返信を見る' }}</a>@else<x-post :action="'/case-mails/'.$m->id.'/provider-draft'" label="応募を確定させる" cls="ghost small" />@endif</div>@endif</td>
 <td>{{ fmt_dt($m->sent_at) }}</td>
 <td>{{ $replyLabels[$m->reply] ?? $m->reply }}@if($m->reply_note)<div class="muted">{{ $m->reply_note }}</div>@endif @if($m->reply_via === 'app')<div class="muted">（本人が画面で）</div>@endif</td>
 <td>@include('cases._result', ['m' => $m, 'canEdit' => $canMail])</td>
