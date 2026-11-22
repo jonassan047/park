@@ -1,6 +1,5 @@
-@extends('layouts.app', ['title' => 'エンジニアを選択：'.$c->title, 'wide' => true])
+@extends('layouts.app', ['title' => 'エンジニアを選択：'.$c->code.'　'.$c->title, 'wide' => true])
 @section('content')
-<p class="muted">案件ID：<x-code :v="$c->code" />　{{ $c->title }}</p>
 @unless($canSend)<p class="note">いまはメールを「保存のみ」にしています。送った記録は残りますが、実際には届きません。</p>@endunless
 @php
 // マッチした点・マッチしなかった点：必須・尚可ごとに、当たった項目・当たらなかった項目を並べる（業務は「（業務）」を添える）
