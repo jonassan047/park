@@ -293,6 +293,8 @@ class ParkTest extends TestCase
         $this->assertDatabaseHas('case_mails', ['id' => $m->id, 'reply_via' => 'ses']);
         $this->post("/r/$tok", ['answer' => 'question', 'note' => '在宅は何日？'])->assertOk()->assertSee('受け付けました');
         $this->assertDatabaseHas('case_mails', ['id' => $m->id, 'reply' => 'question', 'reply_via' => 'link', 'reply_note' => '在宅は何日？']);
+        // 返事をした本人（エンジニア）にも「受け付けました」のメールが届く
+        $this->assertDatabaseHas('mail_outbox', ['to_email' => 'eg1@park.example', 'kind' => 'reply-ack']);
         $this->get('/r/'.str_repeat('0', 32).'/question')->assertNotFound();
         // 「今やること」に出る
         $this->as('ses1@park.example')->get('/ses')->assertSee('今やること')->assertSee('山田 太郎 さんから質問');
