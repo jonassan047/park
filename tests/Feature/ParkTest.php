@@ -267,7 +267,8 @@ class ParkTest extends TestCase
         $this->post("/case-mails/{$m->id}/reply", ['reply' => 'interested', 'note' => '単価は相談したい'])->assertRedirect();
         $this->assertDatabaseHas('case_mails', ['id' => $m->id, 'reply' => 'interested', 'reply_via' => 'ses']);
         $this->get("/case-mails/{$m->id}/doc/careersheet")->assertOk();
-        $this->get("/cases/$cid")->assertSee('案内済メール')->assertSee('単価は相談したい');
+        $this->get("/cases/$cid")->assertSee('案内済メール')->assertSee('単価は相談したい')
+            ->assertSee('<option value="interested" selected>応募あり</option>', false); // 担当者の画面では「応募あり」。記録の欄も今の返事を選んでおく
 
         // グループのほかの人（プラスα）：PARK から送り、名前を伏せた書類は「応募したい」のあとだけ
         $this->post("/cases/$cid/mail/send", ['scope' => 'group', 'mode' => 'each', 'to' => [2 => ['send' => 1, 'subject' => '件名', 'body' => '本文']]])->assertRedirect();
