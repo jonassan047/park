@@ -161,7 +161,7 @@ class CaseController extends Controller
             $data['extraN'] = DB::table('inbound_mails')->where('case_id', $id)->where('status', 'linked')->whereNotNull('search_extra_id')
                 ->selectRaw('search_extra_id, count(*) as n')->groupBy('search_extra_id')->pluck('n', 'search_extra_id')->all();
         }
-        // 検索のキーワード（案内できる人の右の列。募集中だけ）：自分の検索の条件（外した印・足した項目を引き継ぐ）
+        // エンジニアを検索（案内できる人の右の列。募集中だけ）：自分の検索の条件（外した印・足した項目を引き継ぐ）
         if ($data['canMail'] && $c->status === 'open') {
             $data['cond'] = CaseSearch::conditions($c, DB::table('case_searches')->where('case_id', $id)->where('created_by', $u->id)->first());
         }

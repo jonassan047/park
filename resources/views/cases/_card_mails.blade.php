@@ -1,8 +1,9 @@
+@if($mails->count() || (isset($extras) && $extras->count()))
 {{-- 案内メールの記録：提案元 SES の担当者は操作もできる。管理者は読むだけ（v0.11.0）。追加の宛先は v0.15.0 --}}
 <x-card title="案内メール">
-<x-slot:actions>@if($canMail && $c->status === 'open')<a class="btn small" href="#keywords">エンジニアに提案する</a>@endif</x-slot:actions>
+<x-slot:actions>@if($canMail && $c->status === 'open')<a class="btn small" href="#keywords">エンジニアを検索</a>@endif</x-slot:actions>
 <div id="mails"></div>
-<x-table :head="$canMail ? ['エンジニア', '送った日', '返事', '先方の結果', '記録する', '案件をくれた先へ返す書類'] : ['エンジニア', '送った日', '返事', '先方の結果']" :count="$mails->count()" :empty="$canMail ? 'まだ送っていません。「エンジニアに提案する」で、候補を絞ってメールを送れます。' : 'まだ送っていません。案内は、提案元 SES の担当者が行います。'">
+<x-table :head="$canMail ? ['エンジニア', '送った日', '返事', '先方の結果', '記録する', '案件をくれた先へ返す書類'] : ['エンジニア', '送った日', '返事', '先方の結果']" :count="$mails->count()" :empty="$canMail ? 'まだ送っていません。「エンジニアを検索」で、候補を絞ってメールを送れます。' : 'まだ送っていません。案内は、提案元 SES の担当者が行います。'">
 @foreach($mails as $m)<tr>
 <td>@if($m->route === 'own' || $u->role === 'admin'){{ $m->name }} <x-code :v="$m->eg_code" />@else{{ $m->initials ?: '—' }} <span class="muted">（{{ $m->ses_name }}・PARK から）</span>@endif<div class="muted">{{ $m->score }}点・{{ \App\Services\CaseMail::MODES[$m->mode] ?? '同じ内容' }}</div>
 @if(!empty($inboundN[$m->engineer_id]))<div><a href="{{ url('/inbound?case='.$c->id.'&eg='.$m->engineer_id) }}">返信メール {{ $inboundN[$m->engineer_id] }} 件</a></div>@endif
@@ -32,3 +33,4 @@
 </x-table>
 @endif
 </x-card>
+@endif

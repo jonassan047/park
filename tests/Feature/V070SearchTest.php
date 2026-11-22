@@ -172,13 +172,13 @@ class V070SearchTest extends TestCase
         $this->as(self::ADMIN)->get("/cases/$cid/search")->assertForbidden();
     }
 
-    // v0.15.0：検索画面は案件の画面の「メール本文」「検索のキーワード」に移った。古い /search は案件の画面へ移す
+    // v0.15.0：検索画面は案件の画面の「メール本文」「エンジニアを検索」に移った。古い /search は案件の画面へ移す
     public function test_t6_search_screen_shows_mail_or_description(): void
     {
         $cid = $this->mkCase(self::SES1, ['raw_text' => "架空の全文その1\n架空の全文その2"]);
         $this->as(self::SES1)->get("/cases/$cid/search")->assertRedirect("/cases/$cid#keywords");
         $this->as(self::SES1)->get("/cases/$cid")->assertOk()->assertSee('架空の全文その1')->assertSee('架空の全文その2')
-            ->assertSee('Java')->assertSee('AWS')->assertSee('エンジニアに提案');
+            ->assertSee('Java')->assertSee('AWS')->assertSee('エンジニアを検索');
         $cid2 = $this->mkCase(self::SES1, ['raw_text' => '']);
         $this->as(self::SES1)->get("/cases/$cid2")->assertOk()->assertSee('元のメールはありません')->assertSee('架空の作業内容');
     }

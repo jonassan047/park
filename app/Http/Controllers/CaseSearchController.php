@@ -35,7 +35,7 @@ class CaseSearchController extends Controller
         return $c->status === 'open' ? null : $this->go("/cases/{$c->id}", '募集中の案件だけ案内できます。', 'bad');
     }
 
-    // 古いリンク（検索画面）：条件は案件の画面の「検索のキーワード」に移した
+    // 古いリンク（検索画面）：条件は案件の画面の「エンジニアを検索」に移した
     public function form(Request $r, int $id)
     {
         $c = $this->loadCase($r, $id);

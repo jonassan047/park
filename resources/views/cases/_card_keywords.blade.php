@@ -1,5 +1,5 @@
-{{-- 検索のキーワード（提案元 SES の担当者だけ。v0.15.0）：チェックした項目で、エンジニアを検索する。案件の必須・尚可は変わらない --}}
-<x-card title="検索のキーワード" id="keywords">
+{{-- エンジニアを検索（提案元 SES の担当者だけ。v0.15.0）：チェックした項目で、エンジニアを検索する。案件の必須・尚可は変わらない --}}
+<x-card title="エンジニアを検索" id="keywords">
 @if($c->status !== 'open')
 <p class="muted">募集を終えた案件です。</p>
 @else
@@ -22,7 +22,7 @@ $kwSections = [
 <x-field :label="$label.'に足す'" :name="'add_'.$side" type="textarea" rows="2" :hint="$hint" />
 <p><button class="btn ghost small" formaction="{{ url('/cases/'.$c->id.'/keywords') }}">追加</button></p>
 @endforeach
-<p><button class="btn">エンジニアに提案</button></p>
+<p><button class="btn">エンジニアを検索</button></p>
 <p class="muted">この検索にだけ使います。案件の必須・尚可は変わりません。チェックを外した項目は、検索に使いません。</p>
 </form>
 @endif

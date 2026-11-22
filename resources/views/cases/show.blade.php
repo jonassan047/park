@@ -6,7 +6,7 @@ $newLayout = $canMail;
 @extends('layouts.app', ['title' => $c->title, 'wide' => true])
 @section('content')
 @if($newLayout)
-{{-- 左：メール本文 → 案内メール → プロバイダーへの返信 → この案件への応募。右：AI の読み直し → 検索のキーワード --}}
+{{-- 左：メール本文 → 案内メール → プロバイダーへの返信 → この案件への応募。右：AI の読み直し → エンジニアを検索 --}}
 <div class="cols"><div>
 <x-card title="メール本文">
 <x-slot:actions>
@@ -60,7 +60,7 @@ $newLayout = $canMail;
   <x-card title="状態の変更">@foreach(['open', 'filled', 'closed'] as $s)@if($s !== $c->status)<x-post :action="'/cases/'.$c->id.'/status'" :label="lbl('caseStatus', $s).'にする'" :fields="['status' => $s]" cls="ghost small" /> @endif @endforeach</x-card>
 
 @elseif($u->role === 'ses')
-  {{-- 提案元ではない会社の SES・担当者：自社の人との相性と、推薦（提案元 SES の担当者は、新しい配置の「検索のキーワード」から提案する） --}}
+  {{-- 提案元ではない会社の SES・担当者：自社の人との相性と、推薦（提案元 SES の担当者は、新しい配置の「エンジニアを検索」から提案する） --}}
   <x-card title="エンジニアとの相性">
   @if($c->status !== 'open')<p class="muted">募集を終えた案件です。</p>
   @else

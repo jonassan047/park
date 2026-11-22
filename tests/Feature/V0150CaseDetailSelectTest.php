@@ -130,13 +130,11 @@ class V0150CaseDetailSelectTest extends TestCase
         $cid = $this->mkCase();
         foreach ([self::SES1, self::STAFF] as $who) {
             $r = $this->as($who)->get("/cases/$cid")->assertOk();
-            $r->assertSee('メール本文')->assertSee('架空のメール本文ABC')->assertSee('案件票（読み取った項目）')->assertSee('案内メール')->assertSee('プロバイダーへの返信')->assertSee('この案件への応募')
-                ->assertSee('AI の読み直し')->assertSee('検索のキーワード')->assertSee('id="keywords"', false)->assertSee('エンジニアに提案')
-                ->assertSee('EGに確認')->assertSee('稼働開始はいつからですか')->assertSee('追加')->assertSee('href="#keywords"', false);
+            $r->assertSee('メール本文')->assertSee('架空のメール本文ABC')->assertSee('案件票（読み取った項目）')->assertDontSee('案内メール')->assertDontSee('プロバイダーへの返信')->assertDontSee('この案件への応募') // 送る前・返信前・応募前は出さない
+                ->assertSee('AI の読み直し')->assertSee('エンジニアを検索')->assertSee('id="keywords"', false)->assertSee('エンジニアを検索')
+                ->assertSee('EGに確認')->assertSee('稼働開始はいつからですか')->assertSee('追加');
             $html = $r->getContent();
-            $this->assertLessThan(strpos($html, '案内メール'), strpos($html, '架空のメール本文ABC'), '本文が案内メールより上');
-            $this->assertLessThan(strpos($html, 'この案件への応募'), strpos($html, 'プロバイダーへの返信'));
-            $this->assertLessThan(strpos($html, '検索のキーワード'), strpos($html, 'AI の読み直し'), 'AI がキーワードより上');
+            $this->assertLessThan(strpos($html, 'エンジニアを検索'), strpos($html, 'AI の読み直し'), 'AI がキーワードより上');
             $this->assertStringNotContainsString('エンジニアとの相性', $html); // A8
             $this->assertSame(5, preg_match_all(self::CHECKED, $html), '既定は全部オン（必須2・尚可1・確認2）');
             $this->assertStringContainsString('name="kw"', $html);
@@ -150,7 +148,7 @@ class V0150CaseDetailSelectTest extends TestCase
         foreach ([self::ADMIN, self::SES2, self::EG1] as $who) {
             $res = $this->as($who)->get("/cases/$cid");
             if ($res->getStatusCode() !== 200) { $this->assertContains($res->getStatusCode(), [403, 404]); continue; }
-            $res->assertDontSee('架空のメール本文ABC')->assertDontSee('検索のキーワード')->assertDontSee('エンジニアに提案')->assertDontSee('id="keywords"', false);
+            $res->assertDontSee('架空のメール本文ABC')->assertDontSee('エンジニアを検索')->assertDontSee('エンジニアを検索')->assertDontSee('id="keywords"', false);
         }
         $this->as(self::ADMIN)->get("/cases/$cid/search")->assertForbidden();
         $this->as(self::SES2)->get("/cases/$cid/search")->assertForbidden();

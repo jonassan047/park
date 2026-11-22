@@ -363,10 +363,10 @@ class V0110NoDirectTest extends TestCase
     {
         [$cid, $eid, $mid] = $this->sentCase();
         $this->as(self::ADMIN, 'admin')->get("/cases/$cid")->assertOk()
-            ->assertDontSee('エンジニアに提案する')->assertSee('案内は、提案元 SES（みどり情報システム）の担当者が行います。')
+            ->assertDontSee('エンジニアを検索')->assertSee('案内は、提案元 SES（みどり情報システム）の担当者が行います。')
             ->assertSee('案内メール')->assertSee('自社 太郎')->assertDontSee("/case-mails/$mid/reply", false)->assertDontSee("/case-mails/$mid/doc/", false);
         // 提案元 SESの担当者には、今までどおり操作が出る
-        $this->as(self::SES1, 'ses')->get("/cases/$cid")->assertOk()->assertSee('エンジニアに提案する')->assertSee("/case-mails/$mid/reply", false);
+        $this->as(self::SES1, 'ses')->get("/cases/$cid")->assertOk()->assertSee('エンジニアを検索')->assertSee("/case-mails/$mid/reply", false);
     }
 
     public function test_n5_ses_acts_on_cases_registered_by_admin(): void

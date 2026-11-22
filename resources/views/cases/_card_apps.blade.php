@@ -1,3 +1,5 @@
+@if($apps->count())
 <x-card title="この案件への応募"><x-table :head="['ID', 'エンジニア', 'SES', '状態', '応募日', '']" :count="$apps->count()">
 @foreach($apps as $a)<tr><td><x-code :v="$a->code" /></td><td>{{ $a->eg_name }} <x-code :v="($u->role !== 'ses' || (int) $a->eg_ses_id === (int) $u->ses_id) ? $a->eg_code : null" /></td><td>{{ $a->ses_name }}</td><td>{{ badge('appStatus', $a->status) }}</td><td>{{ fmt_date($a->applied_at) }}</td><td><a class="btn small" href="{{ url('/applications/'.$a->id) }}">詳細</a>@if($u->role === 'admin' || (int) $a->eg_ses_id === (int) $u->ses_id) <a class="btn ghost small" href="{{ url('/cases/'.$c->id.'/threads/'.$a->engineer_id) }}">やり取り</a>@endif</td></tr>@endforeach
 </x-table></x-card>
+@endif
