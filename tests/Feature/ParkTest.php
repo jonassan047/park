@@ -308,7 +308,7 @@ class ParkTest extends TestCase
         $this->assertSame(1, DB::table('applications')->where('case_id', $cid)->where('engineer_id', 1)->count());
         $appId = DB::table('applications')->where('case_id', $cid)->where('engineer_id', 1)->value('id');
         $this->assertDatabaseHas('applications', ['id' => $appId, 'status' => 'submitted']);
-        $this->get("/cases/$cid")->assertSee('応募・面談の画面へ');
+        $this->get("/cases/$cid")->assertSee('応募する');
         // 応募の画面に「応募を確定させる」（先方に伝える前は、面談・次の手順を隠す）（案件の ID 付きのタイトルも）
         $this->get("/applications/$appId")->assertOk()->assertSee('応募を確定させる')->assertDontSee('面談依頼が来た')->assertSee('選考：'.DB::table('cases')->where('id', $cid)->value('code'));
         $this->post("/applications/$appId/interview", ['scheduled_at' => date('Y-m-d').'T10:00', 'place' => 'オンライン', 'request_note' => "設計の経験\nリーダー経験の有無"])->assertRedirect();
