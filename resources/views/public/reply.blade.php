@@ -1,5 +1,5 @@
 @php $labels = \App\Services\CaseMail::REPLIES; @endphp
-@extends('layouts.app', ['title' => $answer === 'interested' ? '案件へ応募' : 'ご返事のお願い'])
+@extends('layouts.app', ['title' => ['interested' => '案件へ応募', 'question' => '質問事項', 'declined' => '案件見送り'][$answer] ?? 'ご返事のお願い'])
 @section('content')
 <x-card><form method="post" action="{{ url('/r/'.$token) }}" class="narrow">@csrf
 @if($m->case_status !== 'open')<p class="note">この案件は、すでに募集を終えています。ご返事は担当者に届きます。</p>@endif
