@@ -11,6 +11,7 @@ use App\Services\CaseThread;
 use App\Services\Ids;
 use App\Services\Matcher;
 use App\Services\Notifier as N;
+use App\Services\PartnerTrack;
 use App\Services\Registration;
 use App\Services\SkillChecks;
 use App\Services\Workflow as W;
@@ -168,10 +169,19 @@ class CaseController extends Controller
                 ->where('t.case_id', $id)->whereNotNull('t.sent_at')->select('t.*', 'p.name as partner_name', 'su.name as staff_name')->orderByDesc('t.sent_at')->orderByDesc('t.id');
             if ($u->role === 'ses') $sq->where('t.ses_id', (int) $u->ses_id);
             $data['staffReq'] = $sq->get()->map(function ($t) use ($id) {
-                // その会社が案内した人数（案内メールの記録だけ数える。中身は見せない）
-                $t->introduced = DB::table('case_mails')->where('case_id', $id)->where('mode', CaseSearch::MODE_PARTNER)->where('ses_id', $t->partner_ses_id)->count();
+                // その会社が案内した人数（案内メールの記録だけ数える。中身は見せない）。提案の依頼・成約の数（v0.17.0）
+                $partner = DB::table('case_mails')->where('case_id', $id)->where('mode', CaseSearch::MODE_PARTNER)->where('ses_id', $t->partner_ses_id);
+                $t->introduced = (clone $partner)->count();
+                $t->handoffN = (clone $partner)->whereNotNull('handoff_at')->count();
+                $t->wonN = (clone $partner)->where('outcome', 'won')->count();
                 return $t;
             });
+            // パートナーから提案を頼まれた人（受注 SES の担当者だけ。管理者は案内済メールの partner の行で読む）：イニシャルと、結果の欄だけ。返信の本文・氏名は出さない
+            if ($data['canMail']) $data['handoffs'] = PartnerTrack::handoffRows($c);
+        }
+        // パートナー側の追跡：自社から案内した人（受注 SES ではない SES・担当者。行があるときだけ）
+        if ($u->role === 'ses' && !$data['canMail']) {
+            $data['partnerMails'] = PartnerTrack::rows($u, $c);
         }
         // 紹介の依頼を受けた会社の SES・担当者（受注 SES ではない）：会社の誰が開いても見える（依頼先が1人でも、休みなどで止まらないように）
         if ($u->role === 'ses' && !$data['canMail']) {

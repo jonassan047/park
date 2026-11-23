@@ -2,8 +2,10 @@
 <dl class="dl">
 <dt>ID</dt><dd><x-code :v="$c->code" /></dd>
 <dt>状態</dt><dd>{{ badge('caseStatus', $c->status) }}</dd>
-<dt>金額</dt><dd>@if($u->role === 'eg'){{-- エンジニアには、届いた案内メールの単価の文だけ（プロバイダーからの金額は出さない。v0.16.0） --}}{{ \App\Services\CaseMail::priceFor($c, (int) $u->engineer_id) }}@else{{ man($c->price) }} <span class="muted">{{ $c->price_note }}</span>@endif</dd>
-@if($u->role !== 'eg')<dt>元請け</dt><dd>{{ $c->client_label ?: '—' }}</dd><dt>受注 SES</dt><dd>{{ $c->ses_name ?: '—' }}</dd>@endif
+{{-- 受注 SES ではない SES・担当者：プロバイダーからの金額・金額のメモ・元請けは出さない（v0.17.0） --}}
+@php $hideSource = $u->role === 'ses' && !\App\Services\CaseMail::canSend($u, $c); @endphp
+<dt>金額</dt><dd>@if($u->role === 'eg'){{-- エンジニアには、届いた案内メールの単価の文だけ（プロバイダーからの金額は出さない。v0.16.0） --}}{{ \App\Services\CaseMail::priceFor($c, (int) $u->engineer_id) }}@elseif($hideSource){{ \App\Services\CaseMail::priceForSes($u, $c) }}@else{{ man($c->price) }} <span class="muted">{{ $c->price_note }}</span>@endif</dd>
+@if($u->role !== 'eg')@unless($hideSource)<dt>元請け</dt><dd>{{ $c->client_label ?: '—' }}</dd>@endunless<dt>受注 SES</dt><dd>{{ $c->ses_name ?: '—' }}</dd>@endif
 <dt>必須</dt><dd><x-chips :list="skill_items($c->required_skills)" /></dd>
 <dt>尚可</dt><dd><x-chips :list="skill_items($c->preferred_skills)" /></dd>
 @php $expReq = \App\Support\CaseExp::split($c->required_exp ?? null); $expPref = \App\Support\CaseExp::split($c->preferred_exp ?? null); @endphp

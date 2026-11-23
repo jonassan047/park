@@ -27,13 +27,16 @@ class SesController extends Controller
         $engs = DB::table('engineers')->where('ses_id', $sid)->get();
         $all = DB::table('applications')->where('ses_id', $sid)->pluck('status');
         $withProj = DB::table('engineer_projects')->distinct()->pluck('engineer_id')->all();
+        $newCases = DB::table('cases')->where('status', 'open')->orderByDesc('id')->limit(5)->get();
+        $texts = \App\Services\CaseMail::priceTextsForSes((int) $sid, $newCases->pluck('id')->map(fn ($x) => (int) $x)->all());
+        foreach ($newCases as $c) $c->price_disp = self::priceDisp($r->user(), $c, $texts);
         return view('ses.dashboard', [
             's' => DB::table('ses_companies')->find($sid), 'engs' => $engs,
             'apps' => DB::table('applications as a')->join('cases as c', 'c.id', '=', 'a.case_id')->join('engineers as e', 'e.id', '=', 'a.engineer_id')
                 ->where('a.ses_id', $sid)->whereNotIn('a.status', ['won', 'rejected', 'withdrawn'])->select('a.*', 'c.title', 'e.name as eg_name')->orderByDesc('a.updated_at')->get(),
             'offers' => DB::table('case_offers as o')->join('cases as c', 'c.id', '=', 'o.case_id')->join('engineers as e', 'e.id', '=', 'o.engineer_id')
                 ->where('e.ses_id', $sid)->whereIn('o.status', ['sent', 'viewed'])->where('c.status', 'open')->select('o.*', 'c.title', 'e.name as eg_name')->orderByDesc('o.sent_at')->get(),
-            'newCases' => DB::table('cases')->where('status', 'open')->orderByDesc('id')->limit(5)->get(),
+            'newCases' => $newCases,
             'est' => Billing::items($sid, this_month()),
             'won' => $all->filter(fn ($s) => $s === 'won')->count(), 'appCount' => $all->count(),
             'noSheet' => $engs->filter(fn ($e) => !in_array($e->id, $withProj)),
@@ -48,7 +51,9 @@ class SesController extends Controller
         $skills = SkillChecks::summaryMany($list->pluck('id')->all());
         // ログインの状態：兼任の人も engineer_id で探す（管理者との兼任かどうかは、ここには出さない）
         $users = DB::table('users')->whereIn('engineer_id', $list->pluck('id'))->orderByRaw("case when role = 'eg' then 1 else 0 end")->get()->keyBy('engineer_id');
+        $staff = \App\Services\EgStaff::ofMany($list); // 担当者（まとめて読む）
         foreach ($list as $e) {
+            $e->staff_name = ($staff[(int) $e->id] ?? null)?->name; // 担当者の氏名
             $e->skills = $skills[$e->id] ?? ''; // 同じ技術は1回だけ
             $e->account = engineer_state($e, $users[$e->id] ?? null);
             $e->mail = self::mailForSes($users[$e->id] ?? null);
@@ -73,12 +78,21 @@ class SesController extends Controller
         $engs = Registration::usableEngineers(DB::table('engineers')->where('ses_id', $r->user()->ses_id)->whereIn('status', ['available', 'proposing']))->get();
         $idxs = Matcher::skillIndexMany($engs->pluck('id')->all()); // 案件の数によらず、1回だけまとめて読む
         $exps = SkillChecks::expMany($engs->pluck('id')->all());
-        $list = $q->get()->map(function ($c) use ($engs, $idxs, $exps) {
+        $cases = $q->get();
+        $texts = \App\Services\CaseMail::priceTextsForSes((int) $r->user()->ses_id, $cases->pluck('id')->map(fn ($x) => (int) $x)->all()); // 案件ごとに問い合わせず、まとめて読む
+        $list = $cases->map(function ($c) use ($engs, $idxs, $exps, $r, $texts) {
             $best = $engs->map(fn ($e) => ['e' => $e, 's' => Matcher::score($c, $e, $idxs[$e->id] ?? [], $exps[$e->id] ?? [])['score']])->sortByDesc('s')->first();
             $c->best = $best ? "{$best['e']->name}（{$best['s']}点）" : '—';
+            $c->price_disp = self::priceDisp($r->user(), $c, $texts); // 自社が受注 SES の案件だけ、プロバイダーからの金額
             return $c;
         });
         return view('ses.cases', compact('list', 'mine'));
+    }
+
+    // 一覧の金額の列（v0.17.0）：自社が受注 SES の案件はプロバイダーからの金額。ほかは、自社あての紹介の依頼で伝えられた単価の文、無ければ「—」
+    public static function priceDisp($u, object $c, array $texts): string
+    {
+        return \App\Services\CaseMail::canSend($u, $c) ? man($c->price) : ($texts[(int) $c->id] ?? '—');
     }
 
     public function applications(Request $r)

@@ -49,12 +49,10 @@ class Todo
         $out = [];
         $s = DB::table('ses_companies')->find($sesId);
         // 案内メールの返事
-        // 受注 SES は、パートナー経由（mode=partner）以外の分。パートナー側の SES は、自社の担当者が送った分（mode=partner）
+        // 受注 SES は、パートナー経由（mode=partner）以外の分。パートナー側の分は、下の「自社から案内したエンジニア」（v0.17.0）
         $mails = DB::table('case_mails as m')->join('cases as c', 'c.id', '=', 'm.case_id')->join('engineers as e', 'e.id', '=', 'm.engineer_id')
             ->where('c.status', 'open')
-            ->where(fn ($w) => $w
-                ->where(fn ($a) => $a->where('c.source_ses_id', $sesId)->where(fn ($b) => $b->whereNull('m.mode')->orWhere('m.mode', '!=', CaseSearch::MODE_PARTNER)))
-                ->orWhere(fn ($a) => $a->where('m.ses_id', $sesId)->where('m.mode', CaseSearch::MODE_PARTNER)))
+            ->where('c.source_ses_id', $sesId)->where(fn ($b) => $b->whereNull('m.mode')->orWhere('m.mode', '!=', CaseSearch::MODE_PARTNER))
             ->select('m.*', 'c.title', 'e.name', 'e.initials', 'e.ses_id as eg_ses_id')->get();
         $applied = DB::table('applications')->whereIn('case_id', $mails->pluck('case_id')->unique()->all())->get(['case_id', 'engineer_id'])
             ->map(fn ($a) => $a->case_id.'-'.$a->engineer_id)->all();
@@ -65,6 +63,27 @@ class Todo
             if ($m->reply === 'interested') $out[] = self::item("{$who} さんが「応募したい」：{$m->title}", '書類を添付して先方に返し、「書類を返した」を押す', "/cases/{$m->case_id}#mails");
             if ($m->reply === 'question') $out[] = self::item("{$who} さんから質問：{$m->title}", ($m->reply_note ?: '内容を確かめて').'。答えて、返事を記録する', "/cases/{$m->case_id}#mails");
         }
+        // パートナー側：自社から案内して、最後の結果が未記録の人（案件が終わっても、記録するまで残る。v0.17.0）。1人につき、上から最初に当たる1つ
+        $partner = DB::table('case_mails as m')->join('cases as c', 'c.id', '=', 'm.case_id')->join('engineers as e', 'e.id', '=', 'm.engineer_id')
+            ->where('m.mode', CaseSearch::MODE_PARTNER)->where('m.ses_id', $sesId)->whereNull('m.outcome')->orderBy('m.id')
+            ->select('m.*', 'c.title', 'c.status as case_status', 'e.name', 'e.initials', 'e.ses_id as eg_ses_id')->get();
+        foreach ($partner as $m) {
+            $who = (int) $m->eg_ses_id === $sesId ? $m->name : ($m->initials ?: 'エンジニア');
+            $link = "/cases/{$m->case_id}#partner-mails";
+            if (in_array($m->result, ['passed', 'failed'], true)) $out[] = self::item("{$who} さん：先方の結果が出ました（{$m->title}）", '最後の結果（成約／不成約）を記録する', $link);
+            elseif (in_array($m->case_status, ['filled', 'closed'], true)) $out[] = self::item("{$who} さん：案件が終わりました（{$m->title}）", '最後の結果を記録する', $link);
+            elseif ($m->reply === 'interested' && !$m->handoff_at) $out[] = self::item("{$who} さんが「応募する」：{$m->title}", '受注 SES に提案を頼む', $link);
+            elseif ($m->reply === 'declined') $out[] = self::item("{$who} さんが見送り：{$m->title}", '最後の結果（不成約）を記録する', $link);
+            elseif ($m->reply === 'question') $out[] = self::item("{$who} さんから質問：{$m->title}", ($m->reply_note ?: '内容を確かめて').'。答えて、返事を記録する', $link);
+            elseif ($m->reply === 'none') $out[] = self::item("{$who} さんの返事待ち：{$m->title}", '返事が来たら記録する', $link);
+            else $out[] = self::item("{$who} さん：先方の結果待ち（{$m->title}）", '先方の結果待ち（受注 SES から届きます）', $link); // 提案を頼んだあと
+        }
+        // 受注 SES：パートナーから提案を頼まれて、プロバイダーへの返信をまだ送っていない人
+        $handoffs = DB::table('case_mails as m')->join('cases as c', 'c.id', '=', 'm.case_id')->join('engineers as e', 'e.id', '=', 'm.engineer_id')->join('ses_companies as p', 'p.id', '=', 'm.ses_id')
+            ->where('m.mode', CaseSearch::MODE_PARTNER)->whereNotNull('m.handoff_at')->whereNull('m.outcome')->where('c.source_ses_id', $sesId)->where('c.status', 'open')
+            ->whereNotExists(fn ($q) => $q->select(DB::raw(1))->from('provider_mails as pm')->whereColumn('pm.case_mail_id', 'm.id')->where('pm.status', 'sent'))
+            ->orderBy('m.handoff_at')->select('m.case_id', 'c.title', 'e.initials', 'p.name as partner_name')->get();
+        foreach ($handoffs as $h) $out[] = self::item('提案の依頼：'.($h->initials ?: 'エンジニア')."（{$h->partner_name}）{$h->title}", 'プロバイダーへの返信を作って送る', "/cases/{$h->case_id}#staffreq");
         // 自社が受注 SES で、まだ誰にも案内していない案件
         $cases = DB::table('cases as c')->where('c.source_ses_id', $sesId)->where('c.status', 'open')
             ->whereNotExists(fn ($q) => $q->select(DB::raw(1))->from('case_mails')->whereColumn('case_mails.case_id', 'c.id'))->get();

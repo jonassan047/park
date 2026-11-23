@@ -119,19 +119,14 @@ class V0160PartnerComposeTest extends TestCase
     public function test_a3_staff_decision_order(): void
     {
         $w = $this->world();
-        $b = $this->sesId(self::SES2);
+        // v0.17.0：担当者は EG ごとの担当者（engineers.staff_user_id）。使えない人が入っていれば会社の SES。それも使えなければ空
+        DB::table('engineers')->where('id', $w['b1'])->update(['staff_user_id' => $this->user(self::BY)->id]);
         $e = DB::table('engineers')->find($w['b1']);
-        // 登録した人が使えれば、その人（EG のアカウントを登録した人）
-        $egUser = W::createUser('eg16@example.test', '架空 EG', 'eg', 'park1234', ['engineer_id' => $w['b1']]);
-        DB::table('users')->where('id', $egUser)->update(['registered_by' => $this->user(self::BY)->id]);
         $this->assertSame(self::BY, CS::staffFor($e)->email);
-        // 使えなければ、会社の SES（代表者）→ それも使えなければ id の小さい担当者
         DB::table('users')->where('email', self::BY)->update(['active' => 0]);
-        $this->assertSame(self::BX, CS::staffFor($e)->email);
+        $this->assertSame(self::BX, CS::staffFor($e)->email); // 会社の SES（代表者）
         DB::table('users')->where('email', self::BX)->update(['active' => 0]);
-        // 最後は、seed の B 社の担当者（同じ条件の再計算はしない）
-        $this->assertSame(self::SES2, CS::staffFor($e)?->email);
-        $this->assertSame($this->user(self::SES2)->name, CS::staffFor($e)?->name);
+        $this->assertNull(CS::staffFor($e)); // SES も使えなければ、担当者はいない
     }
 
     public function test_a3_no_staff_cannot_be_checked(): void
@@ -282,9 +277,8 @@ class V0160PartnerComposeTest extends TestCase
     {
         $w = $this->world();
         $b2 = $this->mkEng(self::SES2, '他社 次郎', 'B.C');
-        // 別の担当者（B 社の Y）が登録した EG は、Y が担当者になる
-        $egUser = W::createUser('eg16b2@example.test', '架空 EG二', 'eg', 'park1234', ['engineer_id' => $b2]);
-        DB::table('users')->where('id', $egUser)->update(['registered_by' => $this->user(self::BY)->id]);
+        // 別の担当者（B 社の Y）が担当の EG は、Y が担当者になる（v0.17.0：EG ごとの担当者）
+        DB::table('engineers')->where('id', $b2)->update(['staff_user_id' => $this->user(self::BY)->id]);
         $sid = $this->search($w['cid']);
         $this->as(self::SES1)->post("/searches/$sid/compose", ['pick' => [$w['b1'], $b2]])->assertRedirect("/searches/$sid/compose");
         $this->assertSame(2, DB::table('case_search_staff')->where('search_id', $sid)->where('in_batch', 1)->count());
@@ -305,8 +299,7 @@ class V0160PartnerComposeTest extends TestCase
     {
         $w = $this->world();
         $b2 = $this->mkEng(self::SES2, '他社 次郎', 'B.C');
-        $egUser = W::createUser('eg16c2@example.test', '架空 EG三', 'eg', 'park1234', ['engineer_id' => $b2]);
-        DB::table('users')->where('id', $egUser)->update(['registered_by' => $this->user(self::BY)->id]);
+        DB::table('engineers')->where('id', $b2)->update(['staff_user_id' => $this->user(self::BY)->id]);
         $sid = $this->search($w['cid']);
         $this->as(self::SES1)->post("/searches/$sid/compose", ['pick' => [$w['b1'], $b2]])->assertRedirect();
         $rows = DB::table('case_search_staff')->where('search_id', $sid)->orderBy('id')->get();
@@ -501,7 +494,7 @@ class V0160PartnerComposeTest extends TestCase
         $this->assertStringNotContainsString('他社 花子', $a);
         $this->assertStringNotContainsString('B.B', $a);
         $b = implode("\n", $texts($this->sesId(self::SES2)));
-        $this->assertStringContainsString('他社 花子 さんが「応募したい」', $b, '自社の EG なので氏名で出る');
+        $this->assertStringContainsString('他社 花子 さんが「応募する」', $b, '自社の EG なので氏名で出る');
         $this->assertSame('partner', $cm->mode);
     }
 
@@ -606,7 +599,7 @@ class V0160PartnerComposeTest extends TestCase
 
     public function test_version(): void
     {
-        $this->assertSame('v0.16.0', config('park.version'));
-        $this->get('/login')->assertOk()->assertSee('v0.16.0');
+        $this->assertSame('v0.17.0', config('park.version'));
+        $this->get('/login')->assertOk()->assertSee('v0.17.0');
     }
 }

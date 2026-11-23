@@ -33,6 +33,26 @@
   @endif
 @endif
 </x-card>
+@if(!$isEg && $e->status !== 'left')
+<x-card title="担当者を付け替える" id="staff">
+  <p>今の担当者：{{ $staffNow ? $staffNow->name : '—' }}</p>
+  <p class="muted">同じ会社の担当者の中で付け替えられます。</p>
+  <form method="post" action="{{ url('/engineers/'.$e->id.'/staff') }}" onsubmit="return confirm('担当者を付け替えます。新しい担当者と、前の担当者・ご本人にお知らせが届きます。')">@csrf
+    <div class="field"><label>担当者</label>
+      <select name="staff_user_id">
+        @foreach($staffCandidates as $c)<option value="{{ $c->id }}" @selected($staffNow && (int) $staffNow->id === (int) $c->id)>{{ $c->name }}</option>@endforeach
+      </select></div>
+    <button class="btn">付け替える</button>
+  </form>
+  <h3>付け替えの記録</h3>
+  @php $nameOf = DB::table('users')->whereIn('id', $staffLogs->flatMap(fn ($l) => [$l->from_user_id, $l->to_user_id, $l->changed_by])->filter()->unique()->all())->pluck('name', 'id'); @endphp
+  <x-table :head="['日時', '前', '後', 'した人', '理由']" :count="$staffLogs->count()">
+  @foreach($staffLogs as $l)
+    <tr><td>{{ fmt_dt($l->created_at) }}</td><td>{{ $l->from_user_id ? ($nameOf[$l->from_user_id] ?? '—') : '—' }}</td><td>{{ $nameOf[$l->to_user_id] ?? '—' }}</td><td>{{ $l->changed_by ? ($nameOf[$l->changed_by] ?? '—') : '—' }}</td><td>{{ \App\Services\EgStaff::REASONS[$l->reason] ?? $l->reason }}</td></tr>
+  @endforeach
+  </x-table>
+</x-card>
+@endif
 @endif
 <x-card><form method="post" action="{{ url($action) }}">@csrf<div class="grid2">
 <div class="pair">

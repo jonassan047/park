@@ -224,6 +224,7 @@ class DummySeed
         config(['mail.default' => 'array']);
         try {
             self::insertAll($spec, $plan);
+            EgStaff::fillMissing(); // 作った EG に、はじめの担当者を入れる（お知らせは出さない）
         } finally {
             config(['mail.default' => $mailer]);
         }

@@ -8,6 +8,7 @@ use App\Services\CaseResult;
 use App\Services\EngineerDocs;
 use App\Services\Matcher;
 use App\Services\Notifier as N;
+use App\Services\PartnerTrack;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -81,16 +82,38 @@ class CaseMailController extends Controller
         return $this->go("/cases/$id", "{$n}名に案内メールを送りました。返事が来たら、下の「案内済メール」に記録してください。");
     }
 
-    // 5. 返事の記録（SES に直接来た返信を入れる）
+    // 5. 返事の記録（SES に直接来た返信を入れる）。受注 SES の自社のエンジニアの分と、パートナーが自社から案内した分（v0.17.0）
     public function reply(Request $r, int $mid)
     {
         $m = DB::table('case_mails')->find($mid);
         abort_unless($m, 404);
-        $c = $this->load($r, $m->case_id);
-        abort_unless($this->ownEngineer($r, $m), 403); // 返事を記録できるのは、自社のエンジニアの分だけ
+        $c = DB::table('cases')->find($m->case_id);
+        abort_unless($c, 404);
+        $track = PartnerTrack::canTrack($r->user(), $m);
+        abort_unless($track || (CM::canSend($r->user(), $c) && $this->ownEngineer($r, $m)), 403); // 受注 SES は自社のエンジニアの分だけ。パートナーは自社から案内した分
         CM::reply($c->id, $m->engineer_id, (string) $r->input('reply'), str_in($r->input('note')), 'ses');
         N::audit($r->user()->id, 'case-mail-reply', "#$mid ".$r->input('reply'));
-        return $this->go("/cases/{$c->id}#mails", '返事を記録しました。');
+        return $this->go("/cases/{$c->id}".($track ? '#partner-mails' : '#mails'), '返事を記録しました。');
+    }
+
+    // 受注 SES に提案を頼む（パートナーが、返事が「応募する」の人について。v0.17.0）。管理者・ほかの会社は 403
+    public function handoff(Request $r, int $mid)
+    {
+        $m = DB::table('case_mails')->find($mid);
+        abort_unless($m, 404);
+        abort_unless(PartnerTrack::canTrack($r->user(), $m), 403);
+        $res = PartnerTrack::handoff($r->user(), $mid, is_string($r->input('note')) ? $r->input('note') : null);
+        return $this->go("/cases/{$m->case_id}#partner-mails", $res['msg'], $res['type']);
+    }
+
+    // 最後の結果（成約・不成約）を記録する（パートナーが、自社から案内した人について。v0.17.0）
+    public function outcome(Request $r, int $mid)
+    {
+        $m = DB::table('case_mails')->find($mid);
+        abort_unless($m, 404);
+        abort_unless(PartnerTrack::canTrack($r->user(), $m), 403);
+        $res = PartnerTrack::outcome($r->user(), $mid, is_string($r->input('outcome')) ? $r->input('outcome') : '', is_string($r->input('note')) ? $r->input('note') : null);
+        return $this->go("/cases/{$m->case_id}#partner-mails", $res['msg'], $res['type']);
     }
 
     // 先方の結果（結果待ち・合格・不合格）とメモの登録（v0.13.0）。持ち込み元の担当者だけ（管理者・ほかの会社・エンジニアは 403）。
@@ -100,7 +123,8 @@ class CaseMailController extends Controller
         $m = DB::table('case_mails')->find($mid);
         abort_unless($m, 404);
         $c = $this->load($r, $m->case_id);
-        abort_if($m->mode === CaseSearch::MODE_PARTNER, 403); // パートナー経由の分は、受注 SES が結果を登録しない
+        // パートナー経由の分は、パートナーが提案を頼んだ人（handoff_at がある人）だけ、受注 SES が結果を登録できる（v0.17.0）
+        abort_if($m->mode === CaseSearch::MODE_PARTNER && !$m->handoff_at, 403);
         $res = CaseResult::set($r->user(), $mid, (string) $r->input('result'), (string) $r->input('note'));
         return $this->go((string) $r->input('back') === 'inbound' && $r->input('inbound') ? '/inbound/'.(int) $r->input('inbound') : ((string) $r->input('back') === 'pm' && $r->input('pm') ? '/provider-mails/'.(int) $r->input('pm') : "/cases/{$c->id}#mails"), $res['msg'], $res['type']);
     }
@@ -128,7 +152,8 @@ class CaseMailController extends Controller
         $m = DB::table('case_mails')->find($mid);
         abort_unless($m, 404);
         $this->load($r, $m->case_id);
-        abort_if($m->mode === CaseSearch::MODE_PARTNER, 403); // パートナー経由の分は、受注 SES に書類を出さない
+        // パートナー経由の分は、提案を頼まれた人（handoff_at がある人）の名前を伏せた業務経歴書だけ（v0.17.0）
+        abort_if($m->mode === CaseSearch::MODE_PARTNER && (!$m->handoff_at || $kind !== 'careersheet-anon'), 403);
         abort_unless(in_array($kind, ['resume', 'careersheet', 'careersheet-anon'], true), 404);
         $foreign = $r->user()->role === 'ses' && (int) DB::table('engineers')->where('id', $m->engineer_id)->value('ses_id') !== (int) $r->user()->ses_id;
         if ($m->route === 'group' || $foreign) {

@@ -230,16 +230,10 @@ class CaseSearch
         return $out;
     }
 
-    // パートナーの EG の担当者（3.2）。上から順に、最初に使える1人：EG のアカウントを登録した人 → その会社の SES（代表者）→ 担当者のうち id が一番小さい人。いなければ null
+    // パートナーの EG の担当者（v0.17.0）：その EG の担当者（engineers.staff_user_id）。使えない人が入っていれば会社の SES。いなければ null
     public static function staffFor(object $e): ?object
     {
-        $sesId = (int) $e->ses_id;
-        $ok = fn (?object $x) => $x && in_array($x->role, ['ses', 'admin'], true) && (int) $x->ses_id === $sesId && Registration::usable($x);
-        $reg = DB::table('users')->where('engineer_id', $e->id)->where('role', 'eg')->value('registered_by');
-        if ($reg && $ok($x = DB::table('users')->find($reg))) return $x;
-        $rep = DB::table('ses_companies')->where('id', $sesId)->value('rep_user_id');
-        if ($rep && $ok($x = DB::table('users')->find($rep))) return $x;
-        return DB::table('users')->whereIn('role', ['ses', 'admin'])->where('ses_id', $sesId)->orderBy('id')->get()->first($ok);
+        return EgStaff::of($e);
     }
 
     // 担当者の表示：企業名[担当者名]
@@ -252,8 +246,7 @@ class CaseSearch
     // 担当者として選べる人か（その会社の SES・担当者で、使える人）
     public static function usableStaff(?object $x, int $sesId): bool
     {
-        return $x && in_array($x->role, ['ses', 'admin'], true) && (int) $x->ses_id === $sesId && Registration::usable($x)
-            && DB::table('ses_companies')->where('id', $sesId)->value('status') === 'active';
+        return EgStaff::usable($x, $sesId);
     }
 
     // この案件で、紹介の依頼を送った（送信済みの）エンジニアの id と、担当者の id
@@ -403,6 +396,8 @@ class CaseSearch
         $proper = [];
         $partner = [];
         $failed = 0;
+        // パートナーの EG の担当者は、人数によらず決まった回数でまとめて読む
+        $staffMap = EgStaff::ofMany(collect($ev)->filter(fn ($r) => !$r['own'] && isset($members[$r['e']->id]))->pluck('e'));
         foreach ($ev as $row) {
             $mem = $members[$row['e']->id] ?? null;
             if (!$row['pass'] && !($mem && $mem->by_hand)) { $failed++; continue; }
@@ -413,7 +408,7 @@ class CaseSearch
                 $proper[] = $row;
                 continue;
             }
-            $row['staff'] = self::staffFor($row['e']);
+            $row['staff'] = $staffMap[(int) $row['e']->id] ?? null;
             // 依頼済み：この案件で、その人を含む依頼を送った／その担当者に送った
             $row['requested'] = isset($req['engineers'][(int) $row['e']->id]) || ($row['staff'] && isset($req['staff'][(int) $row['staff']->id]));
             $row['name'] = self::displayName($u, $row);
@@ -446,7 +441,7 @@ class CaseSearch
         foreach (self::evaluate($u, $c, json_decode((string) $s->conditions, true) ?: []) as $row) {
             if ((int) $row['e']->id !== $engineerId) continue;
             $row['member'] = $mem;
-            if (!$row['own']) $row['staff'] = self::staffFor($row['e']);
+            if (!$row['own']) $row['staff'] = EgStaff::ofMany([$row['e']])[(int) $row['e']->id] ?? null;
             $row['name'] = self::displayName($u, $row);
             return $row;
         }

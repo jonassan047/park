@@ -224,6 +224,14 @@ class Inbound
         return in_array(strtolower($from), array_filter($mails), true);
     }
 
+    // 差出人が、その案件のプロバイダーの登録のアドレスか
+    private static function fromIsCaseProvider(object $case, string $from): bool
+    {
+        if ($from === '' || !$case->provider_id) return false;
+        $mail = strtolower(trim((string) DB::table('providers')->where('id', $case->provider_id)->value('email')));
+        return $mail !== '' && strtolower($from) === $mail;
+    }
+
     // 見つかった案内メール（トークンの行か、case_mails の行）から、記録に入れる項目を作る
     private static function linkFields(string $by, ?object $token, ?object $cm, string $from): ?array
     {
@@ -352,8 +360,9 @@ class Inbound
             // その会社の中の話なので、受注 SES には見せず、案内した会社（inbound.ses_id）が見る（v0.16.0）
             $me = (int) $u->ses_id;
             $q->leftJoin('case_mails as cm', 'cm.id', '=', 'i.case_mail_id')->where('i.status', 'linked')->where(function ($w) use ($me) {
-                $w->where(fn ($a) => $a->where('c.source_ses_id', $me)->where(fn ($b) => $b->whereNull('cm.mode')->orWhere('cm.mode', '!=', CaseSearch::MODE_PARTNER)))
-                  ->orWhere(fn ($a) => $a->where('i.ses_id', $me)->where('cm.mode', CaseSearch::MODE_PARTNER));
+                $w->where(fn ($a) => $a->where('c.source_ses_id', $me)->where(fn ($b) => $b->whereNull('cm.mode')->orWhere('cm.mode', '!=', CaseSearch::MODE_PARTNER)->orWhere('i.sender_kind', 'provider')))
+                  // プロバイダーからの返事は、案件の今の受注 SES と管理者にしか見せない（パートナーの案内に紐付いた返事でも。v0.17.0）
+                  ->orWhere(fn ($a) => $a->where('i.ses_id', $me)->where('cm.mode', CaseSearch::MODE_PARTNER)->where(fn ($k) => $k->whereNull('i.sender_kind')->orWhere('i.sender_kind', '!=', 'provider')));
             });
         } elseif (!$u || $u->role !== 'admin') $q->whereRaw('1 = 0');
         return $q;
@@ -546,12 +555,19 @@ class Inbound
         $case = DB::table('cases')->find($cm->case_id);
         $token = DB::table('reply_tokens')->where('case_mail_id', $cm->id)->first();
         $ses = $cm->ses_id ?: ($case->source_ses_id ?? null);
+        $fields = ['from_mismatch' => !self::fromIsEngineer((int) $cm->engineer_id, (string) $m->from_email)];
+        // パートナーの案内に手で紐付けても、差出人がその案件のプロバイダーのアドレスなら、プロバイダーの返事として受注 SES に出す
+        // （パートナーの担当者の受信箱・お知らせには出さない）
+        if ($cm->mode === CaseSearch::MODE_PARTNER && !empty($case->source_ses_id) && self::fromIsCaseProvider($case, (string) $m->from_email)) {
+            $ses = $case->source_ses_id;
+            $fields = ['sender_kind' => 'provider', 'from_mismatch' => false];
+        }
         // 同時に 2 回押されても、1 回だけ紐付く
         $done = DB::table('inbound_mails')->where('id', $id)->where('status', 'unlinked')->update([
             'status' => 'linked', 'match_by' => 'manual', 'reply_token_id' => $token->id ?? null, 'case_mail_id' => $cm->id, 'case_id' => $cm->case_id,
-            'ses_id' => $ses ? (int) $ses : null, 'engineer_id' => $cm->engineer_id, 'from_mismatch' => !self::fromIsEngineer((int) $cm->engineer_id, (string) $m->from_email),
+            'ses_id' => $ses ? (int) $ses : null, 'engineer_id' => $cm->engineer_id,
             'linked_by' => $admin->id, 'linked_at' => now_str(), 'notified_at' => null,
-        ]);
+        ] + $fields);
         if (!$done) return ['type' => 'bad', 'msg' => 'もう紐付いています。'];
         N::audit($admin->id, 'inbound-link', "#$id → 案件 ".($case->code ?? $cm->case_id)." 案内メール #{$cm->id}");
         ProviderReply::draftFromInbound($id);

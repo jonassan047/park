@@ -293,7 +293,9 @@ class ProviderReply
             if ($e) {
                 N::toEg((int) $e->id, '先方へご返事を伝えました'.$tail, "案件「{$case->title}」について、担当者が先方へあなたのご返事を伝えました。", "/cases/{$case->id}", false, self::KIND);
                 if ((int) $e->ses_id !== (int) $u->ses_id) {
-                    N::toSes((int) $e->ses_id, 'グループの案件で、貴社のエンジニアのご返事を先方へ伝えました'.$tail, "{$e->name} さんのご返事を、{$sesName}が先方へ伝えました。", "/cases/{$case->id}", false, self::KIND);
+                    // パートナーの案内の行なら、お知らせの行き先は「自社から案内したエンジニア」の表
+                    $anchor = (isset($cm) && $cm && ($cm->mode ?? null) === CaseSearch::MODE_PARTNER) ? '#partner-mails' : '';
+                    N::toSes((int) $e->ses_id, 'グループの案件で、貴社のエンジニアのご返事を先方へ伝えました'.$tail, "{$e->name} さんのご返事を、{$sesName}が先方へ伝えました。", "/cases/{$case->id}{$anchor}", false, self::KIND);
                 }
             }
             N::audit($u->id, 'provider-mail-send', "#$id 案件 ".($case->code ?? $case->id).' → '.($pv->code ?? "プロバイダー#{$pv->id}").'（'.(CaseMail::REPLIES[$pm->reply] ?? $pm->reply).'）');

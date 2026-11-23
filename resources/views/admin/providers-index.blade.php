@@ -1,5 +1,6 @@
 @extends('layouts.app', ['title' => 'プロバイダー'])
 @section('content')
+@include('partials.provider-tabs', ['on' => 'list'])
 <p class="muted">プロバイダーは、案件を SES に提供してくれる上位者です。管理者と SES が見られます（エンジニアには出ません）。案件の登録で選びます。</p>
 <p class="right"><a class="btn small" href="{{ url($base.'/new') }}">プロバイダーを登録</a></p>
 <x-table :head="['ID', '企業名', '氏名', 'メール', '電話', '登録日', '']" :count="$list->count()">

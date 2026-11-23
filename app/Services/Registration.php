@@ -517,6 +517,8 @@ class Registration
             }
         });
         N::audit($actor->id ?? null, 'reg-edit', lbl('role', $t->role)." #{$t->id}");
+        // 仮登録のエンジニアの所属が変わったら、担当者は新しい会社の SES に
+        if ($sesChanged && $t->role === 'eg' && $t->engineer_id) EgStaff::moveTo((int) $t->engineer_id, $sesId, $actor);
         if ($mailChanged || $sesChanged) {
             self::sendLink(DB::table('users')->find($t->id), $actor); // 新しいリンクで、前のリンクは使えなくなる
             return ['ok' => '保存し、新しい仮登録のご案内を送りました（前のリンクは使えなくなりました）。'];

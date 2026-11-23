@@ -8,7 +8,8 @@
 <dt>案件</dt><dd><a href="{{ url('/cases/'.$a->case_id) }}">{{ $a->title }}</a> <x-code :v="$a->case_code" /></dd>
 <dt>エンジニア</dt><dd><a href="{{ url('/engineers/'.$a->engineer_id) }}">{{ $a->eg_name }}</a> <x-code :v="($u->role !== 'ses' || (int) $a->eg_ses_id === (int) $u->ses_id) ? $a->eg_code : null" />@if($u->role === 'admin' && base_role() === 'admin' && (int) $u->engineer_id === (int) $a->engineer_id) <span class="badge warn">管理者ご本人の応募</span>@endif</dd>
 <dt>SES</dt><dd>{{ $a->ses_name }}</dd><dt>状態</dt><dd>{{ badge('appStatus', $a->status) }}</dd>
-<dt>提示の金額</dt><dd>{{ man($a->proposed_price) }}</dd><dt>応募日</dt><dd>{{ fmt_dt($a->applied_at) }}</dd>
+@php $caseRow = (object) ['id' => $a->case_id, 'price' => $a->case_price, 'source_ses_id' => $a->case_source_ses_id]; $showPrice = $u->role === 'admin' || \App\Services\CaseMail::canSend($u, $caseRow); @endphp
+<dt>提示の金額</dt><dd>{{ $showPrice ? man($a->proposed_price) : \App\Services\CaseMail::priceForSes($u, $caseRow) }}</dd><dt>応募日</dt><dd>{{ fmt_dt($a->applied_at) }}</dd>
 <dt>開始に間に合う</dt><dd>{{ $yes($a->start_ok) }}</dd><dt>金額</dt><dd>{{ $yes($a->price_ok) }}</dd><dt>働き方・場所</dt><dd>{{ $yes($a->style_ok) }}</dd>
 <dt>気になること</dt><dd>{!! nl2br(e($a->condition_note)) ?: '—' !!}</dd>
 @if($a->status === 'rejected')<dt>見送りの理由</dt><dd>{{ $a->reject_reason }} {{ $a->reject_note }}</dd>@endif
@@ -56,7 +57,7 @@
 @endif
 @if(in_array($a->status, ['interview', 'interviewed']))
   <form method="post" action="{{ url('/applications/'.$a->id.'/contract') }}" onsubmit="return confirm('成約として記録し、本人と SES に知らせます。よろしいですか？')">@csrf<h3>成約を記録</h3>
-  <div class="grid3"><x-field label="契約の金額（万円／月）" name="price" type="number" step="0.5" :value="num_disp($a->proposed_price ?: $a->case_price)" required />
+  <div class="grid3"><x-field label="契約の金額（万円／月）" name="price" type="number" step="0.5" :value="num_disp($a->proposed_price ?: ($showPrice ? $a->case_price : null))" required />
   <x-field label="開始日" name="start_date" type="date" :value="$a->case_start ?: today_str()" required /><x-field label="契約の終わり（空なら3か月）" name="end_date" type="date" /></div>
   <button class="btn">成約にする</button></form>
 @endif

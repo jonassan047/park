@@ -77,6 +77,8 @@ class Affiliation
             $now = now_str();
             DB::table('engineers')->where('id', $id)->update(['ses_id' => $toId, 'updated_at' => $now]);
             DB::table('users')->where('engineer_id', $id)->where('role', 'eg')->update(['ses_id' => $toId, 'updated_at' => $now]);
+            // 担当者は、新しい会社の SES に（動かした人は前の会社の人なので、新しい会社のことは SES に任せる）
+            EgStaff::moveTo($id, $toId, $u);
             $fromName = (string) ($names[$from] ?? '');
             $toName = (string) ($names[$toId] ?? '');
             N::audit($u->id, self::KIND, W::selfMark($u, $id)."エンジニア #{$id}：{$fromName} → {$toName}");

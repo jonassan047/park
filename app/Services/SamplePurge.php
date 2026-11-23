@@ -178,6 +178,8 @@ class SamplePurge
         DB::transaction(function () use ($p, $moveKept, $moveTo) {
             if ($p['regBy']) DB::table('users')->whereIn('id', $p['regBy'])->update(['registered_by' => null]);
             if ($p['postBy']) DB::table('case_thread_posts')->whereIn('id', $p['postBy'])->update(['from_user_id' => null]);
+            // 消す人が担当者になっている、残る EG は、担当者を空にする（あとで fillMissing が入れ直す）
+            if ($p['sets']['users']) DB::table('engineers')->whereIn('staff_user_id', $p['sets']['users'])->update(['staff_user_id' => null]);
             if ($p['partnerReset']) DB::table('case_threads')->whereIn('id', $p['partnerReset'])->update(['partner_ses_id' => DB::raw('ses_id')]);
             if ($moveKept && ($p['moveUsers'] || $p['moveEngs'])) {
                 $from = $p['sets']['ses'];
@@ -195,6 +197,7 @@ class SamplePurge
 
         // 3. 書類の実物を消す（transaction が通ったあと）
         foreach ($p['files'] as $f) Storage::disk(EngineerDocs::DISK)->delete($f);
+        EgStaff::fillMissing(); // 担当者が空になった EG に、担当者を入れ直す
 
         // 4. 記録（件数だけ。名前は書かない）
         $deleted = array_filter(array_map(fn ($c) => $c[0], $p['counts']));

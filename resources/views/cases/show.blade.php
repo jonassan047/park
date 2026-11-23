@@ -57,6 +57,7 @@ $newLayout = $canMail;
 @elseif($u->role === 'ses')
   {{-- 受注 SES ではない会社の SES・担当者：紹介の依頼（来ていれば一番上）、自社の人との相性と、推薦（受注 SES の担当者は、新しい配置の「エンジニアを検索」から提案する） --}}
   @if(isset($referrals) && $referrals->count())@include('cases._card_referral')@endif
+  @include('cases._card_partner_mails')
   <x-card title="エンジニアとの相性">
   @if($c->status !== 'open')<p class="muted">募集を終えた案件です。</p>
   @else

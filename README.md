@@ -139,7 +139,7 @@ SES が受けた案件メールから、エンジニアへの案内メールを�
 
 「エンジニアを選択」の結果を「プロパー（自社のエンジニア）」と「パートナー（他社のエンジニア）」に分け、他社の EG には直接メールを送らず、その会社の担当者に紹介を頼む形にした。**この節が新しい**（上の「全員へのメッセージ」・他社の EG への直接送信は、この版でやめた）。
 
-- **判定**：プロパー＝`engineers.ses_id` が操作している人の `users.ses_id` と同じ EG（`CaseSearch::pool` の `own`、行の `kind`）、パートナー＝それ以外。列は足していない。パートナーの担当者は `CaseSearch::staffFor`：①その EG のアカウントを登録した人（`users.registered_by`）→ ②会社の SES（`ses_companies.rep_user_id`）→ ③その会社の担当者のうち id が一番小さい人。どれも使える人（`Registration::usable`）だけ。いなければ「担当者がいません」で選べない。表示は「イニシャル（企業名[担当者名]）」（`displayName`、`staffLabel`）。年齢・価格・最寄り駅は「—」。
+- **判定**：プロパー＝`engineers.ses_id` が操作している人の `users.ses_id` と同じ EG（`CaseSearch::pool` の `own`、行の `kind`）、パートナー＝それ以外。列は足していない。パートナーの担当者は `CaseSearch::staffFor`（v0.17.0 から、その EG の担当者 `engineers.staff_user_id`。使えなければ会社の SES。下の v0.17.0 の節）。いなければ「担当者がいません」で選べない。表示は「イニシャル（企業名[担当者名]）」（`displayName`、`staffLabel`）。年齢・価格・最寄り駅は「—」。
 - **一覧**（`cases/search-list.blade.php`。`CaseSearch::rows` は `proper`・`partner`・`staff`・`failed`・`rows`（proper＋partner）を返す）：表が2つ。「全員へのメッセージ」は画面にもメールにも出さない（列 `case_searches.message_all` は残す）。「エンジニア・担当者を追加」（`findTargets`：自社の EG は氏名・愛称・イニシャル、他社は企業名・担当者の氏名。他社の EG は探せない）。他社の担当者を足すと `case_search_staff`（`by_hand=1`）の行でパートナーの表に入る（`spick[]`）。ボタンは［エンジニア・担当者へメールを作成］（`POST /searches/{sid}/compose`）と［チェックを保存］。
 - **作成画面**（`/searches/{sid}/compose`。`cases/search-compose.blade.php`）：プロパー（チェック済み・未送信の自社の EG と追加の宛先）→ 担当者（束 `case_search_staff.in_batch`。`CaseSearch::buildBatch` が、チェックしたパートナーの EG を担当者ごとにまとめる）の順。左で件名・本文を直せる（案件の項目は文字で入り、1人ずつ変わる `{呼び名}`・`{合う点}`・`{個別メッセージ}`／`{宛名}`・`{依頼するエンジニア}` だけ差し込み）。送る前の確かめ（JavaScript の `confirm`）：「■単価：」の行がはじめのまま／変えた／行が無い、で文が変わる。送ったときの単価の文は `case_mails.price_text`・`case_search_staff.price_text` に残る（`CaseSearch::priceTextOf`、100 字まで）。下書きは `case_searches.proper_subject/proper_body`、担当者は行の `subject/body`。古い `POST /searches/{sid}/send` は作成画面へ移す。
 - **担当者への依頼**（`CaseSearch::sendStaff`）：案件の行を押さえ、`sent_at` が空の行だけ更新してから、メール（kind `case-referral`。Reply-To なし）と PARK のお知らせ（`/cases/{id}#referral`）。同じ案件で同じ担当者には1通だけ（ほかの検索から送っていれば「依頼済み」）。監査 `case-referral-send`（名前・アドレスは書かない）。
@@ -147,6 +147,16 @@ SES が受けた案件メールから、エンジニアへの案内メールを�
 - **返信・やり取り**：`mode='partner'` の案内への返信は、案内した会社（`inbound_mails.ses_id`）だけが `/inbound` で読める（`Inbound::query`。受注 SES には見えない）。`CaseThread::partnerFor` はその EG の所属の会社。`ProviderReply::draftFromInbound` は下書きを作らない。受注 SES・管理者の案件の画面の「案内済メール」には `mode='partner'` の行を出さず、代わりに「担当者への依頼」の表（会社・担当者・送った日・状態・案内した人数）。
 - **EG の金額**：EG の画面（案件の画面の案件票と応募の確認・届いた案件・ホーム）の金額は、届いた案内メールの単価の文（`CaseMail::priceFor`。無ければ「担当者にご確認ください」）。プロバイダーからの金額は出さない。SES・管理者の画面の金額は今のまま。
 - **版**：`v0.16.0`（`config/park.php`）。マイグレーションは `2026_11_23_000001_partner_requests.php`（表 `case_search_staff`、`case_searches` に `proper_subject`・`proper_body`・`request_id`、`case_mails` に `price_text`。今ある案内メールの本文の「■単価：」から `price_text` を埋める。足すだけ。`down` は足したものを消す）。
+
+### EG ごとの担当者・プロバイダーを伏せる・原文の一覧・パートナーの追跡（v0.17.0。2026-11-23）
+
+**この節が新しい**。計画は `PLAN-v0170.md`。プレーヤー：管理者・SES・担当者・EG（アプリでは SES と担当者はどちらも `users.role=ses`）。
+
+- **EG ごとの担当者**：`engineers.staff_user_id`（1人の EG に担当者は1人）。手続きは `app/Services/EgStaff.php`（`usable`・`of`（読むだけ。使えなければ会社の SES、それも無ければ null）・`candidates`・`initial`・`assign`・`release`・`fillMissing`）。EG を作る `Workflow::createEngineer` が、登録した人（管理者なら会社の SES）を入れる。担当者の停止・退会・兼任の解除（`suspendSesUser`・`leaveSesUser`・`leaveAdmin`）で、その人の EG は会社の SES に移る（`release`）。所属の変更（`Affiliation::move`・`Registration::editProvisionalPerson`）で、新しい会社の SES に移る。付け替えは `POST /engineers/{id}/staff`（管理者と、その EG の会社の SES・担当者。EG 本人・他社は 403）。記録は `engineer_staff_logs`、監査は `eg-staff-change`（名前は書かない）、お知らせ（メールなし。kind `eg-staff`）。一覧に「担当者」の列。
+- **プロバイダーを伏せる**：受注 SES ではない SES・担当者の画面（案件票・`/ses/cases`・`/ses` の「新しい案件」）から、プロバイダーからの金額・金額のメモ・元請けを消し、金額は自社あての紹介の依頼の単価の文（`CaseMail::priceForSes`・`priceTextsForSes`）。プロバイダーからの返事（`sender_kind='provider'`）は、受注 SES と管理者だけ（`Inbound::query`）。
+- **受けた案件（原文）**：`/ses/providers/cases`・`/admin/providers/cases`（`ProviderController::cases`。SES・担当者は自社が受注 SES の案件だけ、管理者は全社）。プロバイダーの詳細にも同じ表。タブは `partials/provider-tabs`。
+- **パートナー側の追跡**（`app/Services/PartnerTrack.php`）：案件の画面の「自社から案内したエンジニア」（`#partner-mails`）で、返事の記録・［受注 SES に提案を頼む］（`POST /case-mails/{id}/handoff`。受注 SES の依頼した人にお知らせとメール）・最後の結果［成約／不成約］（`POST /case-mails/{id}/outcome`。成約に変わるときだけ成約の報告のメール、不成約はお知らせだけ）。管理者は読むだけ（押すと 403）。受注 SES の側は、「担当者への依頼」の下の「提案の依頼」の表から、プロバイダーへの下書き・名前を伏せた業務経歴書・先方の結果の登録ができる。ホームの「今やること」（`Todo::ses`）にも出る。
+- **版**：`v0.17.0`（`config/park.php`）。マイグレーションは `2026_11_23_000002_eg_staff_and_partner_track.php`（`engineers.staff_user_id`、表 `engineer_staff_logs`、`case_mails` に `handoff_*`・`outcome*`。今ある EG の担当者を、同じ migration の中で埋める。足すだけ。`down` は足したものを消す）。`php artisan park:status` に「EG の担当者が空」を足した。
 
 ## 連絡メール（v0.8.0。2026-11-13）
 

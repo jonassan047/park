@@ -31,6 +31,26 @@ class CaseMail
         return $t ?: self::NO_PRICE;
     }
 
+    const PRICE_FROM_SOURCE = '受注 SES から伝えられます'; // 受注 SES ではない SES・担当者に出す、金額の欄の文
+
+    // 受注 SES ではない SES・担当者に出す金額：自社あての紹介の依頼（送信済み・辞退していない）の新しい1件の単価の文。無ければ $fallback。
+    // 受注 SES の人には、プロバイダーからの金額（無ければ「相談」）。プロバイダーからの金額は、受注 SES と管理者以外には出さない（v0.17.0）
+    public static function priceForSes($u, object $c, string $fallback = self::PRICE_FROM_SOURCE): string
+    {
+        if (self::canSend($u, $c)) return $c->price ? man($c->price) : '相談';
+        return self::priceTextsForSes((int) $u->ses_id, [(int) $c->id])[(int) $c->id] ?? $fallback;
+    }
+
+    // 一覧用：案件の id でまとめて読む。[案件 id => 単価の文]（紹介の依頼が無い・単価の文が空の案件は入らない）
+    public static function priceTextsForSes(int $sesId, array $caseIds): array
+    {
+        if (!$caseIds) return [];
+        $out = [];
+        $rows = DB::table('case_search_staff')->whereIn('case_id', $caseIds)->where('partner_ses_id', $sesId)->whereNotNull('sent_at')->whereNull('declined_at')->orderByDesc('id')->get(['case_id', 'price_text']);
+        foreach ($rows as $r) if (!isset($out[(int) $r->case_id])) $out[(int) $r->case_id] = (string) $r->price_text; // 新しい1件だけ
+        return array_filter($out, fn ($t) => $t !== '');
+    }
+
     // 候補：own＝自社のエンジニア（名前が見える。SES から直接送る）、group＝グループのほかの SES の人（名前は伏せる。PARK から送る）
     public static function candidates($u, object $c, string $scope): array
     {

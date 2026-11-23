@@ -11,4 +11,7 @@
 </dl>
 <p><a class="btn ghost" href="{{ url($base) }}">プロバイダーの一覧に戻る</a></p>
 </x-card>
+<x-card :title="'この会社から受けた案件'.($base === '/admin/providers' ? '（全社）' : '（自社）')">
+@include('partials.provider-cases-table', ['list' => $cases, 'withSes' => $base === '/admin/providers'])
+</x-card>
 @endsection

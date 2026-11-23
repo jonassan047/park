@@ -32,9 +32,38 @@ class ProviderController extends Controller
         return $this->go($this->base($r)."/$id", 'プロバイダーを登録しました。'.($r->user()->role === 'admin' ? '' : ' 案件の登録で選べます。'));
     }
 
+    // 受けた案件（原文）（v0.17.0）：SES・担当者は自社が受注 SES の案件だけ（紹介の依頼を受けた案件は出ない）。管理者は全社の分（読むだけ）。
+    // 絞り込み：provider（プロバイダーの id）・status・q（案件名か ID）。新しい順
+    public function cases(Request $r)
+    {
+        $provider = (string) $r->query('provider');
+        $st = (string) $r->query('status');
+        $q = trim((string) $r->query('q'));
+        $list = $this->casesQuery($r->user(), ctype_digit($provider) ? (int) $provider : null, isset(PARK_LABELS['caseStatus'][$st]) ? $st : null, $q)->get();
+        [$list, $pager] = page_slice($list);
+        return view('admin.providers-cases', ['list' => $list, 'pager' => $pager, 'base' => $this->base($r), 'providers' => DB::table('providers')->orderBy('name')->orderBy('id')->pluck('name', 'id')->all(),
+            'provider' => ctype_digit($provider) ? $provider : '', 'st' => isset(PARK_LABELS['caseStatus'][$st]) ? $st : '', 'q' => $q]);
+    }
+
+    // 受けた案件の問い合わせ。SES・担当者は受注 SES が自社の案件だけ。管理者は全部
+    private function casesQuery($u, ?int $providerId = null, ?string $status = null, string $q = '')
+    {
+        $query = DB::table('cases as c')->leftJoin('providers as p', 'p.id', '=', 'c.provider_id')->leftJoin('ses_companies as s', 's.id', '=', 'c.source_ses_id')
+            ->select('c.*', 'p.name as provider_name', 's.name as ses_name')->orderByDesc('c.id');
+        if ($u->role !== 'admin') $query->where('c.source_ses_id', (int) $u->ses_id);
+        if ($providerId) $query->where('c.provider_id', $providerId);
+        if ($status) $query->where('c.status', $status);
+        if ($q !== '') {
+            $like = '%'.str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $q).'%';
+            $query->where(fn ($w) => $w->where('c.title', 'like', $like)->orWhere('c.code', 'like', $like));
+        }
+        return $query;
+    }
+
     public function show(Request $r, int $id)
     {
-        return view('admin.providers-show', ['p' => $this->find($id), 'base' => $this->base($r)]);
+        $p = $this->find($id);
+        return view('admin.providers-show', ['p' => $p, 'base' => $this->base($r), 'cases' => $this->casesQuery($r->user(), (int) $p->id)->get()]);
     }
 
     public function edit(Request $r, int $id)

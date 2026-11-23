@@ -386,6 +386,8 @@ class AdminController extends Controller
         if ($q !== '') $list = $list->filter(fn ($e) => str_contains(mb_strtolower(implode(' ', [$e->name, $e->kana, $e->skills, $e->ses_name, $e->strengths, $e->code])), mb_strtolower($q)));
         [$list, $pager] = page_slice(sort_kana($list)); // あいうえお順・1ページ 20 件
         $egIds = $list->pluck('id');
+        $staff = \App\Services\EgStaff::ofMany($list); // 担当者（まとめて読む）
+        foreach ($list as $e) $e->staff_name = ($staff[(int) $e->id] ?? null)?->name;
         return view('admin.engineers', [
             'list' => $list, 'pager' => $pager, 'q' => $q, 'st' => $st,
             // 連絡メールを送れる人（行にチェックを出す）。判定は DirectMail の1か所

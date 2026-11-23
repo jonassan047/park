@@ -110,7 +110,7 @@ class Matcher
         if ($c->price && $e->desired_price) {
             if ((float) $e->desired_price <= (float) $c->price) { $score += $W['price']; $reasons[] = '単価が合う'; }
             elseif ($e->min_price && (float) $e->min_price <= (float) $c->price) { $score += $W['price'] * 0.6; $reasons[] = '単価は下限なら合う'; }
-            else $missing[] = '単価（希望 '.man($e->desired_price).' ＞ '.man($c->price).'）';
+            else $missing[] = '単価（希望が案件より高い）'; // プロバイダーの金額は、ここに書かない（EG の画面にも出るため）
         } else $score += $W['price'] * 0.5;
 
         $start = $c->start_date ?: today_str();

@@ -175,6 +175,10 @@ Route::middleware('role:admin,ses')->group(function () {
     Route::post('/engineers/{id}/suspend', [Eng::class, 'suspend']);
     Route::post('/engineers/{id}/resume', [Eng::class, 'resume']);
     Route::post('/engineers/{id}/affiliation', [Eng::class, 'affiliation']);
+    Route::post('/engineers/{id}/staff', [Eng::class, 'staff']); // EG の担当者の付け替え（v0.17.0）
+    // パートナー側の追跡（v0.17.0）：受注 SES に提案を頼む・最後の結果を記録する。権限は PartnerTrack::canTrack（管理者は 403）
+    Route::post('/case-mails/{id}/handoff', [CMail::class, 'handoff'])->middleware('throttle:20,1');
+    Route::post('/case-mails/{id}/outcome', [CMail::class, 'outcome'])->middleware('throttle:20,1');
     // 担当者の停止・再開・退会（管理者はどの会社でも、SES は自社の担当者だけ。中で確かめる）
     Route::post('/admin/ses/{id}/users/{uid}/suspend', [Adm::class, 'sesUserSuspend'])->where('uid', '[0-9]+');
     Route::post('/admin/ses/{id}/users/{uid}/resume', [Adm::class, 'sesUserResume'])->where('uid', '[0-9]+');
@@ -247,6 +251,7 @@ Route::middleware('role:admin')->group(function () {
         Route::get('/engineers', [Adm::class, 'engineers']);
         Route::post('/engineers/operator', [Adm::class, 'operator']);
         Route::get('/providers', [Prov::class, 'index']);
+        Route::get('/providers/cases', [Prov::class, 'cases']); // 受けた案件（原文）。全社の分（v0.17.0）
         Route::get('/providers/new', [Prov::class, 'create']);
         Route::post('/providers', [Prov::class, 'store']);
         Route::get('/providers/{id}', [Prov::class, 'show'])->whereNumber('id');
@@ -292,6 +297,7 @@ Route::middleware('role:admin')->group(function () {
 Route::middleware('role:ses')->prefix('ses')->group(function () {
     // プロバイダー：見る・登録するだけ（編集・削除は管理者）
     Route::get('/providers', [Prov::class, 'index']);
+    Route::get('/providers/cases', [Prov::class, 'cases']); // 受けた案件（原文）。自社が受注 SES の分（v0.17.0）
     Route::get('/providers/new', [Prov::class, 'create']);
     Route::post('/providers', [Prov::class, 'store']);
     Route::get('/providers/{id}', [Prov::class, 'show'])->whereNumber('id');

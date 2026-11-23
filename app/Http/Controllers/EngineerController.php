@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\Affiliation;
+use App\Services\EgStaff;
 use App\Services\EngineerDocs;
 use App\Services\Matcher;
 use App\Services\Notifier as N;
@@ -132,6 +133,7 @@ class EngineerController extends Controller
             'certs' => DB::table('engineer_certs')->where('engineer_id', $id)->orderBy('sort')->get(),
             'files' => DB::table('engineer_files')->where('engineer_id', $id)->orderByDesc('id')->get(),
             // 連絡メールを送れる人か（管理者と、その人の会社の SES・担当者。本人には出さない）
+            'staffNow' => EgStaff::of($e), // 担当者（入っている人が使えなければ、代わりの SES）
             'canMail' => $r->user()->role !== 'eg' && isset(\App\Services\DirectMail::engineerTargets($r->user(), [$id])['ok'][$id]),
         ]);
     }
@@ -144,7 +146,11 @@ class EngineerController extends Controller
         return view('engineers.form', ['e' => $e, 'action' => "/engineers/$id", 'isNew' => false, 'sesFixed' => null,
             'sesName' => $e->ses_name,
             'affBlocker' => $u->role === 'eg' ? null : Affiliation::blocker($u, $e),
-            'affTargets' => $u->role === 'eg' ? [] : Affiliation::targets($u, $e)]);
+            'affTargets' => $u->role === 'eg' ? [] : Affiliation::targets($u, $e),
+            // 「担当者を付け替える」のカード（本人・退会済には出さない）
+            'staffCandidates' => $u->role === 'eg' || $e->status === 'left' ? collect() : EgStaff::candidates((int) $e->ses_id),
+            'staffNow' => EgStaff::of($e),
+            'staffLogs' => $u->role === 'eg' || $e->status === 'left' ? collect() : EgStaff::logs((int) $id)]);
     }
 
     // 所属の SES を変える（管理者と、自社のエンジニアを移す SES・担当者。本人は role ミドルウェアで入れない）。判定は Affiliation に集めている
@@ -155,6 +161,21 @@ class EngineerController extends Controller
         abort_if(isset($res['forbidden']), 403);
         if (isset($res['bad'])) return back()->with('flash', ['msg' => $res['bad'], 'type' => 'bad']);
         return $this->go($res['to'], $res['ok']);
+    }
+
+    // 担当者を付け替える（管理者と、その EG の会社の SES・担当者。本人・他社の人は 403）。選べるのは、その会社の使える担当者だけ
+    public function staff(Request $r, int $id)
+    {
+        $e = $this->load($r, $id);
+        abort_if($r->user()->role === 'eg', 403);
+        if ($e->status === 'left') return $this->go("/engineers/$id", '退会済のエンジニアは、担当者を付け替えられません。', 'bad');
+        $to = $r->input('staff_user_id');
+        $ok = is_scalar($to) && ctype_digit((string) $to) && EgStaff::candidates((int) $e->ses_id)->contains(fn ($x) => (int) $x->id === (int) $to);
+        if (!$ok) return back()->with('flash', ['msg' => '選べない担当者です。', 'type' => 'bad']);
+        $x = DB::table('users')->find((int) $to);
+        if ((int) $e->staff_user_id === (int) $to) return $this->go("/engineers/$id/edit#staff", "担当者は、すでに {$x->name} さんです。");
+        EgStaff::assign($e, (int) $to, $r->user(), 'manual');
+        return $this->go("/engineers/$id/edit#staff", "担当者を {$x->name} さんにしました。");
     }
 
     public function update(Request $r, int $id)

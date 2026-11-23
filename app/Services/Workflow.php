@@ -65,6 +65,7 @@ class Workflow
         // 招待リンクも使えなくする
         DB::table('users')->where('id', $uid)->update(['active' => 0, 'token' => null, 'token_expires' => null, 'updated_at' => now_str()]);
         N::audit($actor->id ?? null, 'ses-user-suspend', self::sesCompanyName($sesId).' '.$u->name);
+        EgStaff::release($uid, $actor, 'suspend'); // その人が担当の EG は、会社の SES に移る
         return ['type' => 'ok', 'msg' => "{$u->name} さんを停止しました。".(self::isDual($u) ? '（エンジニアとしても入れなくなります）' : '')];
     }
 
@@ -93,10 +94,12 @@ class Workflow
             $egStopped = DB::table('engineers')->where('id', $u->engineer_id)->whereNotNull('suspended_at')->exists();
             DB::table('users')->where('id', $uid)->update(['role' => 'eg', 'active' => $egStopped ? 0 : $u->active, 'updated_at' => now_str()]);
             N::audit($actor->id ?? null, 'ses-user-leave', self::sesCompanyName($sesId).' '.$u->name);
+            EgStaff::release($uid, $actor, 'leave');
             return ['type' => 'ok', 'msg' => "{$u->name} さんを SES 担当者から外しました。エンジニアとしては引き続き入れます。"];
         }
         DB::table('users')->where('id', $uid)->update(['active' => 0, 'left_at' => now_str(), 'token' => null, 'token_expires' => null, 'updated_at' => now_str()]);
         N::audit($actor->id ?? null, 'ses-user-leave', self::sesCompanyName($sesId).' '.$u->name);
+        EgStaff::release($uid, $actor, 'leave');
         return ['type' => 'ok', 'msg' => "{$u->name} さんを退会済にしました。"];
     }
 
@@ -126,6 +129,7 @@ class Workflow
             // 招待リンクも使えなくする
             DB::table('users')->where('id', $id)->update(['active' => 0, 'token' => null, 'token_expires' => null, 'updated_at' => now_str()]);
             N::audit($actor->id ?? null, 'admin-suspend', "#user {$id}");
+            if (!empty($u->ses_id)) EgStaff::release($id, $actor, 'suspend'); // 兼任の管理者が担当の EG は、会社の SES に移る
             return ['type' => 'ok', 'msg' => "{$u->name} さんを停止しました。".(!empty($u->engineer_id) && self::isDual($u) ? '（エンジニアとしても入れなくなります）' : '')];
         });
     }
@@ -158,10 +162,12 @@ class Workflow
                 DB::table('users')->where('id', $id)->update(['role' => 'eg', 'ses_id' => $e->ses_id, 'active' => $e->suspended_at ? 0 : 1, 'updated_at' => now_str()]);
                 DB::table('engineers')->where('id', $e->id)->update(['is_operator' => 0]);
                 N::audit($actor->id ?? null, 'admin-leave', "#user {$id}");
+                EgStaff::release($id, $actor, 'leave');
                 return ['type' => 'ok', 'msg' => "{$u->name} さんを管理者から外しました。エンジニアとしては引き続き入れます。"];
             }
             DB::table('users')->where('id', $id)->update(['active' => 0, 'left_at' => now_str(), 'token' => null, 'token_expires' => null, 'updated_at' => now_str()]);
             N::audit($actor->id ?? null, 'admin-leave', "#user {$id}");
+            EgStaff::release($id, $actor, 'leave');
             return ['type' => 'ok', 'msg' => "{$u->name} さんを退会済にしました。"];
         });
     }
@@ -422,6 +428,7 @@ class Workflow
             if (!$me) return ['type' => 'bad', 'msg' => '管理者だけが操作できます。'];
             if ((int) $me->ses_id !== (int) $s->id) return ['type' => 'ok', 'msg' => 'この会社の担当者は、兼ねていません。'];
             DB::table('users')->where('id', $me->id)->update(['ses_id' => null, 'updated_at' => now_str()]);
+            EgStaff::release((int) $me->id, $actor, 'leave'); // 兼任していた間に担当だった EG は、会社の SES に移る
             return ['type' => 'ok', 'msg' => '「'.$s->name.'」の担当者の兼任をやめました。', 'name' => $me->name];
         });
         if ($res['type'] === 'ok' && isset($res['name'])) {
@@ -684,7 +691,9 @@ class Workflow
     public static function createEngineer(int $sesId, array $d, $actor, bool $invite = true, ?object &$linked = null, bool $tellAdmins = true): int
     {
         $v = self::engValues($d);
-        $id = DB::table('engineers')->insertGetId($v + ['ses_id' => $sesId, 'code' => Ids::next('E'), 'created_at' => now_str(), 'updated_at' => now_str()]);
+        $staffId = EgStaff::initial($sesId, $actor); // 担当者：登録した人（管理者が登録したときは、その会社の SES）
+        $id = DB::table('engineers')->insertGetId($v + ['ses_id' => $sesId, 'staff_user_id' => $staffId, 'code' => Ids::next('E'), 'created_at' => now_str(), 'updated_at' => now_str()]);
+        if ($staffId) EgStaff::log($id, null, $staffId, $actor->id ?? null, 'create');
         N::audit($actor->id ?? null, 'engineer-create', "{$v['name']}（SES {$sesId}）");
         $linked = null;
         if ($v['email'] && ($t = self::egShareTarget($v['email'], $sesId, $actor))) {
@@ -966,9 +975,15 @@ class Workflow
         if (DB::table('applications')->where('case_id', $caseId)->where('engineer_id', $engineerId)->exists()) throw new \RuntimeException('この案件には応募済みです');
         $code = Ids::next('AP');
         $tag = Ids::tag($code);
+        // 提示の金額の既定値：受注 SES のエンジニアは案件の金額。パートナーのエンジニアは、プロバイダーの金額を使わず、本人に届いた案内メールの単価の文から数字を読む（無ければ空）
+        $defaultPrice = $c->price;
+        if (!empty($c->source_ses_id) && (int) $c->source_ses_id !== (int) $e->ses_id) {
+            $text = (string) DB::table('case_mails')->where('case_id', $caseId)->where('engineer_id', $engineerId)->orderByDesc('id')->value('price_text');
+            $defaultPrice = preg_match('/\d+(?:\.\d+)?/', $text, $mm) ? (float) $mm[0] : null;
+        }
         $appId = DB::table('applications')->insertGetId([
             'case_id' => $caseId, 'engineer_id' => $engineerId, 'ses_id' => $e->ses_id, 'status' => 'applied', 'code' => $code,
-            'proposed_price' => num_or_null($d['proposed_price'] ?? null) ?? $c->price,
+            'proposed_price' => num_or_null($d['proposed_price'] ?? null) ?? $defaultPrice,
             'start_ok' => !empty($d['start_ok']), 'price_ok' => !empty($d['price_ok']), 'style_ok' => !empty($d['style_ok']),
             'condition_note' => str_in($d['condition_note'] ?? ''), 'applied_by' => $actor->id, 'applied_at' => now_str(), 'updated_at' => now_str(),
         ]);
@@ -996,7 +1011,7 @@ class Workflow
     {
         return DB::table('applications as a')->join('cases as c', 'c.id', '=', 'a.case_id')->join('engineers as e', 'e.id', '=', 'a.engineer_id')
             ->join('ses_companies as s', 's.id', '=', 'a.ses_id')->where('a.id', $appId)
-            ->select('a.*', 'c.title', 'c.price as case_price', 'c.start_date as case_start', 'c.headcount', 'c.code as case_code', 'e.name as eg_name', 'e.code as eg_code', 'e.ses_id as eg_ses_id', 's.name as ses_name')->first();
+            ->select('a.*', 'c.title', 'c.price as case_price', 'c.source_ses_id as case_source_ses_id', 'c.start_date as case_start', 'c.headcount', 'c.code as case_code', 'e.name as eg_name', 'e.code as eg_code', 'e.ses_id as eg_ses_id', 's.name as ses_name')->first();
     }
 
     public static function setStatus(int $appId, string $status, $actor, string $reason = '', string $note = ''): void

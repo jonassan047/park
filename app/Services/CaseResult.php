@@ -44,7 +44,9 @@ class CaseResult
                 : ['今回は見送りとなりました'.$tail, '次の案件に活かします。'];
             N::toEg((int) $e->id, $title, $text, $link, false, self::KIND);
             if ((int) $e->ses_id !== (int) $u->ses_id) {
-                N::toSes((int) $e->ses_id, 'グループの案件の結果'.$tail, "{$e->name} さん：{$label}", $link, false, self::KIND);
+                // パートナーが案内した人の結果は、パートナーの追跡の欄へ（v0.17.0）
+                $toLink = $cm->mode === CaseSearch::MODE_PARTNER ? $link.'#partner-mails' : $link;
+                N::toSes((int) ($cm->mode === CaseSearch::MODE_PARTNER && $cm->ses_id ? $cm->ses_id : $e->ses_id), 'グループの案件の結果'.$tail, "{$e->name} さん：{$label}", $toLink, false, self::KIND);
             }
         }
         return ['type' => 'ok', 'msg' => '登録しました。'];

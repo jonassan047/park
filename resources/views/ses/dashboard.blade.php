@@ -18,7 +18,7 @@
 </div><div>
 <x-card title="新しい案件（グループ全体）"><x-slot:actions><a class="btn small" href="{{ url('/cases/new') }}">案件を登録</a></x-slot:actions>
 <x-table :head="['案件', '金額', '開始', '']" :count="$newCases->count()" empty="まだ案件はありません。案件が入ると、ここに出ます。">
-@foreach($newCases as $c)<tr><td>{{ $c->title }}</td><td>{{ man($c->price) }}</td><td>{{ fmt_date($c->start_date) }}</td><td><a class="btn small" href="{{ url('/cases/'.$c->id) }}">開く</a></td></tr>@endforeach
+@foreach($newCases as $c)<tr><td>{{ $c->title }}</td><td>{{ $c->price_disp }}</td><td>{{ fmt_date($c->start_date) }}</td><td><a class="btn small" href="{{ url('/cases/'.$c->id) }}">開く</a></td></tr>@endforeach
 </x-table></x-card>
 @if($noSheet->count())
 <x-card title="経験票がまだのエンジニア"><p class="muted">経験票が入っていないと、合う案件が届きません。ご本人に声をかけてください。</p>

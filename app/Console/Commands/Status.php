@@ -52,6 +52,16 @@ class Status extends Command
         }
     }
 
+    // 担当者が空の EG の数（v0.17.0）。列が無い（マイグレーション前）は「未反映」
+    private function emptyStaff(): int|string
+    {
+        try {
+            return Schema::hasColumn('engineers', 'staff_user_id') ? \App\Services\EgStaff::emptyCount() : '未反映';
+        } catch (\Throwable $e) {
+            return '未反映';
+        }
+    }
+
     // 案件のやり取りの数え。マイグレーション前（表が無い）は、落ちずに「未反映」と出す
     private function staleThreads(): int|string
     {
@@ -120,6 +130,7 @@ class Status extends Command
             '兼任（管理者＋エンジニア）' => DB::table('users')->where('role', 'admin')->whereNotNull('engineer_id')->count(),
             '兼任（管理者＋SES 担当者）' => DB::table('users')->where('role', 'admin')->whereNotNull('ses_id')->count(),
             '管理者で ses_id がある行（担当者の兼任になる。反映の前に、古い行が無いか確かめる）' => DirectMerge::adminsWithSes(),
+            'EG の担当者が空' => $this->emptyStaff(),
             self::ID_KEY => $this->missingIds(),
             '見本データ（@park.example）' => DB::table('users')->where('email', 'like', '%@park.example')->count(),
         ] + $this->inboundLines() + $this->registrationCounts();
