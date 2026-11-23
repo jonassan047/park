@@ -91,6 +91,16 @@ class V070SearchTest extends TestCase
         return array_map(fn ($r) => $r['e']->id, $rows);
     }
 
+    // v0.16.0：チェックして作成画面へ → 雛形のまま（または $body）プロパーに送る。送ったときの本文の元（雛形）を返す
+    private function composeSend(string $as, int $sid, array $pick, ?string $body = null): string
+    {
+        $this->as($as)->post("/searches/$sid/compose", ['pick' => $pick])->assertRedirect(url("/searches/$sid/compose"));
+        $s = DB::table('case_searches')->find($sid);
+        $tpl = $body ?? CS::properTemplate($this->user($as), $this->c((int) $s->case_id), $s);
+        $this->as($as)->post("/searches/$sid/compose/proper", ['subject' => '【案件のご案内】検索テスト', 'body' => $tpl])->assertRedirect();
+        return $tpl;
+    }
+
     private function setMessage(string $as, int $sid, int $eid, string $msg, bool $omit = false): void
     {
         $this->as($as)->post("/searches/$sid/members/$eid", ['message' => $msg] + ($omit ? ['omit_note' => 1] : []))->assertRedirect();
@@ -234,14 +244,14 @@ class V070SearchTest extends TestCase
         $sid = $this->search(self::SES1, $cid);
         $r = $this->as(self::SES1)->get("/searches/$sid")->assertOk();
         $r->assertSee('合格 一郎')->assertSee('合格 二郎')->assertDontSee('不合 三郎')->assertSee('必須 2/2')->assertSee('尚可 1/1')
-            ->assertSee('全員へのメッセージ')->assertSee('エンジニアへメールを送信')->assertSee('条件に届かなかった人：1名');
+            ->assertDontSee('全員へのメッセージ')->assertSee('エンジニア・担当者へメールを作成')->assertSee('条件に届かなかった人：1名');
         $r->assertSee('name="pick[]" value="'.$p1.'" checked', false)->assertSee('name="pick[]" value="'.$p2.'" checked', false);
         $this->assertSame(2, DB::table('case_search_members')->where('search_id', $sid)->count());
         $this->assertNotNull($f);
 
         $cid2 = $this->mkCase(self::SES1, ['required_skills' => 'ZZNobodyHas', 'preferred_skills' => '']);
         $sid2 = $this->search(self::SES1, $cid2);
-        $this->as(self::SES1)->get("/searches/$sid2")->assertOk()->assertSee('条件に合うエンジニアがいません');
+        $this->as(self::SES1)->get("/searches/$sid2")->assertOk()->assertSee('条件に合う自社のエンジニアがいません');
     }
 
     public function test_t11_other_company_is_initials_and_closed_case_goes_back(): void
@@ -250,7 +260,7 @@ class V070SearchTest extends TestCase
         $this->mkEng(self::SES1, '自社 太郎', 'J.T', $this->sk('Java'));
         $this->mkEng(self::SES2, '他社 花子', 'X.Q', $this->sk('Java'));
         $sid = $this->search(self::SES1, $cid);
-        $this->as(self::SES1)->get("/searches/$sid")->assertOk()->assertSee('自社 太郎')->assertSee('X.Q（あおぞらテック）')->assertDontSee('他社 花子');
+        $this->as(self::SES1)->get("/searches/$sid")->assertOk()->assertSee('自社 太郎')->assertSee('X.Q（あおぞらテック[', false)->assertDontSee('他社 花子')->assertSee('パートナー（他社のエンジニア）');
         $this->as(self::ADMIN)->get("/searches/$sid")->assertForbidden(); // 管理者は検索を開けない（v0.11.0）
         DB::table('cases')->where('id', $cid)->update(['status' => 'closed']);
         $this->as(self::SES1)->get("/searches/$sid")->assertRedirect(url("/cases/$cid"))->assertSessionHas('flash', fn ($f) => str_contains($f['msg'], '募集中の案件だけ'));
@@ -265,8 +275,11 @@ class V070SearchTest extends TestCase
         $this->mkEng(self::SES2, '他社 花子', 'X.Q', $this->sk('Java'));
         $sid = $this->search(self::SES1, $cid);
         $u = $this->user(self::SES1);
-        $this->assertSame([], CS::findEngineers($u, $this->c($cid), '他社 花子'));
-        $this->assertCount(1, CS::findEngineers($u, $this->c($cid), 'X.Q'));
+        // 他社のエンジニアは、名前でもイニシャルでも探せない（他社は担当者を探す。v0.16.0）
+        $this->assertSame([], CS::findTargets($u, $this->c($cid), '他社 花子'));
+        $this->assertSame([], CS::findTargets($u, $this->c($cid), 'X.Q'));
+        $found = CS::findTargets($u, $this->c($cid), 'あおぞらテック');
+        $this->assertSame(['staff'], array_values(array_unique(array_column($found, 'type'))));
         $this->as(self::SES1)->get("/searches/$sid?q=".urlencode('ゼット'))->assertOk()->assertSee('ゼット 落選（みどり情報システム）')->assertSee('一覧に足す');
         $this->as(self::SES1)->post("/searches/$sid/add", ['engineer_id' => $weak])->assertRedirect();
         $this->assertSame(1, (int) DB::table('case_search_members')->where('search_id', $sid)->where('engineer_id', $weak)->value('by_hand'));
@@ -285,10 +298,10 @@ class V070SearchTest extends TestCase
         $r->assertDontSee('name="pick[]" value="'.$p3.'"', false);
         $this->assertSame(0, (int) DB::table('case_search_members')->where('search_id', $sid)->where('engineer_id', $p3)->value('checked'));
 
-        $this->as(self::SES1)->post("/searches/$sid", ['pick' => [$p2], 'message_all' => 'みなさんへの架空の連絡', 'go' => $p1])
+        $this->as(self::SES1)->post("/searches/$sid", ['pick' => [$p2], 'go' => $p1])
             ->assertRedirect(url("/searches/$sid/members/$p1"));
         $this->as(self::SES1)->get("/searches/$sid/members/$p1")->assertOk();
-        $this->as(self::SES1)->get("/searches/$sid")->assertOk()->assertSee('みなさんへの架空の連絡')
+        $this->as(self::SES1)->get("/searches/$sid")->assertOk()
             ->assertSee('name="pick[]" value="'.$p2.'" checked', false)->assertDontSee('name="pick[]" value="'.$p1.'" checked', false);
     }
 
@@ -316,8 +329,9 @@ class V070SearchTest extends TestCase
     public function test_t15_other_company_detail_hides_private_data(): void
     {
         [$cid, $sid, $full, $gap, $other] = $this->worldForMail();
-        $this->as(self::SES1)->get("/searches/$sid/members/$other")->assertOk()->assertSee('【案件のご案内】')->assertSee('T.S（あおぞらテック）')
-            ->assertDontSee('他社 三郎')->assertDontSee('other-eg@example.com');
+        // 他社の人には直接メールを送らないので、メールの見本は出さず、担当者に依頼すると書く（v0.16.0）
+        $this->as(self::SES1)->get("/searches/$sid/members/$other")->assertOk()->assertSee('この方には直接メールを送りません')->assertSee('T.S（あおぞらテック[', false)
+            ->assertDontSee('【案件のご案内】')->assertDontSee('他社 三郎')->assertDontSee('other-eg@example.com');
         $this->as(self::SES1)->get("/searches/$sid/members/$gap")->assertOk()->assertSee("/engineers/$gap");
     }
 
@@ -325,12 +339,11 @@ class V070SearchTest extends TestCase
     {
         [$cid, $sid, $full, $gap, $other] = $this->worldForMail();
         $this->setMessage(self::SES1, $sid, $gap, '一部さんだけへの架空の連絡');
-        $this->as(self::SES1)->post("/searches/$sid/send", ['pick' => [$full, $gap], 'message_all' => '全員への架空の連絡'])->assertRedirect();
+        $this->composeSend(self::SES1, $sid, [$full, $gap]);
         $bodies = DB::table('case_mails')->where('case_id', $cid)->pluck('body', 'engineer_id')->all();
         $this->assertCount(2, $bodies);
         $this->assertSame(2, DB::table('mail_outbox')->where('kind', 'case-mail')->count());
         foreach ($bodies as $b) {
-            $this->assertStringContainsString('全員への架空の連絡', $b);
             $this->assertStringContainsString('■尚可：AWS', $b);
             $this->assertStringNotContainsString('{', $b);
             $this->assertDoesNotMatchRegularExpression("/\n{3,}/", $b);
@@ -340,13 +353,13 @@ class V070SearchTest extends TestCase
         $this->assertStringNotContainsString('一部さんだけへの架空の連絡', $bodies[$full]);
         $this->assertStringNotContainsString('ご検討ください', $bodies[$full]);
         // 送ったあとのお知らせは、同じ人のまま次の画面で見る（as() はセッションを捨てるので使わない）
-        $this->get("/cases/$cid")->assertOk()->assertSee('2名に案内メールを送りました')->assertSee('エンジニア検索');
+        $this->get("/cases/$cid")->assertOk()->assertSee('2名のエンジニアに案内メールを送りました')->assertSee('エンジニア検索');
     }
 
     public function test_t16b_empty_messages_leave_no_blank_lines(): void
     {
         [$cid, $sid, $full] = $this->worldForMail();
-        $this->as(self::SES1)->post("/searches/$sid/send", ['pick' => [$full]])->assertRedirect();
+        $this->composeSend(self::SES1, $sid, [$full]);
         $b = DB::table('case_mails')->where('engineer_id', $full)->value('body');
         $this->assertDoesNotMatchRegularExpression("/\n{3,}/", $b);
         $this->assertStringNotContainsString('{', $b);
@@ -356,31 +369,34 @@ class V070SearchTest extends TestCase
     public function test_t18_records_offers_notices_and_audit(): void
     {
         [$cid, $sid, $full, $gap, $other] = $this->worldForMail();
-        $this->as(self::SES1)->post("/searches/$sid/send", ['pick' => [$full, $other]])->assertRedirect();
+        // 他社のエンジニア（$other）は、直接は送らない：担当者への依頼になる（v0.16.0）
+        $this->composeSend(self::SES1, $sid, [$full, $other]);
         $rows = DB::table('case_mails')->where('case_id', $cid)->get()->keyBy('engineer_id');
-        $this->assertSame(['search', 'search'], [$rows[$full]->mode, $rows[$other]->mode]);
-        $this->assertSame(['own', 'group'], [$rows[$full]->route, $rows[$other]->route]);
+        $this->assertSame(['search'], [$rows[$full]->mode]);
+        $this->assertSame(['own'], [$rows[$full]->route]);
+        $this->assertFalse(isset($rows[$other]));
         $this->assertNotEmpty($rows[$full]->token);
         $offers = DB::table('case_offers')->where('case_id', $cid)->get()->keyBy('engineer_id');
-        $this->assertCount(2, $offers);
-        foreach ([$full, $other] as $eid) {
-            $this->assertSame(Matcher::score($this->c($cid), DB::table('engineers')->find($eid))['score'], (int) $offers[$eid]->score);
-        }
-        $this->assertTrue(DB::table('app_notifications')->where('title', 'like', 'グループの案件が%')->exists());
+        $this->assertCount(1, $offers);
+        $this->assertSame(Matcher::score($this->c($cid), DB::table('engineers')->find($full))['score'], (int) $offers[$full]->score);
+        $this->assertFalse(DB::table('app_notifications')->where('title', 'like', 'グループの案件が%')->exists());
         $this->assertTrue(DB::table('audit_log')->where('action', 'case-search-send')->exists());
     }
 
     public function test_t19_no_double_send_even_from_a_colleague(): void
     {
         [$cid, $sid, $full, $gap] = $this->worldForMail();
-        $this->as(self::SES1)->post("/searches/$sid/send", ['pick' => [$full]])->assertRedirect();
-        $this->as(self::SES1)->post("/searches/$sid/send", ['pick' => [$full]])->assertRedirect()
+        $tpl = $this->composeSend(self::SES1, $sid, [$full]);
+        // 続けてもう一度送っても、同じ人に2通出ない
+        $this->as(self::SES1)->post("/searches/$sid/compose/proper", ['subject' => '件名', 'body' => $tpl])->assertRedirect()
             ->assertSessionHas('flash', fn ($f) => str_contains($f['msg'], '送る相手がいません'));
         $staffId = W::createUser('staff70@example.com', '担当 零郎', 'ses', 'park1234', ['ses_id' => $this->sesId(self::SES1)]);
         $this->completeProfile($staffId);
         $sid2 = $this->search('staff70@example.com', $cid);
         $this->assertNotSame($sid, $sid2);
-        $this->as('staff70@example.com')->post("/searches/$sid2/send", ['pick' => [$full]])->assertRedirect()
+        $this->as('staff70@example.com')->post("/searches/$sid2/compose", ['pick' => [$full]])->assertRedirect()
+            ->assertSessionHas('flash', fn ($f) => str_contains($f['msg'], '送る相手を選んでください'));
+        $this->as('staff70@example.com')->post("/searches/$sid2/compose/proper", ['subject' => '件名', 'body' => $tpl])->assertRedirect()
             ->assertSessionHas('flash', fn ($f) => str_contains($f['msg'], '送る相手がいません'));
         $this->as('staff70@example.com')->post("/searches/$sid2/send", [])->assertSessionHas('flash', fn ($f) => str_contains($f['msg'], '送る相手を選んでください'));
         $this->assertSame(1, DB::table('case_mails')->where('case_id', $cid)->count());
@@ -435,7 +451,7 @@ class V070SearchTest extends TestCase
 
     public function test_t23_version(): void
     {
-        $this->assertSame('v0.15.0', config('park.version'));
-        $this->get('/login')->assertOk()->assertSee('v0.15.0');
+        $this->assertSame('v0.16.0', config('park.version'));
+        $this->get('/login')->assertOk()->assertSee('v0.16.0');
     }
 }

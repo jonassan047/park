@@ -115,6 +115,7 @@ class ProviderMailController extends Controller
         abort_unless($m, 404);
         $c = DB::table('cases')->find($m->case_id);
         abort_unless($c && CM::canSend($r->user(), $c), 403);
+        abort_if($m->mode === \App\Services\CaseSearch::MODE_PARTNER, 403); // パートナー経由の分は、プロバイダーへ返さない
         $pid = PR::draftFromCaseMail($id, $r->user());
         return $this->go("/provider-mails/$pid");
     }

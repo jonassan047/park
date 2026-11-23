@@ -162,6 +162,15 @@ class V0110AdminStaffDualTest extends TestCase
         $this->assertSame($q, (int) $this->row('adm-q@example.test')->id);
     }
 
+    // v0.16.0：チェックして作成画面へ → 画面の本文のまま［エンジニアへメールを送信］（直接は送らない）
+    private function sendVia(int $sid, array $pick)
+    {
+        $this->post("/searches/$sid/compose", ['pick' => $pick])->assertRedirect();
+        $html = $this->get("/searches/$sid/compose")->assertOk()->getContent();
+        preg_match('/<textarea name="body"[^>]*>(.*?)<\/textarea>/s', $html, $m);
+        return $this->post("/searches/$sid/compose/proper", ['subject' => '件名', 'body' => html_entity_decode($m[1] ?? '', ENT_QUOTES)]);
+    }
+
     // ---------- X6〜X8：発信は担当者の立場だけ ----------
     public function test_x6_can_send_as_staff(): void
     {
@@ -173,7 +182,7 @@ class V0110AdminStaffDualTest extends TestCase
         $this->post("/cases/$cid/search", [])->assertRedirect();
         $sid = (int) DB::table('case_searches')->where('case_id', $cid)->value('id');
         $this->assertSame($a, (int) DB::table('case_searches')->find($sid)->ses_id);
-        $this->post("/searches/$sid/send", ['pick' => [$eid]])->assertRedirect();
+        $this->sendVia($sid, [$eid])->assertRedirect();
         $m = DB::table('case_mails')->where('case_id', $cid)->where('engineer_id', $eid)->first();
         $this->assertNotNull($m);
         $this->assertSame($a, (int) $m->ses_id);
@@ -425,14 +434,14 @@ class V0110AdminStaffDualTest extends TestCase
         $eid = $this->mkEng($a, '自社 太郎', 'J.T');
         $this->as(self::P, 'ses')->post("/cases/$cid/search", [])->assertRedirect();
         $sid = (int) DB::table('case_searches')->where('case_id', $cid)->value('id');
-        $this->post("/searches/$sid/send", ['pick' => [$eid]])->assertRedirect();
+        $this->sendVia($sid, [$eid])->assertRedirect();
         $detail = (string) DB::table('audit_log')->where('action', 'case-mail')->orderByDesc('id')->value('detail');
         $this->assertStringStartsWith('［管理者の兼任］', $detail);
         // ふつうの担当者の記録には付かない
         $eid2 = $this->mkEng($a, '自社 二郎', 'J.J');
         $this->as(self::SES1, 'ses')->post("/cases/$cid/search", [])->assertRedirect();
         $sid2 = (int) DB::table('case_searches')->where('case_id', $cid)->where('created_by', $this->row(self::SES1)->id)->value('id');
-        $this->post("/searches/$sid2/send", ['pick' => [$eid2]])->assertRedirect();
+        $this->sendVia($sid2, [$eid2])->assertRedirect();
         $d2 = (string) DB::table('audit_log')->where('action', 'case-mail')->orderByDesc('id')->value('detail');
         $this->assertStringNotContainsString('［管理者の兼任］', $d2);
     }

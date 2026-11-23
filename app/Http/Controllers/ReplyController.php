@@ -57,7 +57,9 @@ class ReplyController extends Controller
         $who = $m->route === 'own' ? $m->eg_name : 'グループのエンジニア';
         // 案内メールは SES 担当者か管理者の立場で送るもの。兼任の人には、その立場あてのお知らせにする
         $senderRole = $m->sent_by ? DB::table('users')->where('id', $m->sent_by)->value('role') : null;
-        if ($m->sent_by) N::notify((int) $m->sent_by, "{$who} さんから返事：{$label}（{$m->title}）".\App\Services\Ids::tag(DB::table('cases')->where('id', $m->case_id)->value('code')),$note ?: '', "/cases/{$m->case_id}#mails", true, 'reply', in_array($senderRole, ['admin', 'ses'], true) ? $senderRole : null);
+        // パートナー経由（mode=partner）は、送った担当者が受注 SES ではなく「案内済メール」を見られない。見られる「紹介の依頼」の欄へ案内する
+        $replyLink = $m->mode === \App\Services\CaseSearch::MODE_PARTNER ? "/cases/{$m->case_id}#referral" : "/cases/{$m->case_id}#mails";
+        if ($m->sent_by) N::notify((int) $m->sent_by, "{$who} さんから返事：{$label}（{$m->title}）".\App\Services\Ids::tag(DB::table('cases')->where('id', $m->case_id)->value('code')),$note ?: '', $replyLink, true, 'reply', in_array($senderRole, ['admin', 'ses'], true) ? $senderRole : null);
         // 返事をした本人（エンジニア）にも、受け付けた旨を知らせる
         $code = DB::table('cases')->where('id', $m->case_id)->value('code');
         $accepted = ['interested' => '応募を受け付けました', 'question' => '質問を受け付けました', 'declined' => '見送りを受け付けました'][$answer];

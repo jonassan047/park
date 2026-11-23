@@ -1,4 +1,4 @@
-@if($mails->count() || (isset($extras) && $extras->count()))
+@if($mails->count() || (isset($extras) && $extras->count()) || (isset($staffReq) && $staffReq->count()))
 {{-- 案内メールの記録：受注 SES の担当者は操作もできる。管理者は読むだけ（v0.11.0）。追加の宛先は v0.15.0 --}}
 <x-card title="案内済メール">
 <div id="mails"></div>
@@ -30,6 +30,19 @@
 <td>@if(!empty($extraN[$x->id]))@if($canMail)<a href="{{ url('/inbound?case='.$c->id.'&extra='.$x->id) }}">返信メール {{ $extraN[$x->id] }} 件</a>@else返信メール {{ $extraN[$x->id] }} 件@endif @else<span class="muted">まだありません</span>@endif</td>
 </tr>@endforeach
 </x-table>
+@endif
+{{-- 担当者への依頼（他社の担当者に紹介をお願いしたもの。v0.16.0）：受注 SES の担当者と管理者。管理者は読むだけ。返信の本文は、その会社の中の話なので出さない --}}
+@if(isset($staffReq) && $staffReq->count())
+<h3 id="staffreq">担当者への依頼</h3>
+<x-table :head="['企業名［担当者名］', '送った日', '状態', 'その会社から案内した人数']" :count="$staffReq->count()">
+@foreach($staffReq as $t)<tr>
+<td>{{ $t->partner_name }}［{{ $t->staff_name }}］</td>
+<td>{{ fmt_dt($t->sent_at) }}</td>
+<td>@if($t->declined_at)<span class="muted">辞退（{{ fmt_date($t->declined_at) }}）</span>@if($t->declined_note)<div class="muted">{{ $t->declined_note }}</div>@endif @else依頼中@endif</td>
+<td>{{ $t->introduced }} 名</td>
+</tr>@endforeach
+</x-table>
+<p class="muted">パートナーの担当者が自社のエンジニアに案内した返事は、その会社の中で扱います。案内したい人がいれば、担当者から推薦が届きます。</p>
 @endif
 </x-card>
 @endif

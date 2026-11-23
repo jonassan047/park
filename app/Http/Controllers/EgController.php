@@ -11,6 +11,12 @@ use Illuminate\Support\Facades\DB;
 // エンジニアの画面：ホーム・届いた案件・応募と面談。プロフィール・経験票・スキルシート・やり取りは共通の画面へ
 class EgController extends Controller
 {
+    // 届いた案内メールの単価の文（プロバイダーからの金額は、エンジニアの画面に出さない。v0.16.0）。o は case_offers の別名
+    private function priceTextQuery()
+    {
+        return DB::table('case_mails as m')->whereColumn('m.case_id', 'o.case_id')->whereColumn('m.engineer_id', 'o.engineer_id')->orderByDesc('m.id')->limit(1)->select('m.price_text');
+    }
+
     public function home(Request $r)
     {
         $eid = $r->user()->engineer_id;
@@ -18,7 +24,7 @@ class EgController extends Controller
         return view('eg.home', [
             'e' => DB::table('engineers')->find($eid), 'check' => Qa::sheetCheck($eid), 'contract' => $contract,
             'offers' => DB::table('case_offers as o')->join('cases as c', 'c.id', '=', 'o.case_id')->where('o.engineer_id', $eid)->whereIn('o.status', ['sent', 'viewed'])
-                ->where('c.status', 'open')->select('o.*', 'c.title', 'c.price', 'c.start_date', 'c.code as case_code')->orderByDesc('o.sent_at')->get(),
+                ->where('c.status', 'open')->select('o.*', 'c.title', 'c.start_date', 'c.code as case_code')->selectSub($this->priceTextQuery(), 'price_text')->orderByDesc('o.sent_at')->get(),
             'apps' => DB::table('applications as a')->join('cases as c', 'c.id', '=', 'a.case_id')->where('a.engineer_id', $eid)->whereNotIn('a.status', ['rejected', 'withdrawn'])
                 ->select('a.*', 'c.title', 'c.code as case_code')->orderByDesc('a.updated_at')->get(),
             'ivs' => DB::table('interviews as iv')->join('applications as a', 'a.id', '=', 'iv.application_id')->join('cases as c', 'c.id', '=', 'a.case_id')
@@ -47,7 +53,8 @@ class EgController extends Controller
         // 案件のやり取り：発言の数と、未読（相手側の発言で、まだ読んでいないもの）の数
         $posts = fn () => DB::table('case_thread_posts as p')->join('case_threads as t', 't.id', '=', 'p.thread_id')->whereColumn('t.case_id', 'o.case_id')->where('t.engineer_id', $eid);
         $list = DB::table('case_offers as o')->join('cases as c', 'c.id', '=', 'o.case_id')->where('o.engineer_id', $eid)
-            ->select('o.*', 'c.title', 'c.price', 'c.start_date', 'c.status as case_status', 'c.code as case_code')
+            ->select('o.*', 'c.title', 'c.start_date', 'c.status as case_status', 'c.code as case_code')
+            ->selectSub($this->priceTextQuery(), 'price_text')
             ->selectSub($posts()->selectRaw('count(*)'), 'thread_posts')
             ->selectSub($posts()->where('p.from_side', '!=', 'eg')->where('p.read_by_eg', false)->selectRaw('count(*)'), 'thread_unread')
             ->orderByDesc('o.sent_at')->get();

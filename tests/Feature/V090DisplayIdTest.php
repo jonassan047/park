@@ -428,7 +428,7 @@ class V090DisplayIdTest extends TestCase
         $sid = (int) DB::table('case_searches')->where('case_id', $cid)->value('id');
         $this->post("/searches/$sid/add", ['engineer_id' => $this->engId(self::EG2)]);
         $this->get("/searches/$sid")->assertOk()->assertDontSee($other);
-        $this->get("/searches/$sid/members/".$this->engId(self::EG2))->assertOk()->assertDontSee($other);
+        $this->get("/searches/$sid/members/".$this->engId(self::EG2))->assertNotFound(); // v0.16.0：他社のエンジニアは手で足せないので、詳細もない
     }
 
     // 会社の S- を管理者が探すと、SES の詳細へ。古い直属の行（kind=direct。消さずに残してある）は、詳細が無いので見つからない扱い（v0.11.0）
@@ -606,7 +606,7 @@ class V090DisplayIdTest extends TestCase
     // T26：版
     public function test_t26_version(): void
     {
-        $this->assertSame('v0.15.0', config('park.version'));
-        $this->get('/login')->assertOk()->assertSee('v0.15.0');
+        $this->assertSame('v0.16.0', config('park.version'));
+        $this->get('/login')->assertOk()->assertSee('v0.16.0');
     }
 }

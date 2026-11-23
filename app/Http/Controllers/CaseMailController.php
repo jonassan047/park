@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\CaseMail as CM;
+use App\Services\CaseSearch;
 use App\Services\CaseResult;
 use App\Services\EngineerDocs;
 use App\Services\Matcher;
@@ -99,6 +100,7 @@ class CaseMailController extends Controller
         $m = DB::table('case_mails')->find($mid);
         abort_unless($m, 404);
         $c = $this->load($r, $m->case_id);
+        abort_if($m->mode === CaseSearch::MODE_PARTNER, 403); // パートナー経由の分は、受注 SES が結果を登録しない
         $res = CaseResult::set($r->user(), $mid, (string) $r->input('result'), (string) $r->input('note'));
         return $this->go((string) $r->input('back') === 'inbound' && $r->input('inbound') ? '/inbound/'.(int) $r->input('inbound') : ((string) $r->input('back') === 'pm' && $r->input('pm') ? '/provider-mails/'.(int) $r->input('pm') : "/cases/{$c->id}#mails"), $res['msg'], $res['type']);
     }
@@ -126,6 +128,7 @@ class CaseMailController extends Controller
         $m = DB::table('case_mails')->find($mid);
         abort_unless($m, 404);
         $this->load($r, $m->case_id);
+        abort_if($m->mode === CaseSearch::MODE_PARTNER, 403); // パートナー経由の分は、受注 SES に書類を出さない
         abort_unless(in_array($kind, ['resume', 'careersheet', 'careersheet-anon'], true), 404);
         $foreign = $r->user()->role === 'ses' && (int) DB::table('engineers')->where('id', $m->engineer_id)->value('ses_id') !== (int) $r->user()->ses_id;
         if ($m->route === 'group' || $foreign) {

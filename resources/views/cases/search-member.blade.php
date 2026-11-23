@@ -21,6 +21,12 @@
 @if($note)<div class="note"><b>確認のメモ</b>（SES の方への注意書きです。メールには入りません）<br>{{ $note }}</div>@endif
 </x-card>
 </div><div>
+@if(!$row['own'] && $u->role !== 'admin')
+<x-card title="この方への連絡">
+<p>この方には直接メールを送りません。{{ !empty($row['staff']) ? \App\Services\CaseSearch::staffLabel($row['staff'], $e->ses_name) : $e->ses_name }} に紹介を依頼します。</p>
+</x-card>
+<p><a class="btn ghost" href="{{ url('/searches/'.$s->id) }}">一覧に戻る</a></p>
+@else
 <form method="post" action="{{ url('/searches/'.$s->id.'/members/'.$e->id) }}">@csrf
 <x-card title="このエンジニアへのメッセージ">
 <x-field label="個別メッセージ" name="message" type="textarea" rows="4" :value="$row['member']->message" hint="このエンジニアあてのメールにだけ入ります（空でもかまいません）。" />
@@ -31,5 +37,6 @@
 <p class="muted">いまの保存内容で作ったものです（保存してから見ると、個別メッセージが入ります）。返事のリンクは、送るときに付きます。</p>
 <p><b>{{ $mail['subject'] }}</b></p><pre class="mailbody">{{ $mail['body'] }}</pre>
 </x-card>
+@endif
 </div></div>
 @endsection

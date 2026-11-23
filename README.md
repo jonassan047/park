@@ -135,6 +135,19 @@ SES が受けた案件メールから、エンジニアへの案内メールを�
 - **返信の紐付け**：トークンの種類 `search-extra`（`reply_tokens.search_extra_id`）。①宛先トークン ②In-Reply-To は今のまま当たる。③件名・④本文の案内番号は、差出人がその宛先のアドレスのときだけ。`inbound_mails` は `sender_kind='extra'`・`search_extra_id`・`engineer_id` は空。受注 SES の担当者全員にお知らせだけ（メールなし）。差出人は伏せない。プロバイダーへの返信の下書きは作らない。案件の画面の「追加の宛先」に送った日と「返信メール n 件」（`/inbound?case=…&extra=…`）。管理者は読むだけ。ほかの会社・エンジニアには見えない。
 - **版**：`v0.15.0`（`config/park.php`）。マイグレーションは `2026_11_21_000002_case_search_extras.php`（足すだけ。`down` は足したものを消す）。
 
+### プロパー／パートナーと、エンジニア・担当者へのメール作成画面（v0.16.0。2026-11-23）
+
+「エンジニアを選択」の結果を「プロパー（自社のエンジニア）」と「パートナー（他社のエンジニア）」に分け、他社の EG には直接メールを送らず、その会社の担当者に紹介を頼む形にした。**この節が新しい**（上の「全員へのメッセージ」・他社の EG への直接送信は、この版でやめた）。
+
+- **判定**：プロパー＝`engineers.ses_id` が操作している人の `users.ses_id` と同じ EG（`CaseSearch::pool` の `own`、行の `kind`）、パートナー＝それ以外。列は足していない。パートナーの担当者は `CaseSearch::staffFor`：①その EG のアカウントを登録した人（`users.registered_by`）→ ②会社の SES（`ses_companies.rep_user_id`）→ ③その会社の担当者のうち id が一番小さい人。どれも使える人（`Registration::usable`）だけ。いなければ「担当者がいません」で選べない。表示は「イニシャル（企業名[担当者名]）」（`displayName`、`staffLabel`）。年齢・価格・最寄り駅は「—」。
+- **一覧**（`cases/search-list.blade.php`。`CaseSearch::rows` は `proper`・`partner`・`staff`・`failed`・`rows`（proper＋partner）を返す）：表が2つ。「全員へのメッセージ」は画面にもメールにも出さない（列 `case_searches.message_all` は残す）。「エンジニア・担当者を追加」（`findTargets`：自社の EG は氏名・愛称・イニシャル、他社は企業名・担当者の氏名。他社の EG は探せない）。他社の担当者を足すと `case_search_staff`（`by_hand=1`）の行でパートナーの表に入る（`spick[]`）。ボタンは［エンジニア・担当者へメールを作成］（`POST /searches/{sid}/compose`）と［チェックを保存］。
+- **作成画面**（`/searches/{sid}/compose`。`cases/search-compose.blade.php`）：プロパー（チェック済み・未送信の自社の EG と追加の宛先）→ 担当者（束 `case_search_staff.in_batch`。`CaseSearch::buildBatch` が、チェックしたパートナーの EG を担当者ごとにまとめる）の順。左で件名・本文を直せる（案件の項目は文字で入り、1人ずつ変わる `{呼び名}`・`{合う点}`・`{個別メッセージ}`／`{宛名}`・`{依頼するエンジニア}` だけ差し込み）。送る前の確かめ（JavaScript の `confirm`）：「■単価：」の行がはじめのまま／変えた／行が無い、で文が変わる。送ったときの単価の文は `case_mails.price_text`・`case_search_staff.price_text` に残る（`CaseSearch::priceTextOf`、100 字まで）。下書きは `case_searches.proper_subject/proper_body`、担当者は行の `subject/body`。古い `POST /searches/{sid}/send` は作成画面へ移す。
+- **担当者への依頼**（`CaseSearch::sendStaff`）：案件の行を押さえ、`sent_at` が空の行だけ更新してから、メール（kind `case-referral`。Reply-To なし）と PARK のお知らせ（`/cases/{id}#referral`）。同じ案件で同じ担当者には1通だけ（ほかの検索から送っていれば「依頼済み」）。監査 `case-referral-send`（名前・アドレスは書かない）。
+- **パートナーの担当者の側**：案件の画面（受注 SES ではない SES・担当者）に「紹介の依頼」（`cases/_card_referral.blade.php`。会社の誰が開いても見える。プロバイダーからの金額は出さず、伝えられた単価だけ）。［自社のエンジニアを検索する］（`POST /cases/{id}/referral/{stid}/search`）で、依頼元の条件をもとに自社の EG だけの検索を作る（`case_searches.request_id`。パートナーの表・他社の担当者の追加・メールアドレスの追加は出ない）。ここから送る案内メールは `mode='partner'`（`CaseMail::MODES`）、本文の単価ははじめから伝えられた単価。［今回は紹介できる人がいません］（`.../decline`。ひとこと500字まで）で、依頼した人にお知らせ（辞退の取り消しは作っていない）。`CaseSearch::canUse` は、依頼を受けた会社の SES・担当者も true。
+- **返信・やり取り**：`mode='partner'` の案内への返信は、案内した会社（`inbound_mails.ses_id`）だけが `/inbound` で読める（`Inbound::query`。受注 SES には見えない）。`CaseThread::partnerFor` はその EG の所属の会社。`ProviderReply::draftFromInbound` は下書きを作らない。受注 SES・管理者の案件の画面の「案内済メール」には `mode='partner'` の行を出さず、代わりに「担当者への依頼」の表（会社・担当者・送った日・状態・案内した人数）。
+- **EG の金額**：EG の画面（案件の画面の案件票と応募の確認・届いた案件・ホーム）の金額は、届いた案内メールの単価の文（`CaseMail::priceFor`。無ければ「担当者にご確認ください」）。プロバイダーからの金額は出さない。SES・管理者の画面の金額は今のまま。
+- **版**：`v0.16.0`（`config/park.php`）。マイグレーションは `2026_11_23_000001_partner_requests.php`（表 `case_search_staff`、`case_searches` に `proper_subject`・`proper_body`・`request_id`、`case_mails` に `price_text`。今ある案内メールの本文の「■単価：」から `price_text` を埋める。足すだけ。`down` は足したものを消す）。
+
 ## 連絡メール（v0.8.0。2026-11-13）
 
 案件に結び付かない、人から人への自由な件名・本文のメール（`app/Services/DirectMail.php`・`DirectMailController`・`resources/views/mails/`）。案件の案内メール（`CaseMail`・エンジニア検索）や、管理者とエンジニアの「やり取り」（`/engineers/{id}/messages`。PARK の画面の中だけ）とは別で、どちらも残している。連絡メールは受け取った人にメールで届き、PARK の画面でも読める。

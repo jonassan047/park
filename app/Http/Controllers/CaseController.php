@@ -127,8 +127,11 @@ class CaseController extends Controller
         $data = ['c' => $c, 'apps' => $apps->get(), 'canMail' => CM::canSend($u, $c)];
         $data['canSeeMails'] = $data['canMail'] || $u->role === 'admin';
         if ($data['canSeeMails']) {
+            // パートナーの担当者が自社のエンジニアに送った案内（mode=partner）は、受注 SES には出さない（管理者には出す）。代わりに下の「担当者への依頼」の表（v0.16.0）
             $q = DB::table('case_mails as m')->join('engineers as e', 'e.id', '=', 'm.engineer_id')->join('ses_companies as s', 's.id', '=', 'e.ses_id')
                 ->where('m.case_id', $id)->select('m.*', 'e.name', 'e.initials', 'e.code as eg_code', 's.name as ses_name')->orderByDesc('m.id');
+            // 管理者には partner の行も見せる（全部を読める立場）
+            if ($u->role === 'ses') $q->where('m.mode', '!=', CaseSearch::MODE_PARTNER);
             $q->addSelect('e.ses_id as eg_ses_id');
             $data['mails'] = $q->get()->map(function ($m) use ($u, $c) {
                 // 管理者が送った他社の人は、受注 SES には名前・書類を出さない（グループの人と同じ扱い）
@@ -160,6 +163,25 @@ class CaseController extends Controller
             $data['extras'] = DB::table('case_search_extras')->where('case_id', $id)->whereNotNull('sent_at')->orderByDesc('sent_at')->orderByDesc('id')->get();
             $data['extraN'] = DB::table('inbound_mails')->where('case_id', $id)->where('status', 'linked')->whereNotNull('search_extra_id')
                 ->selectRaw('search_extra_id, count(*) as n')->groupBy('search_extra_id')->pluck('n', 'search_extra_id')->all();
+            // 担当者への依頼（他社の担当者に紹介をお願いしたもの。v0.16.0）：受注 SES の担当者は自社が送ったもの、管理者はすべて（読むだけ）。返信の本文は出さない
+            $sq = DB::table('case_search_staff as t')->join('ses_companies as p', 'p.id', '=', 't.partner_ses_id')->join('users as su', 'su.id', '=', 't.staff_user_id')
+                ->where('t.case_id', $id)->whereNotNull('t.sent_at')->select('t.*', 'p.name as partner_name', 'su.name as staff_name')->orderByDesc('t.sent_at')->orderByDesc('t.id');
+            if ($u->role === 'ses') $sq->where('t.ses_id', (int) $u->ses_id);
+            $data['staffReq'] = $sq->get()->map(function ($t) use ($id) {
+                // その会社が案内した人数（案内メールの記録だけ数える。中身は見せない）
+                $t->introduced = DB::table('case_mails')->where('case_id', $id)->where('mode', CaseSearch::MODE_PARTNER)->where('ses_id', $t->partner_ses_id)->count();
+                return $t;
+            });
+        }
+        // 紹介の依頼を受けた会社の SES・担当者（受注 SES ではない）：会社の誰が開いても見える（依頼先が1人でも、休みなどで止まらないように）
+        if ($u->role === 'ses' && !$data['canMail']) {
+            $data['referrals'] = DB::table('case_search_staff as t')->join('ses_companies as o', 'o.id', '=', 't.ses_id')->join('users as ou', 'ou.id', '=', 't.sent_by')
+                ->where('t.case_id', $id)->where('t.partner_ses_id', (int) $u->ses_id)->whereNotNull('t.sent_at')->orderByDesc('t.sent_at')->orderByDesc('t.id')
+                ->select('t.*', 'o.name as from_company', 'ou.name as from_name')->get()->map(function ($t) use ($id, $u) {
+                    $t->engineers = DB::table('engineers')->whereIn('id', array_map('intval', (array) json_decode((string) $t->engineer_ids, true)))->where('ses_id', (int) $u->ses_id)->orderBy('id')->get(['id', 'name', 'code']);
+                    $t->guided = DB::table('case_mails')->where('case_id', $id)->whereIn('engineer_id', $t->engineers->pluck('id'))->pluck('engineer_id')->all();
+                    return $t;
+                });
         }
         // エンジニアを検索（案内できる人の右の列。募集中だけ）：自分の検索の条件（外した印・足した項目を引き継ぐ）
         if ($data['canMail'] && $c->status === 'open') {

@@ -144,6 +144,8 @@ class ProviderReply
         if (DB::table('provider_mails')->where('inbound_mail_id', $inboundId)->exists()) return null;
 
         $cm = $m->case_mail_id ? DB::table('case_mails')->find($m->case_mail_id) : null;
+        // パートナーの担当者が送った案内への返信は、下書きを作らない（プロバイダーとやり取りするのは受注 SES で、パートナーの会社は直せないため。v0.16.0）
+        if ($cm && $cm->mode === CaseSearch::MODE_PARTNER) return null;
         $e = $m->engineer_id ? DB::table('engineers')->find($m->engineer_id) : null;
         $reply = self::intentOf($cm);
         $text = self::compose($case, self::providerOf($case), self::sesName((int) $m->ses_id), $e, $reply, self::extract((string) $m->body_text, $e, $m));

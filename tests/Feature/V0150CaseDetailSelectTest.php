@@ -113,7 +113,16 @@ class V0150CaseDetailSelectTest extends TestCase
     private function sendChecked(int $sid, string $as = self::SES1): void
     {
         $x = DB::table('case_search_extras')->where('search_id', $sid)->whereNull('sent_at')->where('checked', true)->pluck('id')->all();
-        $this->as($as)->post("/searches/$sid/send", ['xpick' => $x])->assertRedirect();
+        $this->sendVia($sid, ['xpick' => $x], $as)->assertRedirect();
+    }
+
+    // v0.16.0：直接は送らず、作成画面を通して送る。チェックを送って作成画面へ → 雛形の本文のまま［エンジニアへメールを送信］
+    private function sendVia(int $sid, array $post, string $as = self::SES1)
+    {
+        $this->as($as)->post("/searches/$sid/compose", $post)->assertRedirect();
+        $s = DB::table('case_searches')->find($sid);
+        $tpl = CS::properTemplate($this->user($as), DB::table('cases')->find($s->case_id), $s);
+        return $this->as($as)->post("/searches/$sid/compose/proper", ['subject' => '【案件のご案内】テスト', 'body' => $tpl]);
     }
 
     // 追加の宛先を1件足して送り、行を返す
@@ -253,8 +262,8 @@ class V0150CaseDetailSelectTest extends TestCase
         $sid = $this->propose($cid);
         $r = $this->as(self::SES1)->get("/searches/$sid")->assertOk();
         $r->assertSee('エンジニアを選択')->assertSee('すべてを選択')->assertSee('id="pickall"', false)->assertSee('マッチした点')->assertSee('マッチしなかった点')
-            ->assertSee('点数')->assertSee('必須 2/2')->assertSee('尚可 1/1')->assertSee('メールアドレスを追加')->assertSee('エンジニアを追加')
-            ->assertSee('エンジニアへメールを送信');
+            ->assertSee('点数')->assertSee('必須 2/2')->assertSee('尚可 1/1')->assertSee('メールアドレスを追加')->assertSee('エンジニア・担当者を追加')
+            ->assertSee('エンジニア・担当者へメールを作成');
         $this->assertMatchesRegularExpression('/<b>必須<\/b> Java、SQL/', $r->getContent());
         foreach ([self::ADMIN, self::SES2, self::EG1] as $who) $this->as($who)->get("/searches/$sid")->assertForbidden();
     }
@@ -276,7 +285,7 @@ class V0150CaseDetailSelectTest extends TestCase
         $cid = $this->mkCase();
         $a = $this->mkEng(self::SES1, '満点 太郎', 'M.T', ['Java', 'SQL']);
         $sid = $this->propose($cid, $this->form($cid, ['confirm' => ['面談は平日夜でも可能ですか']]));
-        $this->as(self::SES1)->post("/searches/$sid/send", ['pick' => [$a]])->assertRedirect();
+        $this->sendVia($sid, ['pick' => [$a]])->assertRedirect();
         $cm = DB::table('case_mails')->where('case_id', $cid)->where('engineer_id', $a)->first();
         $this->assertStringContainsString('必ずご返信ください', $cm->body);
         $this->assertStringContainsString('・稼働開始はいつからですか', $cm->body);
@@ -291,7 +300,7 @@ class V0150CaseDetailSelectTest extends TestCase
         $cid = $this->mkCase();
         $a = $this->mkEng(self::SES1, '満点 太郎', 'M.T', ['Java', 'SQL']);
         $sid = $this->propose($cid);
-        $this->as(self::SES1)->post("/searches/$sid/send", ['pick' => [$a]])->assertRedirect();
+        $this->sendVia($sid, ['pick' => [$a]])->assertRedirect();
         $b = DB::table('case_mails')->where('case_id', $cid)->value('body');
         $this->assertStringContainsString('稼働開始はいつからですか', $b);
         $this->assertStringContainsString('面談は平日夜でも可能ですか', $b);
@@ -303,7 +312,7 @@ class V0150CaseDetailSelectTest extends TestCase
         $cid = $this->mkCase();
         $a = $this->mkEng(self::SES1, '満点 太郎', 'M.T', ['Java', 'SQL']);
         $sid = $this->propose($cid, $this->form($cid, ['confirm' => ['稼働開始はいつからですか', '面談は平日夜でも可能ですか']]));
-        $this->as(self::SES1)->post("/searches/$sid/send", ['pick' => [$a]])->assertRedirect();
+        $this->sendVia($sid, ['pick' => [$a]])->assertRedirect();
         $cm = DB::table('case_mails')->where('case_id', $cid)->first();
         $this->assertStringNotContainsString('ご確認ください', $cm->body);
         $this->assertStringNotContainsString('必ずご返信', $cm->body);
@@ -311,7 +320,7 @@ class V0150CaseDetailSelectTest extends TestCase
         // 案件に確認事項が無いときも節は出ない
         $cid2 = $this->mkCase(['confirm_items' => '', 'title' => '確認なし案件']);
         $sid2 = $this->propose($cid2);
-        $this->as(self::SES1)->post("/searches/$sid2/send", ['pick' => [$a]])->assertRedirect();
+        $this->sendVia($sid2, ['pick' => [$a]])->assertRedirect();
         $this->assertStringNotContainsString('ご確認ください', DB::table('case_mails')->where('case_id', $cid2)->value('body'));
     }
 
@@ -328,7 +337,7 @@ class V0150CaseDetailSelectTest extends TestCase
     // ---------- C2：返事のリンク ----------
     private function sentToken(int $cid, int $sid, int $eid): string
     {
-        $this->as(self::SES1)->post("/searches/$sid/send", ['pick' => [$eid]])->assertRedirect();
+        $this->sendVia($sid, ['pick' => [$eid]])->assertRedirect();
         return (string) DB::table('case_mails')->where('case_id', $cid)->where('engineer_id', $eid)->value('token');
     }
 
@@ -417,7 +426,7 @@ class V0150CaseDetailSelectTest extends TestCase
         $a2 = DB::table('case_search_extras')->where('email', 'a2@example.test')->value('id');
         $this->as(self::SES1)->post("/searches/$sid/extras/$a1/remove")->assertRedirect();
         $this->assertNull(DB::table('case_search_extras')->find($a1));
-        $this->as(self::SES1)->post("/searches/$sid/send", ['xpick' => [$a2]])->assertRedirect();
+        $this->sendVia($sid, ['xpick' => [$a2]])->assertRedirect();
         $this->as(self::SES1)->post("/searches/$sid/extras/$a2/remove")->assertRedirect();
         $this->assertNotNull(DB::table('case_search_extras')->find($a2), '送った行は消えない');
         $this->as(self::SES2)->post("/searches/$sid/extras/$a2/remove")->assertForbidden();
@@ -458,7 +467,7 @@ class V0150CaseDetailSelectTest extends TestCase
         $sid = $this->propose($cid);
         $this->as(self::SES1)->post("/searches/$sid/extras", ['extra_text' => "x1@example.test\nx2@example.test"]);
         $x1 = DB::table('case_search_extras')->where('email', 'x1@example.test')->value('id');
-        $this->as(self::SES1)->post("/searches/$sid/send", ['pick' => [$a], 'xpick' => [$x1]])->assertRedirect();
+        $this->sendVia($sid, ['pick' => [$a], 'xpick' => [$x1]])->assertRedirect();
         $this->assertNotNull(DB::table('case_search_extras')->find($x1)->sent_at);
         $this->assertNull(DB::table('case_search_extras')->where('email', 'x2@example.test')->value('sent_at'));
         $this->assertSame(1, DB::table('case_mails')->count());
@@ -581,7 +590,7 @@ class V0150CaseDetailSelectTest extends TestCase
         $own = $this->mkEng(self::SES1, '自社 太郎', 'J.T', ['Java', 'SQL']);
         $other = $this->mkEng(self::SES2, '他社 花子', 'H.T', ['Java', 'SQL']);
         $sid = $this->propose($cid);
-        $this->as(self::SES1)->post("/searches/$sid/send", ['pick' => [$own, $other]])->assertRedirect();
+        $this->sendVia($sid, ['pick' => [$own, $other]])->assertRedirect(); // 他社の人には直接送らない（担当者への依頼になる。v0.16.0）
         $html = $this->as(self::SES1)->get("/cases/$cid")->assertOk()->getContent();
         $this->assertStringContainsString("/cases/$cid/threads/$own", $html, '自社 EG の行に「やり取り」');
         $this->assertStringNotContainsString('他社 花子', $html);

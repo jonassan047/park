@@ -2,7 +2,7 @@
 <dl class="dl">
 <dt>ID</dt><dd><x-code :v="$c->code" /></dd>
 <dt>状態</dt><dd>{{ badge('caseStatus', $c->status) }}</dd>
-<dt>金額</dt><dd>{{ man($c->price) }} <span class="muted">{{ $c->price_note }}</span></dd>
+<dt>金額</dt><dd>@if($u->role === 'eg'){{-- エンジニアには、届いた案内メールの単価の文だけ（プロバイダーからの金額は出さない。v0.16.0） --}}{{ \App\Services\CaseMail::priceFor($c, (int) $u->engineer_id) }}@else{{ man($c->price) }} <span class="muted">{{ $c->price_note }}</span>@endif</dd>
 @if($u->role !== 'eg')<dt>元請け</dt><dd>{{ $c->client_label ?: '—' }}</dd><dt>受注 SES</dt><dd>{{ $c->ses_name ?: '—' }}</dd>@endif
 <dt>必須</dt><dd><x-chips :list="skill_items($c->required_skills)" /></dd>
 <dt>尚可</dt><dd><x-chips :list="skill_items($c->preferred_skills)" /></dd>

@@ -49,8 +49,13 @@ class Todo
         $out = [];
         $s = DB::table('ses_companies')->find($sesId);
         // 案内メールの返事
+        // 受注 SES は、パートナー経由（mode=partner）以外の分。パートナー側の SES は、自社の担当者が送った分（mode=partner）
         $mails = DB::table('case_mails as m')->join('cases as c', 'c.id', '=', 'm.case_id')->join('engineers as e', 'e.id', '=', 'm.engineer_id')
-            ->where('c.source_ses_id', $sesId)->where('c.status', 'open')->select('m.*', 'c.title', 'e.name', 'e.initials', 'e.ses_id as eg_ses_id')->get();
+            ->where('c.status', 'open')
+            ->where(fn ($w) => $w
+                ->where(fn ($a) => $a->where('c.source_ses_id', $sesId)->where(fn ($b) => $b->whereNull('m.mode')->orWhere('m.mode', '!=', CaseSearch::MODE_PARTNER)))
+                ->orWhere(fn ($a) => $a->where('m.ses_id', $sesId)->where('m.mode', CaseSearch::MODE_PARTNER)))
+            ->select('m.*', 'c.title', 'e.name', 'e.initials', 'e.ses_id as eg_ses_id')->get();
         $applied = DB::table('applications')->whereIn('case_id', $mails->pluck('case_id')->unique()->all())->get(['case_id', 'engineer_id'])
             ->map(fn ($a) => $a->case_id.'-'.$a->engineer_id)->all();
         foreach ($mails as $m) {

@@ -347,8 +347,15 @@ class Inbound
             ->leftJoin('case_search_extras as x', 'x.id', '=', 'i.search_extra_id')
             ->select('i.*', 'c.title as case_title', 'c.code as case_code', 'c.source_ses_id as case_source', 'e.name as eg_name', 'e.initials as eg_initials', 'e.code as eg_code',
                 'e.ses_id as eg_ses_id', 'es.name as eg_ses_name', 's.name as ses_name', 'pv.name as provider_name', 'x.name as extra_name', 'x.email as extra_email');
-        if ($u && $u->role === 'ses') $q->where('i.status', 'linked')->where('c.source_ses_id', (int) $u->ses_id);
-        elseif (!$u || $u->role !== 'admin') $q->whereRaw('1 = 0');
+        if ($u && $u->role === 'ses') {
+            // 受注 SES が見るのは、案件の今の受注 SES が自社の行。ただし、パートナーの担当者が自社のエンジニアに送った案内（mode=partner）への返信は、
+            // その会社の中の話なので、受注 SES には見せず、案内した会社（inbound.ses_id）が見る（v0.16.0）
+            $me = (int) $u->ses_id;
+            $q->leftJoin('case_mails as cm', 'cm.id', '=', 'i.case_mail_id')->where('i.status', 'linked')->where(function ($w) use ($me) {
+                $w->where(fn ($a) => $a->where('c.source_ses_id', $me)->where(fn ($b) => $b->whereNull('cm.mode')->orWhere('cm.mode', '!=', CaseSearch::MODE_PARTNER)))
+                  ->orWhere(fn ($a) => $a->where('i.ses_id', $me)->where('cm.mode', CaseSearch::MODE_PARTNER));
+            });
+        } elseif (!$u || $u->role !== 'admin') $q->whereRaw('1 = 0');
         return $q;
     }
 

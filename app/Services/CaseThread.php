@@ -27,6 +27,8 @@ class CaseThread
     public static function partnerFor(object $c, object $e): int
     {
         $own = (int) $e->ses_id;
+        // パートナーの担当者（所属の会社）が案内した人は、所属の会社がやり取りの相手（v0.16.0）
+        if (DB::table('case_mails')->where('case_id', $c->id)->where('engineer_id', $e->id)->where('mode', CaseSearch::MODE_PARTNER)->exists()) return $own;
         $s = (int) ($c->source_ses_id ?? 0);
         if ($s && $s !== $own && DB::table('ses_companies')->where('id', $s)->value('kind') === 'ses') return $s;
         return $own;

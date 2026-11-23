@@ -55,7 +55,8 @@ $newLayout = $canMail;
   <x-card title="状態の変更">@foreach(['open', 'filled', 'closed'] as $s)@if($s !== $c->status)<x-post :action="'/cases/'.$c->id.'/status'" :label="lbl('caseStatus', $s).'にする'" :fields="['status' => $s]" cls="ghost small" /> @endif @endforeach</x-card>
 
 @elseif($u->role === 'ses')
-  {{-- 受注 SES ではない会社の SES・担当者：自社の人との相性と、推薦（受注 SES の担当者は、新しい配置の「エンジニアを検索」から提案する） --}}
+  {{-- 受注 SES ではない会社の SES・担当者：紹介の依頼（来ていれば一番上）、自社の人との相性と、推薦（受注 SES の担当者は、新しい配置の「エンジニアを検索」から提案する） --}}
+  @if(isset($referrals) && $referrals->count())@include('cases._card_referral')@endif
   <x-card title="エンジニアとの相性">
   @if($c->status !== 'open')<p class="muted">募集を終えた案件です。</p>
   @else
@@ -88,7 +89,7 @@ $newLayout = $canMail;
     <x-card title="応募する"><form method="post" action="{{ url('/cases/'.$c->id.'/apply') }}">@csrf
     <p class="muted">面談で条件が合わずに落ちるのを防ぐため、応募の前に確かめてください。</p>
     <x-field :label="'開始（'.fmt_date($c->start_date).'）に間に合う'" name="start_ok" type="checkbox" />
-    <x-field :label="'金額（'.man($c->price).'）で問題ない'" name="price_ok" type="checkbox" />
+    <x-field :label="'金額（'.\App\Services\CaseMail::priceFor($c, (int) $u->engineer_id).'）で問題ない'" name="price_ok" type="checkbox" />
     <x-field :label="'働き方・場所（'.lbl('workStyle', $c->work_style).($c->location ? '／'.$c->location : '').'）で問題ない'" name="style_ok" type="checkbox" />
     <x-field label="気になること・伝えたいこと" name="condition_note" type="textarea" rows="2" />
     <button class="btn">この案件に応募する</button></form></x-card>

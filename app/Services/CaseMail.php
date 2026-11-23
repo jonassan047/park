@@ -12,7 +12,9 @@ class CaseMail
 {
     const REPLIES = ['none' => '返事なし', 'interested' => '応募したい', 'question' => '質問あり', 'declined' => '見送り'];
     // 送り方（case_mails.mode）：same 同じ内容／each 個別／search エンジニア検索（v0.7.0）
-    const MODES = ['same' => '同じ内容', 'each' => '個別', 'search' => 'エンジニア検索'];
+    // partner＝パートナーの担当者が、自社のエンジニアに送った案内（v0.16.0）
+    const MODES = ['same' => '同じ内容', 'each' => '個別', 'search' => 'エンジニア検索', 'partner' => '担当者経由'];
+    const NO_PRICE = '担当者にご確認ください'; // 案内メールの単価の文が無いエンジニアに出す金額
     const PLACEHOLDERS = ['{呼び名}', '{案件名}', '{単価}', '{開始}', '{場所}', '{働き方}', '{必須}', '{確認事項}', '{合う点}', '{送り主}', '{案件ID}'];
 
     // 誰が案内できるか：受注 SES の担当者だけ（v0.11.0 から、管理者は案内できない。
@@ -20,6 +22,13 @@ class CaseMail
     public static function canSend($u, $c): bool
     {
         return $u->role === 'ses' && !empty($c->source_ses_id) && (int) $c->source_ses_id === (int) $u->ses_id;
+    }
+
+    // エンジニアの画面に出す金額：そのエンジニアに届いた案内メールの単価の文（プロバイダーからの金額は出さない）。無ければ「担当者にご確認ください」
+    public static function priceFor(object $c, int $engineerId): string
+    {
+        $t = DB::table('case_mails')->where('case_id', $c->id)->where('engineer_id', $engineerId)->orderByDesc('id')->value('price_text');
+        return $t ?: self::NO_PRICE;
     }
 
     // 候補：own＝自社のエンジニア（名前が見える。SES から直接送る）、group＝グループのほかの SES の人（名前は伏せる。PARK から送る）
@@ -135,7 +144,9 @@ class CaseMail
             $mailId = DB::table('case_mails')->insertGetId(['case_id' => $c->id, 'engineer_id' => $e->id, 'ses_id' => $sesId, 'sent_by' => $u->id, 'route' => $own ? 'own' : 'group', 'mode' => $mode,
                 'subject' => $subject, 'body' => $body, 'score' => $score['score'], 'suggest' => implode(' / ', self::suggestions($c, $e, $score)), 'outbox_id' => $outbox, 'sent_at' => now_str(), 'token' => $token,
                 // 検索から送ったとき、メールの「ご確認ください」に入れた項目（返事の画面で、お答えを必須にするのに使う）
-                'confirm_items' => !empty($it['confirm']) ? implode("\n", $it['confirm']) : null]);
+                'confirm_items' => !empty($it['confirm']) ? implode("\n", $it['confirm']) : null,
+                // 送った単価の文（EG の画面に出す金額。本文の「■単価：」の行。v0.16.0）。画面の渡し方が無いときは本文から読む
+                'price_text' => array_key_exists('price_text', $it) ? $it['price_text'] : CaseSearch::priceTextOf($body)]);
             ReplyTokens::attach($tokenId, ['case_mail_id' => $mailId, 'outbox_id' => $outbox, 'message_id' => $outbox ? DB::table('mail_outbox')->where('id', $outbox)->value('message_id') : null]);
             // 本人が PARK の画面からも見られるように（応募・見送りもできる）
             if (!DB::table('case_offers')->where('case_id', $c->id)->where('engineer_id', $e->id)->exists()) {

@@ -137,7 +137,18 @@ Route::middleware('role:admin,ses')->group(function () {
     Route::post('/searches/{sid}/add', [CSearch::class, 'add']);
     Route::post('/searches/{sid}/extras', [CSearch::class, 'addExtras']);
     Route::post('/searches/{sid}/extras/{xid}/remove', [CSearch::class, 'removeExtra']);
-    Route::post('/searches/{sid}/send', [CSearch::class, 'send']);
+    Route::post('/searches/{sid}/send', [CSearch::class, 'startCompose']); // 古い画面から来ても、直接は送らず作成画面へ（v0.16.0）
+    // エンジニア・担当者を追加、作成画面（プロパー → 担当者の順）、紹介の依頼（v0.16.0）
+    Route::post('/searches/{sid}/staff', [CSearch::class, 'addStaff']);
+    Route::post('/searches/{sid}/staff/{stid}/remove', [CSearch::class, 'removeStaff']);
+    Route::get('/searches/{sid}/compose', [CSearch::class, 'compose']);
+    Route::post('/searches/{sid}/compose', [CSearch::class, 'startCompose']);
+    Route::post('/searches/{sid}/compose/proper', [CSearch::class, 'sendProper'])->middleware('throttle:20,1');
+    Route::post('/searches/{sid}/compose/draft', [CSearch::class, 'saveDraft']);
+    Route::post('/searches/{sid}/compose/staff/{stid}', [CSearch::class, 'sendStaff'])->middleware('throttle:20,1');
+    Route::post('/searches/{sid}/compose/staff/{stid}/skip', [CSearch::class, 'skipStaff']);
+    Route::post('/cases/{id}/referral/{stid}/search', [CSearch::class, 'referralSearch']);
+    Route::post('/cases/{id}/referral/{stid}/decline', [CSearch::class, 'referralDecline']);
     Route::get('/searches/{sid}/members/{eid}', [CSearch::class, 'member']);
     Route::post('/searches/{sid}/members/{eid}', [CSearch::class, 'saveMember']);
     Route::post('/case-mails/{id}/reply', [CMail::class, 'reply']);

@@ -20,7 +20,7 @@
 @if($unread)<x-card title="管理者からのメッセージ"><p>未読が {{ $unread }} 件あります。</p><a class="btn small" href="{{ url('/engineers/'.$e->id.'/messages') }}">読む</a></x-card>@endif
 <div class="cols"><div>
 <x-card title="あなたに届いた案件"><x-table :head="['案件', '相性', '金額', '開始', '']" :count="$offers->count()" empty="いまは届いていません。経験票を充実させると、合う案件が届きやすくなります。">
-@foreach($offers as $o)<tr><td>{{ $o->title }} <x-code :v="$o->case_code" /></td><td><x-score :n="$o->score" /></td><td>{{ man($o->price) }}</td><td>{{ fmt_date($o->start_date) }}</td><td><a href="{{ url('/cases/'.$o->case_id) }}">@if($o->status === 'sent')<b>新着</b>@else開く@endif</a></td></tr>@endforeach
+@foreach($offers as $o)<tr><td>{{ $o->title }} <x-code :v="$o->case_code" /></td><td><x-score :n="$o->score" /></td><td>{{ $o->price_text ?: \App\Services\CaseMail::NO_PRICE }}</td><td>{{ fmt_date($o->start_date) }}</td><td><a href="{{ url('/cases/'.$o->case_id) }}">@if($o->status === 'sent')<b>新着</b>@else開く@endif</a></td></tr>@endforeach
 </x-table></x-card>
 <x-card title="応募・選考"><x-table :head="['案件', '状態', '']" :count="$apps->count()" empty="ありません。">
 @foreach($apps as $a)<tr><td>{{ $a->title }} <x-code :v="$a->code" /></td><td>{{ badge('appStatus', $a->status) }}</td><td><a class="btn small" href="{{ url('/applications/'.$a->id) }}">開く</a></td></tr>@endforeach
