@@ -13,13 +13,17 @@ $jlist = function (array $items, bool $hit) {
 <x-card title="エンジニアを選択">
 <x-slot:actions><a class="btn ghost small" href="{{ url('/cases/'.$c->id.'#keywords') }}">キーワードを変える</a> <a class="btn ghost small" href="{{ url('/cases/'.$c->id) }}">案件に戻る</a></x-slot:actions>
 <p><label class="check"><input type="checkbox" id="pickall"> すべてを選択</label> <b>{{ $c->title }}</b></p>
-<x-table :head="['', 'エンジニア', '点数', 'マッチした点', 'マッチしなかった点', '件数']" :count="count($rows)" empty="条件に合うエンジニアがいません。キーワードを外すか、下の「エンジニアを追加」で足してください。">
+<p class="muted">案件ID：<x-code :v="$c->code" />　金額：{{ man($c->price) }}　開始：{{ $c->start_date ? date('Y年n月', strtotime($c->start_date)) : '相談' }}@if($c->work_style !== 'remote')　最寄り駅：{{ $c->location ?: '—' }}@else　フルリモート@endif</p>
+@php $u = auth()->user(); @endphp
+<x-table :head="['', 'エンジニア', '年齢', '価格', '最寄り駅', '点数', 'マッチした点', 'マッチしなかった点', '件数']" :count="count($rows)" empty="条件に合うエンジニアがいません。キーワードを外すか、下の「エンジニアを追加」で足してください。">
 @foreach($rows as $row)@php $e = $row['e']; $j = $row['j']; @endphp<tr>
 <td>@if($row['sent'] !== null)<span class="muted">送信済み</span>@else<input type="checkbox" name="pick[]" value="{{ $e->id }}" @checked($row['member']->checked)>@endif</td>
 <td><button class="linkbtn" name="go" value="{{ $e->id }}" style="background:none;border:0;padding:0;color:var(--blue);cursor:pointer;text-decoration:underline;font:inherit">{{ $row['name'] }}</button>
 @if($row['own'] || auth()->user()->role === 'admin') <x-code :v="$e->code" />@endif
 @if($row['member']->by_hand)<span class="badge info">手で足した</span>@endif
-@if(!$row['pass'])<div><small class="muted">条件に届いていません</small></div>@endif</td>
+@if(!$row['pass'])<div><small class="muted">条件に届いていません@if($row['over'])（単価が案件＋{{ \App\Services\CaseSearch::PRICE_OVER }}万円以上）@endif</small></div>@endif</td>
+@if($row['own'] || $u->role === 'admin')<td>{{ $e->birth_year ? (date('Y') - $e->birth_year).'歳' : '—' }}</td><td>{{ man($e->desired_price) }}</td><td>{{ $e->nearest_station ?: '—' }}</td>
+@else<td class="muted">—</td><td class="muted">—</td><td class="muted">—</td>@endif
 <td><x-score :n="$row['score']" /></td>
 @foreach([true, false] as $hit)@php $rq = $jlist($j['req'], $hit); $pf = $jlist($j['pref'], $hit); @endphp
 <td class="{{ $hit ? 'hit-text' : 'bad-text' }}"><small>@if($rq)<b>必須</b> {{ implode('、', $rq) }}<br>@endif @if($pf)<b>尚可</b> {{ implode('、', $pf) }}<br>@endif @if(!$rq && !$pf)—@endif</small></td>

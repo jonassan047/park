@@ -254,6 +254,14 @@ class CaseSearch
         return $about ?: ($years ?: '');
     }
 
+    // 希望単価が案件の単価＋10万円以上なら、検索の結果から外す（2026-11-23 TEZZO）。どちらかの単価が無ければ外さない
+    const PRICE_OVER = 10;
+    public static function priceOver(object $c, object $e): bool
+    {
+        if (!$c->price || !$e->desired_price) return false;
+        return (float) $e->desired_price >= (float) $c->price + self::PRICE_OVER;
+    }
+
     // 並び：自社 → 他社。それぞれ、当たった必須の技術の月数の合計 → h → 点数 → id の順
     public static function sortRows(array $rows): array
     {
@@ -277,7 +285,8 @@ class CaseSearch
         foreach ($pool as $m) {
             $e = $m['engineer'];
             $j = self::judge($items, $idxs[$e->id] ?? [], $exps[$e->id] ?? []);
-            $rows[] = ['e' => $e, 'own' => $m['own'], 'sent' => $m['sent'], 'score' => $m['score'], 'j' => $j, 'pass' => self::passes($j['h'], $j['n'])];
+            $over = self::priceOver($c, $e);
+            $rows[] = ['e' => $e, 'own' => $m['own'], 'sent' => $m['sent'], 'score' => $m['score'], 'j' => $j, 'over' => $over, 'pass' => !$over && self::passes($j['h'], $j['n'])];
         }
         return self::sortRows($rows);
     }
