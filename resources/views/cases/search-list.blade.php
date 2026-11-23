@@ -13,7 +13,7 @@ $jlist = function (array $items, bool $hit) {
 <x-card title="エンジニアを選択">
 <x-slot:actions><a class="btn ghost small" href="{{ url('/cases/'.$c->id.'#keywords') }}">キーワードを変える</a> <a class="btn ghost small" href="{{ url('/cases/'.$c->id) }}">案件に戻る</a></x-slot:actions>
 <p><label class="check"><input type="checkbox" id="pickall"> すべてを選択</label></p>
-<p><x-code :v="$c->code" /> <b>{{ $c->title }}</b>　<span class="muted">金額：{{ $c->price ? man($c->price) : ($c->price_note ?: '—') }}　開始：{{ $c->start_date ? date('Y年n月', strtotime($c->start_date)) : ($c->period ?: '相談') }}@if($c->work_style !== 'remote')　最寄り駅：{{ $c->location ?: '—' }}@else　フルリモート@endif</span></p>
+<p><b>{{ $c->code }}　{{ $c->title }}</b><br><span class="muted">金額：{{ $c->price ? man($c->price) : ($c->price_note ?: '—') }}　開始：{{ $c->start_date ? date('Y年n月', strtotime($c->start_date)) : ($c->period ?: '相談') }}@if($c->work_style !== 'remote')　最寄り駅：{{ $c->location ?: '—' }}@else　フルリモート@endif</span></p>
 @php $u = auth()->user(); @endphp
 <x-table :head="['', 'エンジニア', '年齢', '価格', '最寄り駅', '点数', 'マッチした点', 'マッチしなかった点', '件数']" :count="count($rows)" empty="条件に合うエンジニアがいません。キーワードを外すか、下の「エンジニアを追加」で足してください。">
 @foreach($rows as $row)@php $e = $row['e']; $j = $row['j']; @endphp<tr>
