@@ -73,5 +73,9 @@ class SearchPriceColumnsTest extends TestCase
         $this->as('ses1@park.example')->post("/cases/$cid/search", [])->assertRedirect();
         $sid = (int) DB::table('case_searches')->where('case_id', $cid)->value('id');
         $this->get("/searches/$sid")->assertOk()->assertSee('フルリモート')->assertDontSee('最寄り駅：品川駅');
+
+        // 金額・開始が空なら、単価の注記・期間を出す
+        DB::table('cases')->where('id', $cid)->update(['price' => null, 'price_note' => 'スキル見合い', 'period' => '2026/12/01〜']);
+        $this->get("/searches/$sid")->assertOk()->assertSee('金額：スキル見合い')->assertSee('開始：2026/12/01〜');
     }
 }
