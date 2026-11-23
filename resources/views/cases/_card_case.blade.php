@@ -3,7 +3,7 @@
 <dt>ID</dt><dd><x-code :v="$c->code" /></dd>
 <dt>状態</dt><dd>{{ badge('caseStatus', $c->status) }}</dd>
 <dt>金額</dt><dd>{{ man($c->price) }} <span class="muted">{{ $c->price_note }}</span></dd>
-@if($u->role !== 'eg')<dt>元請け</dt><dd>{{ $c->client_label ?: '—' }}</dd><dt>みなもと SES</dt><dd>{{ $c->ses_name ?: '—' }}</dd>@endif
+@if($u->role !== 'eg')<dt>元請け</dt><dd>{{ $c->client_label ?: '—' }}</dd><dt>受注 SES</dt><dd>{{ $c->ses_name ?: '—' }}</dd>@endif
 <dt>必須</dt><dd><x-chips :list="skill_items($c->required_skills)" /></dd>
 <dt>尚可</dt><dd><x-chips :list="skill_items($c->preferred_skills)" /></dd>
 @php $expReq = \App\Support\CaseExp::split($c->required_exp ?? null); $expPref = \App\Support\CaseExp::split($c->preferred_exp ?? null); @endphp

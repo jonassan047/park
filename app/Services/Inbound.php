@@ -290,7 +290,7 @@ class Inbound
 
     // ---------- 知らせ ----------
 
-    // 紐付いた返信を、みなもと SES の担当者全員に知らせる（同じ記録に 2 回は出さない）。未紐付けは管理者に（メールなし）
+    // 紐付いた返信を、受注 SES の担当者全員に知らせる（同じ記録に 2 回は出さない）。未紐付けは管理者に（メールなし）
     public static function notify(int $id): void
     {
         $m = DB::table('inbound_mails')->find($id);
@@ -338,7 +338,7 @@ class Inbound
 
     // ---------- 見える範囲 ----------
 
-    // 一覧・詳細の元の問い合わせ。管理者はすべて、SES・担当者は「紐付け済みで、案件の今のみなもと SES が自社」のものだけ。エンジニアは何も見えない
+    // 一覧・詳細の元の問い合わせ。管理者はすべて、SES・担当者は「紐付け済みで、案件の今の受注 SES が自社」のものだけ。エンジニアは何も見えない
     public static function query($u)
     {
         $q = DB::table('inbound_mails as i')->leftJoin('cases as c', 'c.id', '=', 'i.case_id')->leftJoin('engineers as e', 'e.id', '=', 'i.engineer_id')
@@ -383,7 +383,7 @@ class Inbound
         $out->sender = self::senderLabel($u, $row);
         $out->files = json_decode((string) $row->attachments, true) ?: [];
         if (!$u || $u->role !== 'ses') return $out;
-        // 追加の宛先は、自社が入れた宛先（エンジニアではない）。伏せない（見えるのはみなもと SES と管理者だけ）
+        // 追加の宛先は、自社が入れた宛先（エンジニアではない）。伏せない（見えるのは受注 SES と管理者だけ）
         // ただし、宛先と違うアドレスから届いた返信（第三者かもしれない）は、エンジニアと同じに伏せる
         $extra = ($row->sender_kind ?? 'eg') === 'extra';
         if ($extra && empty($row->from_mismatch)) return $out;
@@ -549,7 +549,7 @@ class Inbound
         N::audit($admin->id, 'inbound-link', "#$id → 案件 ".($case->code ?? $cm->case_id)." 案内メール #{$cm->id}");
         ProviderReply::draftFromInbound($id);
         self::notify($id);
-        return ['type' => 'ok', 'msg' => '紐付けました。'.($ses ? 'みなもと SES の担当者に知らせました。' : '')];
+        return ['type' => 'ok', 'msg' => '紐付けました。'.($ses ? '受注 SES の担当者に知らせました。' : '')];
     }
 
     public static function unlink($admin, int $id): array

@@ -41,7 +41,7 @@ class V070SearchTest extends TestCase
         return (int) $this->user($email)->ses_id;
     }
 
-    // 案件（みなもと SES の人のメールで登録）。既定は SES1 の案件で、必須 Java・SQL、尚可 AWS
+    // 案件（受注 SES の人のメールで登録）。既定は SES1 の案件で、必須 Java・SQL、尚可 AWS
     private function mkCase(string $email = self::SES1, array $over = []): int
     {
         return W::saveCase($over + ['title' => '検索テスト用の案件', 'price' => 60, 'required_skills' => 'Java、SQL', 'preferred_skills' => 'AWS',

@@ -1,8 +1,8 @@
 @if($mails->count() || (isset($extras) && $extras->count()))
-{{-- 案内メールの記録：みなもと SES の担当者は操作もできる。管理者は読むだけ（v0.11.0）。追加の宛先は v0.15.0 --}}
+{{-- 案内メールの記録：受注 SES の担当者は操作もできる。管理者は読むだけ（v0.11.0）。追加の宛先は v0.15.0 --}}
 <x-card title="案内済メール">
 <div id="mails"></div>
-<x-table :head="$canMail ? ['エンジニア', '送った日', '返事', 'プロバイダーからの結果報告', '記録する', '案件をくれた先へ返す書類'] : ['エンジニア', '送った日', '返事', 'プロバイダーからの結果報告']" :count="$mails->count()" :empty="$canMail ? 'まだ送っていません。右の「エンジニアを検索」から、候補を絞ってメールを送れます。' : 'まだ送っていません。案内は、みなもと SES の担当者が行います。'">
+<x-table :head="$canMail ? ['エンジニア', '送った日', '返事', 'プロバイダーからの結果報告', '記録する', '案件をくれた先へ返す書類'] : ['エンジニア', '送った日', '返事', 'プロバイダーからの結果報告']" :count="$mails->count()" :empty="$canMail ? 'まだ送っていません。右の「エンジニアを検索」から、候補を絞ってメールを送れます。' : 'まだ送っていません。案内は、受注 SES の担当者が行います。'">
 @php $replyLabels = array_merge(\App\Services\CaseMail::REPLIES, ['interested' => '応募する']); @endphp
 @foreach($mails as $m)@php $sent = isset($providerMails) && $providerMails->where('case_mail_id', $m->id)->where('status', 'sent')->count(); @endphp<tr>
 <td>@if($m->route === 'own' || $u->role === 'admin'){{ $m->name }} <x-code :v="$m->eg_code" />@else{{ $m->initials ?: '—' }} <span class="muted">（{{ $m->ses_name }}・PARK から）</span>@endif<div class="muted">{{ $m->score }}点・{{ \App\Services\CaseMail::MODES[$m->mode] ?? '同じ内容' }}</div>
@@ -20,7 +20,7 @@
 </tr>@endforeach
 </x-table>
 @if($canMail)<p class="muted">書類は、押したときの最新の内容で Excel を作ってダウンロードします。メールに添付して、案件をくれた先へ返信してください。</p>@endif
-{{-- 追加の宛先（PARK に登録していない人へ送ったもの）：みなもと SES の担当者と管理者だけ。管理者は読むだけ --}}
+{{-- 追加の宛先（PARK に登録していない人へ送ったもの）：受注 SES の担当者と管理者だけ。管理者は読むだけ --}}
 @if(isset($extras) && $extras->count())
 <h3 id="extras">追加の宛先</h3>
 <x-table :head="['宛先', '送った日', '返信']" :count="$extras->count()">

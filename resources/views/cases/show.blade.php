@@ -1,6 +1,6 @@
 @php
 $u = auth()->user();
-// 新しい配置（v0.15.0）：みなもと SES の担当者だけ。ほかの人（管理者・ほかの SES・エンジニア）は今までの配置
+// 新しい配置（v0.15.0）：受注 SES の担当者だけ。ほかの人（管理者・ほかの SES・エンジニア）は今までの配置
 $newLayout = $canMail;
 @endphp
 @extends('layouts.app', ['title' => trim($c->code.' '.$c->title), 'wide' => true])
@@ -43,10 +43,10 @@ $newLayout = $canMail;
 </div><div>
 
 @if($u->role === 'admin')
-  {{-- 管理者は案件を発信できない。案内は、みなもと SES の担当者が行う（v0.11.0） --}}
+  {{-- 管理者は案件を発信できない。案内は、受注 SES の担当者が行う（v0.11.0） --}}
   <x-card title="案内">
-  @if($c->ses_name)<p class="muted">案内は、みなもと SES（{{ $c->ses_name }}）の担当者が行います。</p>
-  @else<p class="muted">みなもと SES がまだ決まっていません。案件の「編集」で選んでください。案内は、みなもと SES の担当者が行います。</p>@endif
+  @if($c->ses_name)<p class="muted">案内は、受注 SES（{{ $c->ses_name }}）の担当者が行います。</p>
+  @else<p class="muted">受注 SES がまだ決まっていません。案件の「編集」で選んでください。案内は、受注 SES の担当者が行います。</p>@endif
   </x-card>
   <x-card title="配信済み"><x-table :head="['エンジニア', '点数', '状態', '配信日', '']" :count="$offers->count()">
   @foreach($offers as $o)<tr><td>{{ $o->name }} <x-code :v="$o->eg_code" /></td><td>{{ $o->score }}</td><td>{{ badge('offerStatus', $o->status) }}@if($o->decline_reason)<div class="muted">{{ $o->decline_reason }}</div>@endif</td><td>{{ fmt_dt($o->sent_at) }}</td>
@@ -55,11 +55,11 @@ $newLayout = $canMail;
   <x-card title="状態の変更">@foreach(['open', 'filled', 'closed'] as $s)@if($s !== $c->status)<x-post :action="'/cases/'.$c->id.'/status'" :label="lbl('caseStatus', $s).'にする'" :fields="['status' => $s]" cls="ghost small" /> @endif @endforeach</x-card>
 
 @elseif($u->role === 'ses')
-  {{-- みなもとではない会社の SES・担当者：自社の人との相性と、推薦（みなもと SES の担当者は、新しい配置の「エンジニアを検索」から提案する） --}}
+  {{-- 受注 SES ではない会社の SES・担当者：自社の人との相性と、推薦（受注 SES の担当者は、新しい配置の「エンジニアを検索」から提案する） --}}
   <x-card title="エンジニアとの相性">
   @if($c->status !== 'open')<p class="muted">募集を終えた案件です。</p>
   @else
-  <p class="muted">{{ $c->ses_name ? 'この案件のみなもとは、ほかの SES です。合う方がいれば「推薦する」で、みなもと SES に知らせます（名前は伏せて伝えます）。' : 'この案件は、みなもと SES がまだ決まっていません。合う方がいれば「推薦する」で、管理者に知らせます（名前は伏せて伝えます）。' }}</p>
+  <p class="muted">{{ $c->ses_name ? 'この案件の受注 SES は、ほかの SES です。合う方がいれば「推薦する」で、受注 SES に知らせます（名前は伏せて伝えます）。' : 'この案件は、受注 SES がまだ決まっていません。合う方がいれば「推薦する」で、管理者に知らせます（名前は伏せて伝えます）。' }}</p>
   <x-table :head="['エンジニア', '点数', 'マッチした点', '']" :count="count($rows)" empty="登録しているエンジニアがいません。">
   @foreach($rows as $row)<tr><td><a href="{{ url('/engineers/'.$row['e']->id) }}">{{ $row['e']->name }}</a> <x-code :v="$row['e']->code" /><div class="muted">{{ lbl('engStatus', $row['e']->status) }}</div></td>
     <td><x-score :n="$row['score']" /></td><td><small>@php $rs = $row['reasons'] ?? []; $rq = []; $pf = []; $ot = [];

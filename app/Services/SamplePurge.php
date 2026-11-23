@@ -61,7 +61,7 @@ class SamplePurge
         $thr = DB::table('case_threads')->where(fn ($q) => $q->whereIn('engineer_id', $e)->orWhereIn('case_id', $c)->orWhere($bySes))->pluck('id')->all();
         // 残る1本にある、見本の人の発言は、書いた人を空にして残す（regBy と同じ扱い）
         $postBy = DB::table('case_thread_posts')->whereNotIn('thread_id', $thr)->whereIn('from_user_id', $u)->pluck('id')->all();
-        // 残る1本で、相手（みなもと SES）が消す会社なら、相手を所属の会社に戻す（行は消さない。v0.10.1）
+        // 残る1本で、相手（受注 SES）が消す会社なら、相手を所属の会社に戻す（行は消さない。v0.10.1）
         $partnerReset = DB::table('case_threads')->whereNotIn('id', $thr)->whereIn('partner_ses_id', $s)->pluck('id')->all();
 
         $del = [
@@ -143,7 +143,7 @@ class SamplePurge
         if ($moveKept && $keptEngs) {
             $clash = DB::table('case_threads as a')->whereIn('a.engineer_id', $keptEngs)->whereIn('a.ses_id', $s)
                 ->whereExists(fn ($q) => $q->select(DB::raw(1))->from('case_threads as b')->whereColumn('b.case_id', 'a.case_id')->whereColumn('b.engineer_id', 'a.engineer_id')->where('b.ses_id', $moveTo))->count();
-            // 相手が別の会社（みなもと SES）の1本は、移すと相手の決め方が変わるので、止める
+            // 相手が別の会社（受注 SES）の1本は、移すと相手の決め方が変わるので、止める
             $clash += DB::table('case_threads')->whereIn('engineer_id', $keptEngs)->whereIn('ses_id', $s)->whereNotNull('partner_ses_id')
                 ->whereColumn('partner_ses_id', '!=', 'ses_id')->whereNotIn('partner_ses_id', $s)->count();
             if ($clash) $guards[] = "残す人を移すと、案件のやり取りの1本が、すでにある移し先の1本と重なるか、相手が別の会社の1本が残ります（{$clash}件）。止めました。tezzo に確かめてください。";

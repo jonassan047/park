@@ -6,7 +6,7 @@ use App\Services\Notifier as N;
 use Illuminate\Support\Facades\DB;
 
 // 案件のやり取り（v0.10.0）：案件×エンジニア×会社ごとの1本（case_threads）と、その中の発言（case_thread_posts）。
-// v0.10.1：書ける相手（partner_ses_id）は「みなもと SES」（みなもと SES が無い・所属と同じなら、所属の会社）。
+// v0.10.1：書ける相手（partner_ses_id）は「受注 SES」（受注 SES が無い・所属と同じなら、所属の会社）。
 // エンジニアの所属の会社（ses_id）は、その1本を全部読めるが、相手が別の会社のときは読むだけ。
 // v0.11.0：管理者は、すべてを読むだけで、書けない。画面（コントローラー・ビュー）は、ここを呼ぶ。
 class CaseThread
@@ -23,7 +23,7 @@ class CaseThread
         return (int) $e->ses_id;
     }
 
-    // 相手（書ける会社）を決める（R1）：みなもと SES。ただし、みなもと SES が無い・所属と同じ・SES ではないときは、所属の会社
+    // 相手（書ける会社）を決める（R1）：受注 SES。ただし、受注 SES が無い・所属と同じ・SES ではないときは、所属の会社
     public static function partnerFor(object $c, object $e): int
     {
         $own = (int) $e->ses_id;
@@ -45,7 +45,7 @@ class CaseThread
         return $t ? self::partnerOf($t) : self::partnerFor($c, $e);
     }
 
-    // みなもと SES の担当者が、まだ1本が無い相手に書き始められるか（R9）：相手が自社で、案内メールの記録がある人だけ
+    // 受注 SES の担当者が、まだ1本が無い相手に書き始められるか（R9）：相手が自社で、案内メールの記録がある人だけ
     // $hasMail：案内メールの記録があると分かっているとき（案内メールの一覧の行など）は true を渡すと、読み直さない
     public static function canStart($u, object $c, object $e, ?bool $hasMail = null): bool
     {
@@ -146,13 +146,13 @@ class CaseThread
     {
         if (!$u) return '書けません。';
         if ($u->role === 'admin') return '管理者は、やり取りを読むだけです。';
-        $partner = self::currentPartner($c, $e); // 書ける会社（みなもと SES。R1）
+        $partner = self::currentPartner($c, $e); // 書ける会社（受注 SES。R1）
         if ($u->role === 'eg') {
             if ((int) $u->engineer_id !== (int) $e->id) return 'このやり取りには書けません。';
         } elseif ($u->role === 'ses') {
             if ((int) $u->ses_id !== $partner) {
                 // 所属の会社は読むだけ（R3）
-                if ((int) $e->ses_id === (int) $u->ses_id) return 'このやり取りの相手は、みなもと SES（'.self::partnerName($partner).'）の担当者です。貴社は読むだけです。';
+                if ((int) $e->ses_id === (int) $u->ses_id) return 'このやり取りの相手は、受注 SES（'.self::partnerName($partner).'）の担当者です。貴社は読むだけです。';
                 // 前の所属の会社（そのエンジニアの前の1本がある）と、今は相手ではなくなった会社を分ける
                 if (DB::table('case_threads')->where('case_id', $c->id)->where('engineer_id', $e->id)->where('ses_id', $u->ses_id)->exists()) return 'このエンジニアは、いま貴社の所属ではないので、読むだけです。';
                 return 'このやり取りの相手は、今は貴社ではないので、読むだけです。';
@@ -164,8 +164,8 @@ class CaseThread
         if ($u->role !== 'eg' && $u->engineer_id && (int) $u->engineer_id === (int) $e->id) return 'ご自身のやり取りには、エンジニアとして入って書いてください。';
         if ($e->status === 'left' || $e->suspended_at || !$e->registered_at) return 'このエンジニアは、停止中・退会済・仮登録のため、書けません（過去のやり取りは読めます）。';
         if (DB::table('ses_companies')->where('id', $e->ses_id)->value('status') !== 'active') return '所属の会社が参加中ではないため、書けません。';
-        // 相手が別の会社（みなもと SES）のとき、その会社も参加中であること（R10）
-        if ($partner !== (int) $e->ses_id && DB::table('ses_companies')->where('id', $partner)->value('status') !== 'active') return 'みなもと SES が参加中ではないため、書けません。';
+        // 相手が別の会社（受注 SES）のとき、その会社も参加中であること（R10）
+        if ($partner !== (int) $e->ses_id && DB::table('ses_companies')->where('id', $partner)->value('status') !== 'active') return '受注 SES が参加中ではないため、書けません。';
         $reached = DB::table('case_offers')->where('case_id', $c->id)->where('engineer_id', $e->id)->exists()
             || DB::table('applications')->where('case_id', $c->id)->where('engineer_id', $e->id)->exists();
         if (!$reached) return 'この案件は、このエンジニアに届いていないので、書けません。';
@@ -289,7 +289,7 @@ class CaseThread
         return $q->get();
     }
 
-    // park:status 用：v0.10.1 より前の形で続く1本の数（相手が所属の会社のままで、今の決め方ならみなもと SES の別の会社になる、発言のある1本）
+    // park:status 用：v0.10.1 より前の形で続く1本の数（相手が所属の会社のままで、今の決め方なら受注 SES の別の会社になる、発言のある1本）
     public static function legacyCount(): int
     {
         return DB::table('case_threads as t')->join('cases as c', 'c.id', '=', 't.case_id')

@@ -8,7 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 // エンジニア検索：検索画面（条件）→ 一覧（チェック・全員へのメッセージ）→ 詳細（○×・個別メッセージ）→ 送信
-// 使えるのは、今の案内メールと同じ人（管理者と、みなもと SES の SES・担当者）。エンジニアは入れない（ルートで止める）
+// 使えるのは、今の案内メールと同じ人（管理者と、受注 SES の SES・担当者）。エンジニアは入れない（ルートで止める）
 class CaseSearchController extends Controller
 {
     private function loadCase(Request $r, int $id)

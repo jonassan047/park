@@ -60,7 +60,7 @@ class Todo
             if ($m->reply === 'interested') $out[] = self::item("{$who} さんが「応募したい」：{$m->title}", '書類を添付して先方に返し、「書類を返した」を押す', "/cases/{$m->case_id}#mails");
             if ($m->reply === 'question') $out[] = self::item("{$who} さんから質問：{$m->title}", ($m->reply_note ?: '内容を確かめて').'。答えて、返事を記録する', "/cases/{$m->case_id}#mails");
         }
-        // 自社がみなもと SES で、まだ誰にも案内していない案件
+        // 自社が受注 SES で、まだ誰にも案内していない案件
         $cases = DB::table('cases as c')->where('c.source_ses_id', $sesId)->where('c.status', 'open')
             ->whereNotExists(fn ($q) => $q->select(DB::raw(1))->from('case_mails')->whereColumn('case_mails.case_id', 'c.id'))->get();
         foreach ($cases as $c) $out[] = self::item("新しい案件「{$c->title}」", 'エンジニアに案内する', "/cases/{$c->id}/mail");
