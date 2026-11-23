@@ -14,7 +14,7 @@
 <dl class="dl">
 <dt>案件</dt><dd><a href="{{ url('/cases/'.$c->id) }}">{{ $c->title }}</a> <x-code :v="$c->code" /> {{ badge('caseStatus', $c->status) }}</dd>
 <dt>エンジニア</dt><dd>{{ $egName }} @if($own || $formerSes)<x-code :v="$e->code" />@endif</dd>
-<dt>相手の会社</dt><dd>@if($formerSes)（貴社の所属ではなくなりました）@elseif($notPartner)（今は相手ではありません）@else{{ \App\Services\CaseThread::partnerName($partnerId) }}@if((int) $e->ses_id !== $partnerId)（提案元 SES）@endif @endif</dd>
+<dt>相手の会社</dt><dd>@if($formerSes)（貴社の所属ではなくなりました）@elseif($notPartner)（今は相手ではありません）@else{{ \App\Services\CaseThread::partnerName($partnerId) }}@if((int) $e->ses_id !== $partnerId)（みなもと SES）@endif @endif</dd>
 </dl>
 @if($u->role === 'admin')<p class="muted">これは、会社の担当者とエンジニアのやり取りです。管理者は読むだけです。読んだだけでは、担当者の「未読」は消えません。</p>@endif
 </x-card>

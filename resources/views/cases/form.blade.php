@@ -11,8 +11,8 @@
 <x-field label="プロバイダー" name="provider_id" type="select" :options="$providers" blank="（選んでください）" :value="$c->provider_id ?? null" required cls="span2" hint="案件を提供してくれた上位者です。見つからないときは、先に「プロバイダー」から登録してください。" />
 <x-field label="案件名" name="title" :value="$c->title ?? null" required cls="span2" />
 <x-field label="元請け（伏せ字でよい）" name="client_label" :value="$c->client_label ?? null" placeholder="例：SH-A 社" hint="元請けの名前は外に出しません。伏せ字で構いません。" />
-{{-- 管理者は、提案元 SES を必ず選ぶ（案内は、その SES の担当者が行う）。編集では、提案元 SES が空の案件だけ一度だけ選べる --}}
-@if($sesList && (!isset($c->id) || empty($c->source_ses_id)))<x-field label="提案元 SES（必須）" name="source_ses_id" type="select" :options="$sesList" blank="（選んでください）" :value="$c->source_ses_id ?? null" required hint="案内は、ここで選んだ SES の担当者が行います。管理者は案件を発信しません。" />@else<div></div>@endif
+{{-- 管理者は、みなもと SES を必ず選ぶ（案内は、その SES の担当者が行う）。編集では、みなもと SES が空の案件だけ一度だけ選べる --}}
+@if($sesList && (!isset($c->id) || empty($c->source_ses_id)))<x-field label="みなもと SES（必須）" name="source_ses_id" type="select" :options="$sesList" blank="（選んでください）" :value="$c->source_ses_id ?? null" required hint="案内は、ここで選んだ SES の担当者が行います。管理者は案件を発信しません。" />@else<div></div>@endif
 <x-field label="金額（万円／月）" name="price" type="number" step="0.5" :value="num_disp($c->price ?? null)" hint="SES が元請けから受け取る月額。成功報酬の基準になります。" />
 <x-field label="金額のメモ" name="price_note" :value="$c->price_note ?? null" placeholder="例：スキル見合い、精算 140-180h" />
 <x-field label="必須スキル" name="required_skills" type="textarea" rows="2" :value="$c->required_skills ?? null" placeholder="Java、Spring Boot、SQL（「、」区切り）" hint="技術マスタの名前が入ります。文を書いて保存すると、マスタの語を拾い、拾えない文は「エンジニアに確認」に移します。" />

@@ -67,12 +67,12 @@ class CaseController extends Controller
     {
         if ($e = $this->providerError($r)) return back()->withInput()->with('flash', ['msg' => $e, 'type' => 'bad']);
         if (!str_in($r->input('title'))) return $this->go('/cases/new', '案件名を入れてください。', 'bad');
-        // 管理者は、提案元 SES を必ず選ぶ（参加中の SES だけ。管理者が自分で発信する道は無い）
+        // 管理者は、みなもと SES を必ず選ぶ（参加中の SES だけ。管理者が自分で発信する道は無い）
         $own = null;
         if ($r->user()->role === 'admin') {
             $sid = int_or_null($r->input('source_ses_id'));
             $own = $sid ? DB::table('ses_companies')->where('id', $sid)->where('kind', 'ses')->where('status', 'active')->first(['id', 'name']) : null;
-            if (!$own) return back()->withInput()->with('flash', ['msg' => '提案元 SES を選んでください。', 'type' => 'bad']);
+            if (!$own) return back()->withInput()->with('flash', ['msg' => 'みなもと SES を選んでください。', 'type' => 'bad']);
         }
         $id = W::saveCase($r->all(), $r->user());
         $queued = CaseAi::queue($id, $r->user(), true); // 本文があれば、手元の AI に必須・尚可を読み直してもらう（入れられなくても登録は成功）
@@ -123,7 +123,7 @@ class CaseController extends Controller
             ->where('a.case_id', $id)->select('a.*', 'e.name as eg_name', 'e.code as eg_code', 'e.ses_id as eg_ses_id', 's.name as ses_name')->orderBy('a.id');
         if ($u->role === 'ses') $apps->where('a.ses_id', $u->ses_id);
         if ($u->role === 'eg') $apps->where('a.engineer_id', $u->engineer_id);
-        // 案内メールの記録：提案元 SES の担当者は操作もでき、管理者は読むだけ（v0.11.0）
+        // 案内メールの記録：みなもと SES の担当者は操作もでき、管理者は読むだけ（v0.11.0）
         $data = ['c' => $c, 'apps' => $apps->get(), 'canMail' => CM::canSend($u, $c)];
         $data['canSeeMails'] = $data['canMail'] || $u->role === 'admin';
         if ($data['canSeeMails']) {
@@ -131,10 +131,10 @@ class CaseController extends Controller
                 ->where('m.case_id', $id)->select('m.*', 'e.name', 'e.initials', 'e.code as eg_code', 's.name as ses_name')->orderByDesc('m.id');
             $q->addSelect('e.ses_id as eg_ses_id');
             $data['mails'] = $q->get()->map(function ($m) use ($u, $c) {
-                // 管理者が送った他社の人は、提案元 SES には名前・書類を出さない（グループの人と同じ扱い）
+                // 管理者が送った他社の人は、みなもと SES には名前・書類を出さない（グループの人と同じ扱い）
                 if ($u->role === 'ses' && (int) $m->eg_ses_id !== (int) $u->ses_id) {
                     $m->route = 'group';
-                    // 提案元 SES の自社が、案内した他社のエンジニアに、やり取りで質問を受ける・書き始められる（v0.10.1）
+                    // みなもと SES の自社が、案内した他社のエンジニアに、やり取りで質問を受ける・書き始められる（v0.10.1）
                     $m->canThread = CaseThread::canStart($u, $c, (object) ['id' => $m->engineer_id, 'ses_id' => $m->eg_ses_id], true); // 行がある＝案内メールの記録がある
                 } elseif ($u->role === 'ses') {
                     // 自社の行も同じ判定（応募・やり取りの行き先が、ここだけになるため）
@@ -152,7 +152,7 @@ class CaseController extends Controller
                 });
             // 案内メールの行ごとの、いま開く下書き（なければ送ったもの）
             $data['pmByCm'] = $data['providerMails']->whereNotNull('case_mail_id')->where('status', '!=', 'discarded')->sortBy(fn ($p) => $p->status === 'draft' ? 0 : 1)->groupBy('case_mail_id')->map(fn ($g) => $g->first());
-            // 案内メールへの返信メールの件数（提案元 SES の担当者だけ。v0.12.0）
+            // 案内メールへの返信メールの件数（みなもと SES の担当者だけ。v0.12.0）
             if ($data['canMail']) {
                 $data['inboundN'] = DB::table('inbound_mails')->where('case_id', $id)->where('status', 'linked')->selectRaw('engineer_id, count(*) as n')->groupBy('engineer_id')->pluck('n', 'engineer_id')->all();
             }
@@ -240,7 +240,7 @@ class CaseController extends Controller
         return $this->go("/cases/$id", "{$n}名に配信しました（メールと通知）。");
     }
 
-    // 提案元ではない SES が、自社のエンジニアを推薦する（提案元 SES／管理者に、名前を伏せて知らせる）
+    // みなもとではない SES が、自社のエンジニアを推薦する（みなもと SES／管理者に、名前を伏せて知らせる）
     public function recommend(Request $r, int $id)
     {
         $u = $r->user();
@@ -257,10 +257,10 @@ class CaseController extends Controller
         $text = "{$ses} から、案件「{$c->title}」にエンジニアの推薦がありました。\n".($e->initials ?: '—')."（{$s['score']}点）。合う点：".(implode('、', array_slice($s['reasons'], 0, 4)) ?: '—')
             ."\n案内するときは、案件の「エンジニアに案内する」の「グループのほかの人」から選んでください。";
         if ($c->source_ses_id) N::toSes($c->source_ses_id, "エンジニアの推薦がありました：{$c->title}".Ids::tag($c->code), $text, "/cases/$id", true, 'recommend');
-        // 管理者は案内できないので、知らせは案件の画面へ（提案元 SES が無い古い案件のときだけ、メールも送る）
+        // 管理者は案内できないので、知らせは案件の画面へ（みなもと SES が無い古い案件のときだけ、メールも送る）
         N::toAdmins("エンジニアの推薦がありました：{$c->title}".Ids::tag($c->code), $text, "/cases/$id", !$c->source_ses_id, 'recommend');
         N::audit($u->id, 'recommend', $key);
-        return $this->go("/cases/$id", $c->source_ses_id ? '推薦しました。提案元 SES に知らせました。' : '推薦しました。提案元 SES が決まっていないので、管理者に知らせました。');
+        return $this->go("/cases/$id", $c->source_ses_id ? '推薦しました。みなもと SES に知らせました。' : '推薦しました。みなもと SES が決まっていないので、管理者に知らせました。');
     }
 
     public function apply(Request $r, int $id)

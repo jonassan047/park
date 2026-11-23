@@ -229,7 +229,7 @@ class EmptyStateTest extends TestCase
         $this->as($a)->post('/cases', ['title' => '実データの案件', 'price' => '70', 'required_skills' => 'PHP', 'status' => 'open'])->assertRedirect();
         $caseId = (int) DB::table('cases')->where('title', '実データの案件')->value('id');
         $this->get('/admin')->assertDontSee('PARK をはじめましょう');
-        // 管理者は案件を発信できない（画面の入口は 403）。案内は、提案元 SES の担当者が行う（ここでは処理を直接呼ぶ）
+        // 管理者は案件を発信できない（画面の入口は 403）。案内は、みなもと SES の担当者が行う（ここでは処理を直接呼ぶ）
         $this->assertSame($sesId, (int) DB::table('cases')->where('id', $caseId)->value('source_ses_id'));
         $this->post("/cases/$caseId/distribute", ['engineer_id' => [$e->id], 'message' => 'どうぞ'])->assertForbidden();
         W::distribute($caseId, [$e->id], DB::table('users')->where('email', 'first@example.com')->first(), 'どうぞ');

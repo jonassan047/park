@@ -7,7 +7,7 @@ use App\Support\Perms;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
-// 案件のやり取り（v0.10.0）：エンジニアと、提案元 SES の担当者が、案件について確かめ合う（管理者は読むだけ）。
+// 案件のやり取り（v0.10.0）：エンジニアと、みなもと SES の担当者が、案件について確かめ合う（管理者は読むだけ）。
 // 見える範囲・書ける条件は CaseThread に集めている。ここでは「見られない人には 404」だけを確かめる。
 class CaseThreadController extends Controller
 {
@@ -43,7 +43,7 @@ class CaseThreadController extends Controller
         $e = DB::table('engineers')->find($eid);
         abort_unless($e, 404);
         if ($u->role === 'eg') abort_unless((int) $e->id === (int) $u->engineer_id, 404);
-        // 自社のエンジニア／自社の1本（前の所属や、相手が自社の1本。所属が変わったあとも読める）／提案元 SES の自社が、案内した相手に書き始める（R9）。無関係な会社は 404
+        // 自社のエンジニア／自社の1本（前の所属や、相手が自社の1本。所属が変わったあとも読める）／みなもと SES の自社が、案内した相手に書き始める（R9）。無関係な会社は 404
         if ($u->role === 'ses') {
             abort_unless((int) $e->ses_id === (int) $u->ses_id
                 || DB::table('case_threads')->where('case_id', $id)->where('engineer_id', $eid)->where(fn ($w) => $w->where('ses_id', $u->ses_id)->orWhere('partner_ses_id', $u->ses_id))->exists()

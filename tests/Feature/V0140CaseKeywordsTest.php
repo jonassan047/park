@@ -49,7 +49,7 @@ class V0140CaseKeywordsTest extends TestCase
         return 'staff140@example.com';
     }
 
-    // 案件を登録する（管理者は提案元 SES を選ぶ）
+    // 案件を登録する（管理者はみなもと SES を選ぶ）
     private function register(string $email, array $over = []): object
     {
         $form = $over + ['title' => 'K テスト案件', 'status' => 'open', 'raw_text' => self::RAW, 'source_ses_id' => $this->sesId(self::SES1), 'price' => 60,
@@ -246,7 +246,7 @@ class V0140CaseKeywordsTest extends TestCase
 
     public function test_original_lines_only_for_editors(): void
     {
-        $c = $this->register(self::ADMIN); // 提案元は SES1 の会社
+        $c = $this->register(self::ADMIN); // みなもとは SES1 の会社
         $this->as(self::ADMIN)->get("/cases/{$c->id}")->assertSee('元の必須・尚可の文');
         $this->as(self::SES1)->get("/cases/{$c->id}")->assertSee('元の必須・尚可の文');
         $r = $this->as(self::SES2)->get("/cases/{$c->id}")->assertOk(); // ほかの会社の SES は、見られても直せない

@@ -875,7 +875,7 @@ class Workflow
         }
         if ($id) {
             $upd = $v + ['updated_at' => now_str()];
-            // 提案元 SES が空の案件だけ、管理者が一度だけ選べる（選んだあとは変えない。D6）
+            // みなもと SES が空の案件だけ、管理者が一度だけ選べる（選んだあとは変えない。D6）
             $pick = null;
             if ($user->role === 'admin' && DB::table('cases')->where('id', $id)->whereNull('source_ses_id')->exists()) {
                 $want = int_or_null($d['source_ses_id'] ?? null);
@@ -891,7 +891,7 @@ class Workflow
         $newId = DB::table('cases')->insertGetId($v + ['code' => $code, 'registered_by' => $user->id, 'created_at' => now_str(), 'updated_at' => now_str()]);
         N::audit($user->id, 'case-create', $v['title']);
         if ($user->role === 'ses') {
-            $own = $v['source_ses_id'] ? self::sesCompanyName((int) $v['source_ses_id']) : '提案元 SES';
+            $own = $v['source_ses_id'] ? self::sesCompanyName((int) $v['source_ses_id']) : 'みなもと SES';
             N::toAdmins('SES から案件が登録されました'.Ids::tag($code), "「{$v['title']}」が登録されました。内容を確かめてください。案内は {$own} の担当者が行います。", "/cases/$newId", true, 'case');
         } elseif ($v['source_ses_id']) {
             self::tellCaseOwner($newId, (int) $v['source_ses_id'], $v['title'], $code, $user);

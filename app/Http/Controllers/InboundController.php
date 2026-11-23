@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 // 案内メールへの返信メール（v0.12.0）。
-// SES・担当者：自社が提案元 SES の案件への返信だけを読む（見える範囲は Inbound::query が決める。見られない人には 404）。
+// SES・担当者：自社がみなもと SES の案件への返信だけを読む（見える範囲は Inbound::query が決める。見られない人には 404）。
 // 管理者：受信したメールをすべて読み、紐付かなかったものを手で紐付ける。エンジニアは入れない（ルートで 403）。
 class InboundController extends Controller
 {
@@ -63,7 +63,7 @@ class InboundController extends Controller
         $data['canResult'] = $row->status === 'linked' && $data['c'] && \App\Services\CaseMail::canSend($u, $data['c']);
         $data['providerName'] = $isProv ? ($row->provider_name ?: null) : null;
         if ($u->role === 'admin' && $row->status === 'linked') {
-            // 見える会社（案件の今の提案元 SES）と、知らせた会社（案内メールを送った会社）。違うことがある
+            // 見える会社（案件の今のみなもと SES）と、知らせた会社（案内メールを送った会社）。違うことがある
             $data['sourceName'] = $row->case_source ? DB::table('ses_companies')->where('id', $row->case_source)->value('name') : null;
             $data['notifyName'] = $row->ses_id && (int) $row->ses_id !== (int) $row->case_source ? $row->ses_name : null;
         }

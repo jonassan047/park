@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 // v0.15.0 案件詳細とエンジニア選択の作り直し（PLAN.md の A1〜D4）。名前・本文・アドレスはすべて架空（@park.example / @example.test）
-// プレーヤー：管理者・SES（提案元）・担当者（提案元と同じ会社）・他社 SES・EG
+// プレーヤー：管理者・SES（みなもと）・担当者（みなもとと同じ会社）・他社 SES・EG
 class V0150CaseDetailSelectTest extends TestCase
 {
     use RefreshDatabase;
@@ -523,11 +523,11 @@ class V0150CaseDetailSelectTest extends TestCase
         $r4 = Inbound::ingest($this->eml('stranger@example.test', 'park@example.test', "Re: 案件 $mark", '四通目'), 'file');
         $this->assertSame('unlinked', $this->inb($r4['id'])->status);
 
-        // 提案元の担当者全員にお知らせ
+        // みなもとの担当者全員にお知らせ
         foreach ([self::SES1, self::STAFF] as $who) {
             $this->assertGreaterThan(0, DB::table('app_notifications')->where('user_id', $this->user($who)->id)->where('title', 'like', '追加の宛先から案内メールへの返信%')->count(), $who);
         }
-        // 見える：提案元の SES・担当者（差出人は伏せない）。案件詳細に件数リンク
+        // 見える：みなもとの SES・担当者（差出人は伏せない）。案件詳細に件数リンク
         foreach ([self::SES1, self::STAFF] as $who) {
             $this->as($who)->get('/inbound/'.$r1['id'])->assertOk()->assertSee('outsider@example.test')->assertSee('興味があります。');
             $this->as($who)->get('/inbound?case='.$cid.'&extra='.$x->id)->assertOk()->assertSee('outsider@example.test');
@@ -569,7 +569,7 @@ class V0150CaseDetailSelectTest extends TestCase
         $tok = DB::table('reply_tokens')->find($x->reply_token_id);
         $r = Inbound::ingest($this->eml('outsider@example.test', 'park+'.$tok->token.'@example.test', 'Re: x', 'こんにちは'), 'file');
         $this->as(self::SES2)->get('/inbound/'.$r['id'])->assertNotFound();
-        DB::table('cases')->where('id', $cid)->update(['source_ses_id' => $this->sesId(self::SES2)]); // 提案元が移った
+        DB::table('cases')->where('id', $cid)->update(['source_ses_id' => $this->sesId(self::SES2)]); // みなもとが移った
         $this->as(self::SES1)->get('/inbound/'.$r['id'])->assertNotFound();
         $this->as(self::SES2)->get('/inbound/'.$r['id'])->assertOk();
     }

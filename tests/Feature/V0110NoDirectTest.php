@@ -111,14 +111,14 @@ class V0110NoDirectTest extends TestCase
         DB::table('case_offers')->insert(['case_id' => $cid, 'engineer_id' => $eid, 'score' => 50, 'sent_at' => now_str()]);
     }
 
-    // M1 の土台：直属 D と元直属の EG D1・D2、D1 の応募・契約・やり取り・案内メール・検索・連絡メール、提案元 SESが空の案件。付け替え先 MRSY 役も作る
+    // M1 の土台：直属 D と元直属の EG D1・D2、D1 の応募・契約・やり取り・案内メール・検索・連絡メール、みなもと SESが空の案件。付け替え先 MRSY 役も作る
     private function world(): array
     {
         $d = $this->mkDirect();
         $m = $this->mrsy();
         $d1 = $this->mkEgIn($d, '元直属 一郎', 'd1@example.test', 'D.I');
         $d2 = $this->mkEgIn($d, '元直属 二郎', 'd2@example.test', 'D.J');
-        $caseNull = $this->mkCase(null, '提案元 SES なしの案件');
+        $caseNull = $this->mkCase(null, 'みなもと SES なしの案件');
         $caseDirect = $this->mkCase($d, '直属の案件');
         $app = W::apply($caseNull, $d1, ['start_ok' => 1], $this->admin());
         $k = W::makeContract($app, ['price' => 70, 'start_date' => date('Y-m-01')], $this->admin());
@@ -146,8 +146,8 @@ class V0110NoDirectTest extends TestCase
         $this->assertSame($w['m'], (int) DB::table('contracts')->find($w['k'])->ses_id);
         $t = DB::table('case_threads')->find($w['thread']);
         $this->assertSame([$w['m'], $w['m']], [(int) $t->ses_id, (int) $t->partner_ses_id]);
-        $this->assertSame($w['m'], (int) DB::table('cases')->find($w['caseNull'])->source_ses_id);   // 提案元 SESが空だった案件
-        $this->assertSame($w['m'], (int) DB::table('cases')->find($w['caseDirect'])->source_ses_id); // 直属が提案元 SES の案件
+        $this->assertSame($w['m'], (int) DB::table('cases')->find($w['caseNull'])->source_ses_id);   // みなもと SESが空だった案件
+        $this->assertSame($w['m'], (int) DB::table('cases')->find($w['caseDirect'])->source_ses_id); // 直属がみなもと SES の案件
         $this->assertSame($w['m'], (int) DB::table('case_mails')->find($w['mail'])->ses_id);
         $this->assertSame($w['m'], (int) DB::table('case_searches')->find($w['search'])->ses_id);
         $this->assertSame($w['m'], (int) DB::table('direct_mails')->find($w['dm'])->from_ses_id);
@@ -179,7 +179,7 @@ class V0110NoDirectTest extends TestCase
         DirectMerge::run();
         $this->assertTrue(DirectMerge::restore());
         $this->assertSame($engBefore, DB::table('engineers')->pluck('ses_id', 'id')->all());
-        $this->assertSame($casesBefore, DB::table('cases')->pluck('source_ses_id', 'id')->all()); // 空だった提案元 SESは空に戻る
+        $this->assertSame($casesBefore, DB::table('cases')->pluck('source_ses_id', 'id')->all()); // 空だったみなもと SESは空に戻る
         $this->assertSame($w['d'], (int) DB::table('applications')->find($w['app'])->ses_id);
         $this->assertSame($w['d'], (int) DB::table('contracts')->find($w['k'])->ses_id);
         $this->assertSame($w['d'], (int) DB::table('case_threads')->find($w['thread'])->partner_ses_id);
@@ -292,10 +292,10 @@ class V0110NoDirectTest extends TestCase
         $b = $this->sesId(self::SES2);
         DB::table('ses_companies')->where('id', $b)->update(['status' => 'suspended']);
         $this->as(self::ADMIN, 'admin');
-        $this->post('/cases', ['title' => 'N1 提案元なし'])->assertSessionHas('flash.msg', '提案元 SES を選んでください。');
-        $this->post('/cases', ['title' => 'N1 提案元なし', 'source_ses_id' => ''])->assertSessionHas('flash.msg', '提案元 SES を選んでください。');
-        $this->post('/cases', ['title' => 'N1 停止中の会社', 'source_ses_id' => $b])->assertSessionHas('flash.msg', '提案元 SES を選んでください。');
-        $this->post('/cases', ['title' => 'N1 直属', 'source_ses_id' => $this->mkDirect()])->assertSessionHas('flash.msg', '提案元 SES を選んでください。');
+        $this->post('/cases', ['title' => 'N1 みなもとなし'])->assertSessionHas('flash.msg', 'みなもと SES を選んでください。');
+        $this->post('/cases', ['title' => 'N1 みなもとなし', 'source_ses_id' => ''])->assertSessionHas('flash.msg', 'みなもと SES を選んでください。');
+        $this->post('/cases', ['title' => 'N1 停止中の会社', 'source_ses_id' => $b])->assertSessionHas('flash.msg', 'みなもと SES を選んでください。');
+        $this->post('/cases', ['title' => 'N1 直属', 'source_ses_id' => $this->mkDirect()])->assertSessionHas('flash.msg', 'みなもと SES を選んでください。');
         $this->assertSame($n0, DB::table('cases')->count());
         $this->post('/cases', ['title' => 'N1 A の案件', 'source_ses_id' => $a, 'status' => 'open'])->assertSessionHas('flash.msg', fn ($m) => str_contains($m, '案内は みどり情報システム の担当者が行います'));
         $c = DB::table('cases')->where('title', 'N1 A の案件')->first();
@@ -308,7 +308,7 @@ class V0110NoDirectTest extends TestCase
             $this->assertSame(1, DB::table('mail_outbox')->where('to_email', $email)->where('subject', 'like', '%管理者が貴社の案件として登録しました：N1 A の案件%')->count(), $email);
         }
         $this->as(self::SES1, 'ses')->get('/ses')->assertOk()->assertSee('新しい案件「N1 A の案件」');
-        // 提案元 SESの担当者が0人のときは、管理者にも知らせる
+        // みなもと SESの担当者が0人のときは、管理者にも知らせる
         DB::table('users')->where('ses_id', $this->sesId(self::SES3))->where('role', 'ses')->update(['active' => 0]);
         $this->as(self::ADMIN, 'admin')->post('/cases', ['title' => 'N2 担当者なし', 'source_ses_id' => $this->sesId(self::SES3), 'status' => 'open'])->assertSessionHas('flash.type', 'ok');
         $this->assertSame(1, DB::table('app_notifications')->where('user_id', $this->admin()->id)->where('title', 'like', '案件を登録しました（担当者がいません）：N2 担当者なし%')->count());
@@ -317,7 +317,7 @@ class V0110NoDirectTest extends TestCase
     // 登録の画面：管理者の選択は必須（空の選択肢は「選んでください」）
     public function test_n1_form_requires_source(): void
     {
-        $this->as(self::ADMIN, 'admin')->get('/cases/new')->assertOk()->assertSee('提案元 SES（必須）')->assertSee('（選んでください）')->assertDontSee('（管理者が直接）');
+        $this->as(self::ADMIN, 'admin')->get('/cases/new')->assertOk()->assertSee('みなもと SES（必須）')->assertSee('（選んでください）')->assertDontSee('（管理者が直接）');
     }
 
     private function sentCase(): array
@@ -335,7 +335,7 @@ class V0110NoDirectTest extends TestCase
     public function test_n3_admin_cannot_send(): void
     {
         [$cid, $eid, $mid] = $this->sentCase();
-        // 提案元 SESの担当者が作った検索（管理者は開けない）
+        // みなもと SESの担当者が作った検索（管理者は開けない）
         $this->as(self::SES1, 'ses')->post("/cases/$cid/search", [])->assertRedirect();
         $sid = (int) DB::table('case_searches')->where('case_id', $cid)->value('id');
         $before = [DB::table('case_mails')->count(), DB::table('case_offers')->count(), DB::table('case_searches')->count()];
@@ -363,9 +363,9 @@ class V0110NoDirectTest extends TestCase
     {
         [$cid, $eid, $mid] = $this->sentCase();
         $this->as(self::ADMIN, 'admin')->get("/cases/$cid")->assertOk()
-            ->assertDontSee('エンジニアを検索')->assertSee('案内は、提案元 SES（みどり情報システム）の担当者が行います。')
+            ->assertDontSee('エンジニアを検索')->assertSee('案内は、みなもと SES（みどり情報システム）の担当者が行います。')
             ->assertSee('案内済メール')->assertSee('自社 太郎')->assertDontSee("/case-mails/$mid/reply", false)->assertDontSee("/case-mails/$mid/doc/", false);
-        // 提案元 SESの担当者には、今までどおり操作が出る
+        // みなもと SESの担当者には、今までどおり操作が出る
         $this->as(self::SES1, 'ses')->get("/cases/$cid")->assertOk()->assertSee('エンジニアを検索')->assertSee("/case-mails/$mid/reply", false);
     }
 
@@ -429,7 +429,7 @@ class V0110NoDirectTest extends TestCase
         $res = CaseThread::post($d1User, $c, $e, '案件の質問です');
         $this->assertSame('ok', $res['type'], $res['msg'] ?? '');
         foreach ([self::SES3, 'staff-m2@example.test'] as $email) {
-            $this->assertSame(1, DB::table('app_notifications')->where('user_id', $this->row($email)->id)->where('title', 'like', 'エンジニアから案件の質問が届きました：提案元 SES なしの案件%')->count(), $email);
+            $this->assertSame(1, DB::table('app_notifications')->where('user_id', $this->row($email)->id)->where('title', 'like', 'エンジニアから案件の質問が届きました：みなもと SES なしの案件%')->count(), $email);
         }
         $this->assertSame(0, DB::table('app_notifications')->where('user_id', $this->admin()->id)->where('title', 'like', 'エンジニアから案件の質問が届きました%')->count());
         // 連絡メール：宛先は MRSY の担当者（管理者ではない）
@@ -440,7 +440,7 @@ class V0110NoDirectTest extends TestCase
         $this->assertSame(0, DB::table('app_notifications')->where('user_id', $this->admin()->id)->where('link', 'like', '/mails/%')->count());
         // 応募の知らせ（応募の取り下げ）も MRSY の担当者へ
         W::setStatus($w['app'], 'rejected', $this->admin(), '他の候補者で決定', '');
-        $this->assertSame(1, DB::table('app_notifications')->where('user_id', $this->row(self::SES3)->id)->where('title', 'like', '%見送り：提案元 SES なしの案件%')->count());
+        $this->assertSame(1, DB::table('app_notifications')->where('user_id', $this->row(self::SES3)->id)->where('title', 'like', '%見送り：みなもと SES なしの案件%')->count());
     }
 
     // ---------- N9：他社には「イニシャル（会社名）」 ----------
@@ -458,17 +458,17 @@ class V0110NoDirectTest extends TestCase
         $this->assertFalse($m['own']);
     }
 
-    // ---------- N10：提案元 SESが空の案件は、管理者が一度だけ選べる ----------
+    // ---------- N10：みなもと SESが空の案件は、管理者が一度だけ選べる ----------
     public function test_n10_edit_source_once(): void
     {
         $a = $this->sesId(self::SES1); $b = $this->sesId(self::SES2);
         $cid = $this->mkCase(null, 'N10 提案先なし');
-        $this->as(self::ADMIN, 'admin')->get("/cases/$cid/edit")->assertOk()->assertSee('提案元 SES（必須）');
+        $this->as(self::ADMIN, 'admin')->get("/cases/$cid/edit")->assertOk()->assertSee('みなもと SES（必須）');
         $this->post("/cases/$cid", ['title' => 'N10 提案先なし', 'status' => 'open', 'source_ses_id' => $a])->assertRedirect();
         $this->assertSame($a, (int) DB::table('cases')->find($cid)->source_ses_id);
         $this->assertSame(1, DB::table('app_notifications')->where('user_id', $this->row(self::SES1)->id)->where('title', 'like', '管理者が貴社の案件として登録しました：N10 提案先なし%')->count());
         // 2回目：選ぶ欄が無く、送っても変わらない
-        $this->get("/cases/$cid/edit")->assertOk()->assertDontSee('提案元 SES');
+        $this->get("/cases/$cid/edit")->assertOk()->assertDontSee('みなもと SES');
         $this->post("/cases/$cid", ['title' => 'N10 提案先なし', 'status' => 'open', 'source_ses_id' => $b])->assertRedirect();
         $this->assertSame($a, (int) DB::table('cases')->find($cid)->source_ses_id);
     }
