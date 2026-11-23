@@ -258,9 +258,13 @@ class CaseParser
             $out['price'] = $m[1] ? max(array_map('floatval', $m[1])) : (preg_match('/\d{2,3}/', $p, $m2) ? (float) $m2[0] : null);
         }
         $all = mb_convert_kana((string) $text, 'as');
-        if (preg_match('/フルリモート|完全リモート|リモート\s*可?\s*[（(]?\s*100/u', $all)) $out['work_style'] = 'remote';
-        elseif (preg_match('/リモート|在宅|テレワーク/u', $all)) $out['work_style'] = preg_match('/常駐|出社/u', $all) ? 'hybrid' : 'remote';
-        elseif (preg_match('/常駐|出社/u', $all)) $out['work_style'] = 'onsite';
+        // 働き方（2026-11-23 TEZZO）：「フルリモート」→リモート、「一部リモート」→一部リモート、どちらも無ければ出社（常駐）。
+        // 「フルリモート不可」のように打ち消してあるものは数えない
+        $ws = mb_convert_kana($all, 'KV');
+        $ng = '(?!\s*[（(]?\s*(?:不可|NG|×|なし|無し))';
+        if (preg_match('/(?:フルリモート|完全リモート|リモート\s*100\s*%)'.$ng.'/u', $ws)) $out['work_style'] = 'remote';
+        elseif (preg_match('/(?:一部リモート|リモート併用|一部在宅)'.$ng.'/u', $ws)) $out['work_style'] = 'hybrid';
+        else $out['work_style'] = 'onsite';
         if (!empty($out['interviews_count'])) $out['interviews_count'] = preg_match('/(\d)/', mb_convert_kana($out['interviews_count'], 'n'), $m) ? (int) $m[1] : 1;
         if (!empty($out['headcount'])) $out['headcount'] = preg_match('/(\d+)/', mb_convert_kana($out['headcount'], 'n'), $m) ? (int) $m[1] : 1;
         if (!empty($out['start_date'])) {
