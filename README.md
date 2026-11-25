@@ -148,9 +148,18 @@ SES が受けた案件メールから、エンジニアへの案内メールを�
 - **EG の金額**：EG の画面（案件の画面の案件票と応募の確認・届いた案件・ホーム）の金額は、届いた案内メールの単価の文（`CaseMail::priceFor`。無ければ「担当者にご確認ください」）。プロバイダーからの金額は出さない。SES・管理者の画面の金額は今のまま。
 - **版**：`v0.16.0`（`config/park.php`）。マイグレーションは `2026_11_23_000001_partner_requests.php`（表 `case_search_staff`、`case_searches` に `proper_subject`・`proper_body`・`request_id`、`case_mails` に `price_text`。今ある案内メールの本文の「■単価：」から `price_text` を埋める。足すだけ。`down` は足したものを消す）。
 
+### 推薦文の登録とスキルの抜き出し・技術マスタに語学・海外（v0.19.0。2026-11-25）
+
+**この節が新しい**。計画は `PLAN-v0190.md`（v0.18.0 は取り下げた版で、同じ番号は使わない）。プレーヤー：管理者・SES・担当者・EG。
+
+- **推薦文**：SES・担当者が、自社 EG の推薦文（書式のばらばらな紹介文。個人情報を含む）を貼り付けて登録・更新・消す。仮登録の画面（`/engineers/new`）の欄からと、EG の詳細のカード・`/engineers/{id}/intro` から。見られるのは管理者（読むだけ）と、その EG が今所属する会社の SES・担当者だけ。EG 本人・他社・兼任の人の自分自身の分は 403。手続きは `app/Services/EngineerIntro.php`（表 `engineer_intros`。会社ごとに1件、今の本文だけ。10,000 文字まで）。本文はメール・お知らせ・書類・検索・AI・監査ログに使わない（監査は `eg-intro-save`・`eg-intro-delete` で、番号・文字数・件数だけ）。外部のサービスには送らない。
+- **スキルの抜き出し**：保存のたびに `app/Support/IntroSkills.php` が、案件メールと同じ辞書（`CaseKeywords::pickWithPos`＋`CaseExp::detectLine`）で本文を1行ずつ読み、スキル表に入れる（`SkillChecks::syncIntro`。出どころ `source=intro`）。新しい語はマスタに足さない。氏名・年齢・希望月額・最寄駅・人物などの見出しの行は読まない。すでにある行（画面・移行・見本）は年数も含めて変えない。本文から消えたスキルは、`intro` の行だけ外す。画面でスキルを保存すると `form` になり、以後は消えない。
+- **技術マスタ**：分類 `langs`（語学・海外）に英語・中国語・韓国語・ベトナム語・外国語・外国人との協業・海外拠点との連携を足し、「オフショア開発」「ブリッジSE」に別名を足した。スキル表（`skill_form.json`）に節 `global`（語学・海外との仕事）を足した（案件のマッチングに使う）。反映後に `park:skills-sync`。
+- **版**：`v0.19.0`（`config/park.php`）。マイグレーションは `2026_11_25_000002_engineer_intros.php`（表 `engineer_intros` を足すだけ。`down` は表を消す）。
+
 ### EG ごとの担当者・プロバイダーを伏せる・原文の一覧・パートナーの追跡（v0.17.0。2026-11-23）
 
-**この節が新しい**。計画は `PLAN-v0170.md`。プレーヤー：管理者・SES・担当者・EG（アプリでは SES と担当者はどちらも `users.role=ses`）。
+計画は `PLAN-v0170.md`。プレーヤー：管理者・SES・担当者・EG（アプリでは SES と担当者はどちらも `users.role=ses`）。
 
 - **EG ごとの担当者**：`engineers.staff_user_id`（1人の EG に担当者は1人）。手続きは `app/Services/EgStaff.php`（`usable`・`of`（読むだけ。使えなければ会社の SES、それも無ければ null）・`candidates`・`initial`・`assign`・`release`・`fillMissing`）。EG を作る `Workflow::createEngineer` が、登録した人（管理者なら会社の SES）を入れる。担当者の停止・退会・兼任の解除（`suspendSesUser`・`leaveSesUser`・`leaveAdmin`）で、その人の EG は会社の SES に移る（`release`）。所属の変更（`Affiliation::move`・`Registration::editProvisionalPerson`）で、新しい会社の SES に移る。付け替えは `POST /engineers/{id}/staff`（管理者と、その EG の会社の SES・担当者。EG 本人・他社は 403）。記録は `engineer_staff_logs`、監査は `eg-staff-change`（名前は書かない）、お知らせ（メールなし。kind `eg-staff`）。一覧に「担当者」の列。
 - **プロバイダーを伏せる**：受注 SES ではない SES・担当者の画面（案件票・`/ses/cases`・`/ses` の「新しい案件」）から、プロバイダーからの金額・金額のメモ・元請けを消し、金額は自社あての紹介の依頼の単価の文（`CaseMail::priceForSes`・`priceTextsForSes`）。プロバイダーからの返事（`sender_kind='provider'`）は、受注 SES と管理者だけ（`Inbound::query`）。

@@ -517,7 +517,7 @@ class V0100CaseThreadTest extends TestCase
     // T24：版
     public function test_t24_version(): void
     {
-        $this->assertSame('v0.17.0', config('park.version'));
+        $this->assertSame('v0.19.0', config('park.version'));
     }
 
     // T25：「質問がある」の画面に案内とリンク

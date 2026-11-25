@@ -654,8 +654,16 @@ class Registration
                     if (DB::table($t)->where('engineer_id', $eid)->exists()) { $err = '応募・配信・やり取りなどの記録があるため、取り消せません。'; return; }
                 }
                 // 技術データ（スキル・経験票など）が入っている行は、v0.2.0 より前からいる人の可能性があるので、技術登録は残してアカウントだけ消す
+                // 推薦文（v0.19.0）から入ったスキル（source=intro）は、技術データとは数えない（仮登録のときに推薦文を貼った人も取り消せるように）
                 $hasTech = false;
-                foreach (['engineer_skills', 'engineer_skill_checks', 'engineer_projects', 'engineer_histories', 'engineer_certs'] as $t) if (DB::table($t)->where('engineer_id', $eid)->exists()) $hasTech = true;
+                foreach (['engineer_skills', 'engineer_skill_checks', 'engineer_projects', 'engineer_histories', 'engineer_certs'] as $t) {
+                    $q = DB::table($t)->where('engineer_id', $eid);
+                    if ($t === 'engineer_skill_checks') $q->where('source', '!=', 'intro');
+                    if ($q->exists()) $hasTech = true;
+                }
+                // 推薦文と、推薦文から入れたスキルは、エンジニアを残すときも消す（個人情報を残さない）
+                DB::table('engineer_intros')->where('engineer_id', $eid)->delete();
+                DB::table('engineer_skill_checks')->where('engineer_id', $eid)->where('source', 'intro')->delete();
                 if (!$hasTech) DB::table('engineers')->where('id', $eid)->delete();
             }
             DB::table('app_notifications')->where('user_id', $id)->delete();

@@ -48,6 +48,20 @@
 @if($skills)<dl class="dl">@foreach($skills as $line)<dt>{{ $line['title'] }}</dt><dd>{{ $line['text'] }}</dd>@endforeach</dl>
 @else<p class="empty">まだ登録がありません。</p>@endif</x-card>
 
+@if($introView)
+<section id="intro"></section>
+<x-card title="推薦文（社内用）"><x-slot:actions>@if($introCanEdit)<a class="btn small" href="{{ url('/engineers/'.$e->id.'/intro') }}">{{ $introRows->isEmpty() ? '推薦文を登録する' : '推薦文を更新する' }}</a>@else<a class="btn ghost small" href="{{ url('/engineers/'.$e->id.'/intro') }}">開く</a>@endif</x-slot:actions>
+@forelse($introRows as $ir)
+@if($u->role === 'admin')<p class="muted small">{{ $ir->ses_name }}{{ !empty($ir->former) ? '（前の所属）' : '' }}</p>@endif
+<details><summary>本文を開く（{{ mb_strlen($ir->body) }}文字・更新 {{ fmt_date($ir->updated_at) }} {{ $ir->updater_name }}）</summary><pre class="mailbody">{{ $ir->body }}</pre></details>
+@php $pk = \App\Services\EngineerIntro::picked($ir); @endphp
+@if($pk)<p class="small">推薦文から入れたスキル：{{ implode('、', $pk) }}</p>@endif
+@empty<p class="empty">まだ登録がありません。</p>@endforelse
+<p class="muted small">個人情報を含みます。ご本人と他社には見えません。</p>
+@if($introCanEdit && $introRows->isNotEmpty())<x-post :action="'/engineers/'.$e->id.'/intro/delete'" label="推薦文を消す" cls="ghost small" confirm="推薦文を消します。推薦文から入れて、まだ誰も確かめていないスキルも外れます。" />@endif
+</x-card>
+@endif
+
 <x-card title="経験票（これまでの案件）"><x-slot:actions><a class="btn small" href="{{ url('/engineers/'.$e->id.'/projects/new') }}">案件を追加</a></x-slot:actions>
 @forelse($projects as $p)<div class="proj">
 <div class="projhead"><b>{{ $p->title }}</b><span class="muted">{{ $p->period_from ?: '?' }}〜{{ $p->period_to ?: '現在' }}・{{ $p->industry }}・{{ $p->role }}{{ $p->team_size ? '・'.$p->team_size.'名' : '' }}</span>

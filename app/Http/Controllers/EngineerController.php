@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Services\Affiliation;
 use App\Services\EgStaff;
 use App\Services\EngineerDocs;
+use App\Services\EngineerIntro;
 use App\Services\Matcher;
 use App\Services\Notifier as N;
 use App\Services\ProjectSkills;
@@ -104,21 +105,74 @@ class EngineerController extends Controller
         }
         if (!$sesId || !$hasName) return back()->withInput()->with('flash', ['msg' => '所属と氏名を入れてください。', 'type' => 'bad']);
         if ($lenErr) return back()->withInput()->with('flash', ['msg' => $lenErr, 'type' => 'bad']);
+        // 推薦文（任意。SES・担当者だけ。管理者が送ってきても無視する）。誤りがあれば、仮登録もしないで戻す
+        $intro = null;
+        $introIn = $r->user()->role === 'ses' ? $r->input('intro') : null;
+        if (is_string($introIn) && trim($introIn) !== '') {
+            [$intro, $introErr] = EngineerIntro::check($introIn);
+            if ($introErr) return back()->withInput()->with('flash', ['msg' => $introErr, 'type' => 'bad']);
+        }
         $res = Registration::provisionalPerson('eg', (int) $sesId, ['sei' => $body['name_sei'], 'mei' => $body['name_mei'], 'email' => $r->input('email')], $r->user());
         if (isset($res['bad'])) return back()->withInput()->with('flash', ['msg' => $res['bad'], 'type' => 'bad']);
         $id = (int) $res['engineer_id'];
-        if ($res['linked']) {
-            return $this->go("/engineers/$id", (int) $res['linked']->id === (int) $r->user()->id
-                ? 'ご自身をエンジニアとして登録しました。エンジニアの画面は、ログアウトして入り直し、「エンジニア」を選ぶと開けます。'
-                : '登録しました。このメールアドレスの方のアカウントに、エンジニアの役割を足しました（仮登録のご案内は送っていません）。');
+        $self = $res['linked'] && (int) $res['linked']->id === (int) $r->user()->id;
+        // 推薦文を保存して、スキルを抜き出す（自分自身を足したときは保存しない）
+        $introMsg = '';
+        if ($intro !== null) {
+            if ($self) $introMsg = 'ご自身の推薦文は登録できません。';
+            else {
+                $saved = EngineerIntro::save($r->user(), DB::table('engineers')->find($id), $intro);
+                $introMsg = isset($saved['ok']) ? '推薦文を保存し、スキルを'.count($saved['added']).'件登録しました。' : ($saved['bad'] ?? '推薦文は保存できませんでした。');
+            }
         }
-        return $this->go("/engineers/$id", '仮登録し、ご本人に仮登録のご案内を送りました。');
+        if ($res['linked']) {
+            return $this->go("/engineers/$id", ($self
+                ? 'ご自身をエンジニアとして登録しました。エンジニアの画面は、ログアウトして入り直し、「エンジニア」を選ぶと開けます。'
+                : '登録しました。このメールアドレスの方のアカウントに、エンジニアの役割を足しました（仮登録のご案内は送っていません）。').$introMsg);
+        }
+        return $this->go("/engineers/$id", '仮登録し、ご本人に仮登録のご案内を送りました。'.$introMsg);
+    }
+
+    // ---------- 推薦文（v0.19.0。判定は EngineerIntro。見られない人は 403） ----------
+
+    // 推薦文の画面：管理者は全社の分を読むだけ。SES・担当者は自社の分を読んで、貼り付けて保存する
+    public function intro(Request $r, int $id)
+    {
+        $e = $this->load($r, $id);
+        $u = $r->user();
+        abort_unless(EngineerIntro::canView($u, $e), 403);
+        $rows = $u->role === 'admin' ? EngineerIntro::rowsForAdmin($e) : collect([EngineerIntro::rowFor($u, $e)])->filter()->values();
+        return view('engineers.intro', ['e' => $e, 'rows' => $rows, 'canEdit' => EngineerIntro::canEdit($u, $e), 'result' => session('intro_result')]);
+    }
+
+    public function saveIntro(Request $r, int $id)
+    {
+        $e = $this->load($r, $id);
+        $res = EngineerIntro::save($r->user(), $e, is_string($r->input('body')) ? $r->input('body') : '');
+        abort_if(isset($res['forbidden']), 403);
+        // 失敗のときは、本文（個人情報）をセッションに残さない
+        if (isset($res['bad'])) return back()->withInput($r->except('body', '_token'))->with('flash', ['msg' => $res['bad'], 'type' => 'bad']);
+        return $this->go("/engineers/$id/intro", '推薦文を保存し、スキルを抜き出しました。')->with('intro_result', $res);
+    }
+
+    public function deleteIntro(Request $r, int $id)
+    {
+        $e = $this->load($r, $id);
+        $res = EngineerIntro::delete($r->user(), $e);
+        abort_if(isset($res['forbidden']), 403);
+        if (isset($res['bad'])) return back()->with('flash', ['msg' => $res['bad'], 'type' => 'bad']);
+        return $this->go("/engineers/$id", '推薦文を消しました。');
     }
 
     public function show(Request $r, int $id)
     {
         $e = $this->load($r, $id);
+        // 推薦文のカード（管理者と自社の SES・担当者だけ。本人・兼任の人の自分自身の分は出さない）
+        $introView = EngineerIntro::canView($r->user(), $e);
         return view('engineers.show', [
+            'introView' => $introView,
+            'introCanEdit' => $introView && EngineerIntro::canEdit($r->user(), $e),
+            'introRows' => !$introView ? collect() : ($r->user()->role === 'admin' ? EngineerIntro::rowsForAdmin($e) : collect([EngineerIntro::rowFor($r->user(), $e)])->filter()->values()),
             'e' => $e,
             'skills' => SkillChecks::lines($id),
             'projects' => DB::table('engineer_projects')->where('engineer_id', $id)->orderByDesc('period_from')->get(),

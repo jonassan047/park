@@ -176,6 +176,10 @@ Route::middleware('role:admin,ses')->group(function () {
     Route::post('/engineers/{id}/resume', [Eng::class, 'resume']);
     Route::post('/engineers/{id}/affiliation', [Eng::class, 'affiliation']);
     Route::post('/engineers/{id}/staff', [Eng::class, 'staff']); // EG の担当者の付け替え（v0.17.0）
+    // 推薦文（v0.19.0）：読めるのは管理者と自社の SES・担当者だけ。登録・更新・消すのは自社の SES・担当者だけ（管理者は 403。中で確かめる）
+    Route::get('/engineers/{id}/intro', [Eng::class, 'intro']);
+    Route::post('/engineers/{id}/intro', [Eng::class, 'saveIntro'])->middleware('throttle:20,1');
+    Route::post('/engineers/{id}/intro/delete', [Eng::class, 'deleteIntro'])->middleware('throttle:20,1');
     // パートナー側の追跡（v0.17.0）：受注 SES に提案を頼む・最後の結果を記録する。権限は PartnerTrack::canTrack（管理者は 403）
     Route::post('/case-mails/{id}/handoff', [CMail::class, 'handoff'])->middleware('throttle:20,1');
     Route::post('/case-mails/{id}/outcome', [CMail::class, 'outcome'])->middleware('throttle:20,1');

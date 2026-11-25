@@ -19,13 +19,13 @@ class SkillForm
     const SHORT = [
         'roles' => '役割', 'phases' => '工程', 'lang' => '言語・フレームワーク', 'db' => 'データベース', 'os' => 'OS',
         'pm' => 'プロジェクト管理ツール', 'dev' => '開発・運用ツール',
-        'work' => '業務経験', 'industry' => '業界', 'area' => '業務領域', 'pmpl' => 'PM/PL の経験',
+        'global' => '語学・海外', 'work' => '業務経験', 'industry' => '業界', 'area' => '業務領域', 'pmpl' => 'PM/PL の経験',
     ];
 
     // 今のスキルを新しい表に置くときの「その他」の置き場所（分類 => [節, 親]）。OS と、下に無い分類は place() で決める
     const PLACES = [
         'role' => ['roles', ''], 'method' => ['phases', ''], 'db' => ['db', 'RDB'],
-        'cloud' => ['dev', 'クラウド'], 'infra' => ['dev', 'Webサーバー・AP'], 'tool' => ['dev', 'IDE・エディタ'],
+        'cloud' => ['dev', 'クラウド'], 'infra' => ['dev', 'Webサーバー・AP'], 'tool' => ['dev', 'IDE・エディタ'], 'langs' => ['global', ''],
     ];
 
     private static ?array $data = null;

@@ -86,7 +86,7 @@ class V050WorkExpTest extends TestCase
     public function test_t7_tree_has_work_and_area_sections_and_screen_shows_them(): void
     {
         $keys = array_map(fn ($s) => $s['key'], SkillForm::tree());
-        $this->assertSame(['roles', 'phases', 'lang', 'db', 'os', 'pm', 'dev', 'work', 'industry', 'area', 'pmpl'], $keys);
+        $this->assertSame(['roles', 'phases', 'lang', 'db', 'os', 'pm', 'dev', 'work', 'industry', 'global', 'area', 'pmpl'], $keys);
         $by = [];
         foreach (SkillForm::tree() as $s) $by[$s['key']] = $s;
         $this->assertSame(self::WORK, array_map(fn ($n) => $n['item'], $by['work']['items']));

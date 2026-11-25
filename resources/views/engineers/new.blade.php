@@ -6,5 +6,6 @@
 @elseif($sesOptions)<x-field label="所属する SES（参加中の SES から選びます）" name="ses_id" type="select" :options="$sesOptions" blank="選んでください" required />@endif
 <div class="pair"><x-field label="氏名（姓）" name="name_sei" required /><x-field label="氏名（名）" name="name_mei" required /></div>
 <x-field label="メールアドレス" name="email" type="email" required hint="ご本人に仮登録のご案内が届きます" />
+@if(auth()->user()->role === 'ses')<x-field label="推薦文（任意・社内用）" name="intro" type="textarea" :rows="8" hint="スキルシートの要約などを貼り付けると、スキルを抜き出して登録します。ご本人と他社には見えません。このPCの中で処理し、外部には送りません。" />@endif
 <a class="btn ghost" href="{{ $sesFixed ? url('/admin/ses/'.$sesFixed['id']) : list_url('engineers') }}">戻る</a> <button class="btn">仮登録してメールを送る</button></form></x-card>
 @endsection

@@ -2278,6 +2278,21 @@
    ]
   },
   {
+   "key": "global",
+   "title": "語学・海外との仕事の経験は？",
+   "items": [
+    {"name": "英語", "years": false, "other": false},
+    {"name": "中国語", "years": false, "other": false},
+    {"name": "韓国語", "years": false, "other": false},
+    {"name": "ベトナム語", "years": false, "other": false},
+    {"name": "その他", "years": false, "other": true},
+    {"name": "外国人との協業", "years": false, "other": false},
+    {"name": "海外拠点との連携", "years": false, "other": false},
+    {"name": "オフショア開発 / ニアショア開発", "years": false, "other": false},
+    {"name": "ブリッジSE", "years": false, "other": false}
+   ]
+  },
+  {
    "key": "area",
    "title": "システム開発で関わった業務の領域は？",
    "match": false,

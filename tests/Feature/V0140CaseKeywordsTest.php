@@ -220,9 +220,10 @@ class V0140CaseKeywordsTest extends TestCase
 
     public function test_exp_only_item_goes_to_confirm_on_save(): void // M1
     {
-        $c = $this->register(self::ADMIN, ['required_skills' => 'PHP、英語での会話ができる方', 'confirm_items' => '']);
+        // 「英語」は v0.19.0 から技術マスタの語（語学・海外）になったので、業務にだけ当たる別の文で確かめる
+        $c = $this->register(self::ADMIN, ['required_skills' => 'PHP、ステークホルダーとの合意形成ができる方', 'confirm_items' => '']);
         $this->assertSame('PHP', $c->required_skills);
-        $this->assertStringContainsString('英語での会話ができる方', (string) $c->confirm_items);
+        $this->assertStringContainsString('ステークホルダーとの合意形成ができる方', (string) $c->confirm_items);
     }
 
     public function test_items_split_only_when_all_parts_are_master(): void // M2

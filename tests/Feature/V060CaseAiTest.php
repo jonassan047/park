@@ -525,6 +525,6 @@ class V060CaseAiTest extends TestCase
 
     public function test_version_shown(): void // T26
     {
-        $this->get('/login')->assertOk()->assertSee('v0.17.0');
+        $this->get('/login')->assertOk()->assertSee('v0.19.0');
     }
 }

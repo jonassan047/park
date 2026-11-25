@@ -91,8 +91,29 @@ class CaseKeywords
     // 文章の中から、マスタの言葉を左から最長一致で拾う（見つけた順の正式な名前）
     private static function pick(string $line): array
     {
+        return array_values(array_unique(array_column(self::scan($line), 0)));
+    }
+
+    // 推薦文の抜き出し用（v0.19.0）：1行から、マスタの言葉を位置つきで拾う。[[正式な名前, 始まり, 終わり]…]（見つけた順）。
+    // 渡す行は cleanAll で整えたもの。位置は、それを mb_strtolower(mb_convert_kana(…, 'as')) した文での文字の位置。
+    // 行そのものがマスタの語なら、その名前だけ。新しい語は作らない
+    public static function pickWithPos(string $line): array
+    {
+        // 呼ぶ側が cleanAll で整えた行を渡す（ここでは整え直さない。位置がずれないように）
+        if ($line === '') return [];
+        if (preg_match('/^[^\d()（）年]+$/u', $line) && ($t = self::master($line))) return [[$t[1], 0, mb_strlen(mb_convert_kana($line, 'as'))]];
+        return self::scan($line);
+    }
+
+    // 文章の中から、マスタの言葉を左から最長一致で拾う。[[正式な名前, 始まり, 終わり]…]
+    private static function scan(string $line): array
+    {
         $text = mb_strtolower(mb_convert_kana($line, 'as'));
-        foreach (self::SKIP as $w) $text = str_replace(mb_strtolower(mb_convert_kana($w, 'as')), ' ', $text);
+        // 消す言い方は同じ長さの空白にする（位置がずれないように）
+        foreach (self::SKIP as $w) {
+            $w = mb_strtolower(mb_convert_kana($w, 'as'));
+            $text = str_replace($w, str_repeat(' ', mb_strlen($w)), $text);
+        }
         $words = self::words();
         $chars = mb_str_split($text);
         $n = count($chars);
@@ -111,9 +132,9 @@ class CaseKeywords
                 $hit = [$len, $name];
                 break; // 長い順に並んでいるので、最初に当たったものが一番長い
             }
-            if ($hit) { $found[$hit[1]] = true; $i += $hit[0]; } else $i++;
+            if ($hit) { $found[] = [$hit[1], $i, $i + $hit[0]]; $i += $hit[0]; } else $i++;
         }
-        return array_keys($found);
+        return $found;
     }
 
     // 必須・尚可の行から、案件の列の形にする

@@ -15,7 +15,7 @@ class SkillChecks
     const TABLE = 'engineer_skill_checks';
 
     // 節 → 技術マスタの分類（「その他」の名前を確認待ちで足すときに使う）。言語の節は親が lang、子とその他は fw
-    const CATEGORY = ['roles' => 'role', 'phases' => 'method', 'db' => 'db', 'os' => 'os', 'pm' => 'tool', 'dev' => 'tool'];
+    const CATEGORY = ['roles' => 'role', 'phases' => 'method', 'db' => 'db', 'os' => 'os', 'pm' => 'tool', 'dev' => 'tool', 'global' => 'langs'];
 
     private static function arr($v): array { return is_array($v) ? $v : []; }
 
@@ -255,6 +255,74 @@ class SkillChecks
             }
         }
         foreach (array_chunk($new, 50) as $c) DB::table(self::TABLE)->insert($c);
+    }
+
+    // 推薦文から抜き出した行（IntroSkills::extract の rows）を、その人のスキルに合わせる（v0.19.0）。戻り値は ['added' => [名前…], 'kept' => [名前…], 'removed' => [名前…]]。
+    //  1. すでに同じ行があれば何もしない（kept。出どころも年数も変えない。EG 本人・SES が画面で入れた行・移行の行を守る）。
+    //     ただし、推薦文から入れた行（source=intro）は、年数が変わったら年数を書き換える（updated）
+    //  2. 無ければ source=intro で入れる（added）
+    //  3. source=intro の行のうち、今回の rows に無いものを消す（removed）。ただし、残る子の親の行は消さない
+    // 空の rows を渡すと、推薦文から入れた行（source=intro）だけが消える
+    public static function syncIntro(int $engineerId, array $rows): array
+    {
+        $norm = fn (array $r) => self::key($r['section'], $r['parent'], $r['item'], ($r['other_text'] ?? '') === '' ? '' : self::nameKey((string) $r['other_text']));
+        $nameOf = fn (array $r) => ($r['other_text'] ?? '') !== '' ? $r['other_text'] : $r['item'];
+        // 子の行があるのに親の行が無ければ、親の行（年数なし）を補う
+        $want = [];
+        foreach ($rows as $r) {
+            $r['other_text'] = $r['other_text'] ?? '';
+            $r['years_min'] = isset($r['years_min']) ? (int) $r['years_min'] : null;
+            $k = $norm($r);
+            if (isset($want[$k])) { $want[$k]['years_min'] = self::maxYears($want[$k]['years_min'], $r['years_min']); continue; }
+            $want[$k] = $r;
+        }
+        foreach ($want as $r) {
+            $p = self::parentNode($r['section'], $r['parent']);
+            if ($p === null) continue;
+            $pr = ['section' => $p['section'], 'parent' => '', 'item' => $p['item'], 'other_text' => '', 'years_min' => null];
+            $want[$norm($pr)] ??= $pr;
+        }
+        $result = ['added' => [], 'kept' => [], 'removed' => [], 'updated' => []];
+        DB::transaction(function () use ($engineerId, $want, $norm, $nameOf, &$result) {
+            // 同じ人の保存が同時に来ても、順番に処理する（sqlite では何も起きない）
+            DB::table('engineers')->where('id', $engineerId)->lockForUpdate()->first();
+            $now = now_str();
+            $have = [];
+            foreach (DB::table(self::TABLE)->where('engineer_id', $engineerId)->get() as $x) {
+                $have[$norm(['section' => $x->section, 'parent' => $x->parent, 'item' => $x->item, 'other_text' => $x->other_text])] = $x;
+            }
+            $ins = [];
+            foreach ($want as $k => $r) {
+                if (isset($have[$k])) {
+                    // 推薦文から入れた行（source=intro）は、年数が変わったら書き換える。人が入れた行・移行の行は、今までどおり変えない
+                    $x = $have[$k];
+                    if ($x->source === 'intro' && self::years($x) !== $r['years_min']) {
+                        DB::table(self::TABLE)->where('id', $x->id)->update(['years_min' => $r['years_min'], 'updated_at' => $now]);
+                        $result['updated'][] = $nameOf($r);
+                    } else $result['kept'][] = $nameOf($r);
+                    continue;
+                }
+                $ins[] = ['engineer_id' => $engineerId, 'section' => $r['section'], 'parent' => $r['parent'], 'item' => $r['item'], 'other_text' => $r['other_text'],
+                    'years_min' => $r['years_min'], 'source' => 'intro', 'created_at' => $now, 'updated_at' => $now];
+                $result['added'][] = $nameOf($r);
+            }
+            // 消す行：推薦文から入れた行（source=intro）で、今回の rows に無いもの
+            $drop = [];
+            foreach ($have as $k => $x) if ($x->source === 'intro' && !isset($want[$k])) $drop[$k] = $x;
+            // 残る子（消さない行と、今回入れる行）の親の行は、消さない
+            $needed = [];
+            foreach ($have as $k => $x) if (!isset($drop[$k]) && $x->parent !== '') $needed[$x->section."\0".$x->parent] = true;
+            foreach ($want as $r) if ($r['parent'] !== '') $needed[$r['section']."\0".$r['parent']] = true;
+            $ids = [];
+            foreach ($drop as $x) {
+                if ($x->parent === '' && isset($needed[$x->section."\0".$x->item])) continue;
+                $ids[] = $x->id;
+                $result['removed'][] = $nameOf(['other_text' => $x->other_text, 'item' => $x->item]);
+            }
+            foreach (array_chunk($ids, 500) as $c) DB::table(self::TABLE)->whereIn('id', $c)->delete();
+            foreach (array_chunk($ins, 50) as $c) DB::table(self::TABLE)->insert($c);
+        });
+        return $result;
     }
 
     // 名前・分類・年数の並び（[[名前, 分類, 年数]…]）を置き場所に変えて入れる。ダミー・見本から使う
