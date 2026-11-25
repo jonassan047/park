@@ -148,18 +148,9 @@ SES が受けた案件メールから、エンジニアへの案内メールを�
 - **EG の金額**：EG の画面（案件の画面の案件票と応募の確認・届いた案件・ホーム）の金額は、届いた案内メールの単価の文（`CaseMail::priceFor`。無ければ「担当者にご確認ください」）。プロバイダーからの金額は出さない。SES・管理者の画面の金額は今のまま。
 - **版**：`v0.16.0`（`config/park.php`）。マイグレーションは `2026_11_23_000001_partner_requests.php`（表 `case_search_staff`、`case_searches` に `proper_subject`・`proper_body`・`request_id`、`case_mails` に `price_text`。今ある案内メールの本文の「■単価：」から `price_text` を埋める。足すだけ。`down` は足したものを消す）。
 
-### 候補者紹介メールの取り込み・特記事項（v0.18.0。2026-11-25）
-
-**この節が新しい**。計画は `PLAN.md`。プレーヤー：管理者・SES・担当者・EG（EG 本人には取り込みを出さない）。
-
-- **取り込み**：本登録済みで退会済でない EG の編集画面（`/engineers/{id}/edit`）の上のカード。`POST /engineers/{id}/import-mail`（`EngineerController::importMail`。管理者と、自社の EG の SES・担当者。本人・他社は 403、仮登録中は編集と同じ守り）。**何も保存せず**、同じ編集画面を読んだ値を入れた状態で返す。貼った本文は DB・セッション・ログ・監査記録に残さない（リダイレクトしない。監査 `engineer-import-mail` は読んだ項目の名前と数だけ）。
-- **読み方**：ルールで読む（外部サービス・AI に送らない）。`app/Services/EngineerMailParser.php`（項目名の辞書は `LABELS`。足すときはここだけ）。`app/Services/EngineerMailImport.php` が今の値と比べて、空の欄だけ（上書きのチェックで入っている欄も）埋める値と結果の表を決める。氏名・メール・所属・状態・イニシャルは入れない。スキルは `SkillChecks::saveFromNames(…, 'mail')` で足すだけ（［保存する］のとき、`update()` の `import_skills[]`。監査 `skill-import`）。技術マスタには足さない。
-- **特記事項**：`engineers.special_notes`（text。2000字まで）。編集画面に常に出る（本人にも）。詳細に出る。案件の EG 検索・スキルシート・書き出す書類・案内メール・プロバイダー宛の下書き・AI の仕事には出さない。`W::ENG_FIELDS` に入れ、`ENG_PROFILE_FIELDS` には入れない。
-- **版**：`v0.18.0`（`config/park.php`）。マイグレーションは `2026_11_25_000001_engineer_special_notes.php`（列を1つ足すだけ。`down` は列を消す）。
-
 ### EG ごとの担当者・プロバイダーを伏せる・原文の一覧・パートナーの追跡（v0.17.0。2026-11-23）
 
-計画は `PLAN-v0170.md`。プレーヤー：管理者・SES・担当者・EG（アプリでは SES と担当者はどちらも `users.role=ses`）。
+**この節が新しい**。計画は `PLAN-v0170.md`。プレーヤー：管理者・SES・担当者・EG（アプリでは SES と担当者はどちらも `users.role=ses`）。
 
 - **EG ごとの担当者**：`engineers.staff_user_id`（1人の EG に担当者は1人）。手続きは `app/Services/EgStaff.php`（`usable`・`of`（読むだけ。使えなければ会社の SES、それも無ければ null）・`candidates`・`initial`・`assign`・`release`・`fillMissing`）。EG を作る `Workflow::createEngineer` が、登録した人（管理者なら会社の SES）を入れる。担当者の停止・退会・兼任の解除（`suspendSesUser`・`leaveSesUser`・`leaveAdmin`）で、その人の EG は会社の SES に移る（`release`）。所属の変更（`Affiliation::move`・`Registration::editProvisionalPerson`）で、新しい会社の SES に移る。付け替えは `POST /engineers/{id}/staff`（管理者と、その EG の会社の SES・担当者。EG 本人・他社は 403）。記録は `engineer_staff_logs`、監査は `eg-staff-change`（名前は書かない）、お知らせ（メールなし。kind `eg-staff`）。一覧に「担当者」の列。
 - **プロバイダーを伏せる**：受注 SES ではない SES・担当者の画面（案件票・`/ses/cases`・`/ses` の「新しい案件」）から、プロバイダーからの金額・金額のメモ・元請けを消し、金額は自社あての紹介の依頼の単価の文（`CaseMail::priceForSes`・`priceTextsForSes`）。プロバイダーからの返事（`sender_kind='provider'`）は、受注 SES と管理者だけ（`Inbound::query`）。

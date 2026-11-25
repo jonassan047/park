@@ -5,8 +5,6 @@ namespace App\Http\Controllers;
 use App\Services\Affiliation;
 use App\Services\EgStaff;
 use App\Services\EngineerDocs;
-use App\Services\EngineerMailImport;
-use App\Services\EngineerMailParser;
 use App\Services\Matcher;
 use App\Services\Notifier as N;
 use App\Services\ProjectSkills;
@@ -24,11 +22,6 @@ use Illuminate\Support\Facades\Storage;
 // エンジニア：登録・プロフィール・スキル・経験票・スキルシート・管理者とのやり取り
 class EngineerController extends Controller
 {
-    const MAIL_MAX = 10000;   // 紹介メールの本文の長さの上限（字）
-    const NOTES_MAX = 2000;   // 特記事項の長さの上限（字）
-    const SKILL_IMPORT_MAX = 100; // 1回の保存で足せるスキルの数
-
-
     private function load(Request $r, int $id)
     {
         $e = DB::table('engineers as e')->join('ses_companies as s', 's.id', '=', 'e.ses_id')->where('e.id', $id)->select('e.*', 's.name as ses_name')->first();
@@ -147,17 +140,10 @@ class EngineerController extends Controller
 
     public function edit(Request $r, int $id)
     {
-        return $this->editView($r, $this->loadForEdit($r, $id));
-    }
-
-    // 編集画面を作る。$import は、紹介メールの取り込みの結果（EngineerMailImport::plan）。入っていれば、読んだ値を入れた状態で出す（保存はしない）
-    private function editView(Request $r, object $e, array $import = [])
-    {
+        $e = $this->loadForEdit($r, $id);
         $u = $r->user();
-        $id = (int) $e->id;
-        foreach ($import['fill'] ?? [] as $col => $val) $e->$col = $val;
         // 「所属」のカード：管理者・SES・担当者には変更先と、変えられない理由。本人には今の会社の名前だけ
-        return view('engineers.form', ['e' => $e, 'import' => $import ?: null, 'action' => "/engineers/$id", 'isNew' => false, 'sesFixed' => null,
+        return view('engineers.form', ['e' => $e, 'action' => "/engineers/$id", 'isNew' => false, 'sesFixed' => null,
             'sesName' => $e->ses_name,
             'affBlocker' => $u->role === 'eg' ? null : Affiliation::blocker($u, $e),
             'affTargets' => $u->role === 'eg' ? [] : Affiliation::targets($u, $e),
@@ -165,41 +151,6 @@ class EngineerController extends Controller
             'staffCandidates' => $u->role === 'eg' || $e->status === 'left' ? collect() : EgStaff::candidates((int) $e->ses_id),
             'staffNow' => EgStaff::of($e),
             'staffLogs' => $u->role === 'eg' || $e->status === 'left' ? collect() : EgStaff::logs((int) $id)]);
-    }
-
-    // 候補者の紹介メールを読んで、編集画面に値を入れて返す（v0.18.0）。何も保存しない。
-    // 貼られた本文は、DB・セッション・ログ・監査記録のどこにも残さない（リダイレクトせず、その場で画面を返す）。
-    // 管理者と、自社のエンジニアの SES・担当者だけ（本人・他社は 403。仮登録中は編集と同じ守り）
-    public function importMail(Request $r, int $id)
-    {
-        $e = $this->loadForEdit($r, $id);
-        abort_if($r->user()->role === 'eg', 403);
-        if ($e->status === 'left') return $this->go("/engineers/$id/edit", '退会済のエンジニアには取り込めません。', 'bad');
-        $text = $r->input('mail_text');
-        $bad = null;
-        if (!is_string($text) || trim($text) === '') $bad = 'メールの本文を貼ってください。';
-        elseif (mb_strlen($text) > self::MAIL_MAX) $bad = '長すぎます（'.self::MAIL_MAX.' 字まで）。1人分だけを貼ってください。';
-        if ($bad) {
-            session()->now('flash', ['msg' => $bad, 'type' => 'bad']);
-            return $this->editView($r, $e);
-        }
-        try {
-            $plan = EngineerMailImport::plan($e, EngineerMailParser::parse($text), $r->boolean('overwrite'));
-        } catch (\Throwable) {
-            // 本文を含めない（ログにも書かない）
-            session()->now('flash', ['msg' => '読み取れませんでした。本文を確かめてください。', 'type' => 'bad']);
-            return $this->editView($r, $e);
-        }
-        $u = $r->user();
-        $n = count($plan['read']);
-        // 記録には、読んだ項目の名前と数だけを書く（値・本文は書かない）
-        N::audit($u->id, 'engineer-import-mail', W::selfMark($u, $id)."エンジニア #{$id}：読んだ項目 {$n} 件（".implode('、', $plan['read']).'）');
-        if ($plan['warn'] && !$plan['read']) {
-            session()->now('flash', ['msg' => $plan['warn'][0], 'type' => 'bad']);
-        } else {
-            session()->now('flash', ['msg' => "メールから {$n} 項目を読みました。確かめて［保存する］を押してください（まだ保存していません）。", 'type' => 'ok']);
-        }
-        return $this->editView($r, $e, $plan);
     }
 
     // 所属の SES を変える（管理者と、自社のエンジニアを移す SES・担当者。本人は role ミドルウェアで入れない）。判定は Affiliation に集めている
@@ -260,35 +211,8 @@ class EngineerController extends Controller
         // 郵便番号・住所は、この画面からは送られないが、手で送られても検査してそろえる
         $ad = W::addressCols($body, '現住所');
         if (isset($ad['bad'])) return back()->withInput()->with('flash', ['msg' => $ad['bad'], 'type' => 'bad']);
-        if (is_string($body['special_notes'] ?? null) && mb_strlen(trim($body['special_notes'])) > self::NOTES_MAX) {
-            return back()->withInput()->with('flash', ['msg' => '特記事項は'.self::NOTES_MAX.'文字までにしてください。', 'type' => 'bad']);
-        }
         W::updateEngineer($id, $ad['ok'] + $body, $r->user());
-        // 紹介メールの取り込みで選んだスキルを足す（上位だけ。今のスキルは消さず、年数も変えない）
-        $added = $this->importSkills($r, $e);
-        return $this->go("/engineers/$id", '保存しました。'.($added ? "スキルを {$added} 件足しました。" : ''));
-    }
-
-    // 取り込みの画面でチェックしたスキルを、チェック表に足す。足せるのは技術マスタにある言葉だけ。足した数を返す
-    private function importSkills(Request $r, object $e): int
-    {
-        $u = $r->user();
-        $id = (int) $e->id;
-        $in = $r->input('import_skills');
-        if ($u->role === 'eg' || $e->status === 'left' || !is_array($in)) return 0; // 退会済には足さない
-        $have = SkillChecks::indexMany([$id])[$id] ?? [];
-        $list = [];
-        foreach ($in as $word) {
-            if (!is_string($word) || ($hit = \App\Support\SkillCatalog::find($word)) === null) continue;
-            if (isset($list[$hit[1]]) || isset($have[norm_skill($hit[1])])) continue;
-            $list[$hit[1]] = [$hit[1], $hit[2], null];
-            if (count($list) >= self::SKILL_IMPORT_MAX) break;
-        }
-        if (!$list) return 0;
-        SkillChecks::saveFromNames($id, array_values($list), 'mail');
-        $names = array_keys($list);
-        N::audit($u->id, 'skill-import', W::selfMark($u, $id).'エンジニア #'.$id.'：'.count($list).' 件（'.implode('、', array_slice($names, 0, 20)).(count($names) > 20 ? '…' : '').'）');
-        return count($list);
+        return $this->go("/engineers/$id", '保存しました。');
     }
 
     // 本人が、登録の内容（管理者・SES が入れたものも含む）を確かめ、責任を持つ
