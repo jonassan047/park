@@ -337,3 +337,5 @@ body.role-admin .logo .mark, body.role-eg .logo .mark { box-shadow: 0 3px 8px rg
 .btn { white-space: nowrap; }
 #mails ~ .tablewrap table { min-width: 980px; }
 #mails ~ .tablewrap td form.inline input[name="note"] { width: 150px; }
+/* タイトル行だけのカード（工事中など） */
+.card.title-only > .body { display: none; } .card.title-only > header { border-bottom: 0; }

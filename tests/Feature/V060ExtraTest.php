@@ -29,6 +29,7 @@ class V060ExtraTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        config(['park.case_ai_wip' => false]); // 工事中の表示を外して、欄の中身を試す
         SkillCatalog::forget();
         config(['services.park_ai.token' => 'test-token']);
     }

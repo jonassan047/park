@@ -1,6 +1,10 @@
 @isset($ai)
 {{-- AI の読み直し（直せる人だけ。エンジニア・ほかの会社の SES には、欄も AI の文も渡さない） --}}
 @php $aj = $ai['job']; $cmp = $ai['cmp']; $reasonText = ['count' => '規則と行数が違います', 'missing' => '本文に無い言い方があります', 'edited' => '登録の前か後に人が直したか、本文を変えた案件です', 'empty' => 'AI が必須も尚可も読めませんでした', 'offered' => 'もう案内・応募があります', 'closed' => '募集を終えた案件です']; @endphp
+{{-- 2026-11-26 TEZZO：当面は「（現在工事中）」としてタイトル行だけ出す。戻すときは config/park.php の case_ai_wip を false にする --}}
+@php $wip = config('park.case_ai_wip'); @endphp
+@if($wip)<x-card title="AI の読み直し（現在工事中）" id="ai" class="title-only"></x-card>
+@else
 <x-card title="AI の読み直し" id="ai">
 @if(!$aj)
   @if($ai['block'])<p class="muted">{{ $ai['block'] }}</p>
@@ -33,4 +37,5 @@
   @if(!$ai['block'])<x-post :action="'/cases/'.$c->id.'/ai-parse'" label="もう一度頼む" />@else<p class="muted">{{ $ai['block'] }}</p>@endif
 @endif
 </x-card>
+@endif
 @endisset

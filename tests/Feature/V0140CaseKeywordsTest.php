@@ -33,6 +33,7 @@ class V0140CaseKeywordsTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        config(['park.case_ai_wip' => false]); // 工事中の表示を外して、欄の中身を試す
         SkillCatalog::sync(); // 辞書（AI を含む）を入れた状態で試す
         SkillCatalog::forget();
     }

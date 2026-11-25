@@ -32,6 +32,7 @@ class V060CaseAiTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        config(['park.case_ai_wip' => false]); // 工事中の表示を外して、欄の中身を試す
         SkillCatalog::forget();
         config(['services.park_ai.token' => 'test-token']);
     }
@@ -526,5 +527,16 @@ class V060CaseAiTest extends TestCase
     public function test_version_shown(): void // T26
     {
         $this->get('/login')->assertOk()->assertSee('v0.19.1');
+    }
+
+    // 2026-11-26 TEZZO：工事中の間は「AI の読み直し（現在工事中）」のタイトル行だけを出す。エンジニアには今までどおり出さない
+    public function test_wip_shows_title_only(): void
+    {
+        config(['park.case_ai_wip' => true]);
+        $cid = $this->register(self::SES1);
+        $html = $this->as(self::SES1)->get("/cases/$cid")->assertOk()->assertSee('AI の読み直し（現在工事中）')
+            ->assertDontSee('手元の AI が必須・尚可を読み直しています')->assertDontSee('AI に読み直してもらう')->getContent();
+        $this->assertMatchesRegularExpression('#<section[^>]*class="card title-only"[^>]*>\s*<header><h2>AI の読み直し（現在工事中）</h2></header>\s*<div class="body">\s*</div>#u', $html);
+        $this->as(self::EG1)->get("/cases/$cid")->assertDontSee('AI の読み直し');
     }
 }

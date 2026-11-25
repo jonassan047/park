@@ -14,4 +14,6 @@ return [
         'mailbox' => env('PARK_IMAP_MAILBOX', 'INBOX'),
         'reply_base' => env('PARK_REPLY_BASE'), // 空なら MAIL_FROM_ADDRESS
     ],
+    // 案件の画面の「AI の読み直し」の欄を「（現在工事中）」のタイトル行だけにする（2026-11-26 TEZZO）。戻すときは false
+    'case_ai_wip' => env('PARK_CASE_AI_WIP', true),
 ];
