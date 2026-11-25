@@ -1,5 +1,5 @@
 @php $u = auth()->user(); @endphp
-@extends('layouts.app', ['title' => '案件を案内する：'.$c->title, 'wide' => true])
+@extends('layouts.app', ['title' => '案件を案内する：'.id_title($c->code, $c->title), 'wide' => true])
 @section('content')
 <form method="post" action="{{ url('/cases/'.$c->id.'/mail/preview') }}">@csrf
 <input type="hidden" name="scope" value="{{ $scope }}">

@@ -33,9 +33,9 @@ class SesController extends Controller
         return view('ses.dashboard', [
             's' => DB::table('ses_companies')->find($sid), 'engs' => $engs,
             'apps' => DB::table('applications as a')->join('cases as c', 'c.id', '=', 'a.case_id')->join('engineers as e', 'e.id', '=', 'a.engineer_id')
-                ->where('a.ses_id', $sid)->whereNotIn('a.status', ['won', 'rejected', 'withdrawn'])->select('a.*', 'c.title', 'e.name as eg_name')->orderByDesc('a.updated_at')->get(),
+                ->where('a.ses_id', $sid)->whereNotIn('a.status', ['won', 'rejected', 'withdrawn'])->select('a.*', 'c.title', 'c.code as case_code', 'e.name as eg_name', 'e.code as eg_code')->orderByDesc('a.updated_at')->get(),
             'offers' => DB::table('case_offers as o')->join('cases as c', 'c.id', '=', 'o.case_id')->join('engineers as e', 'e.id', '=', 'o.engineer_id')
-                ->where('e.ses_id', $sid)->whereIn('o.status', ['sent', 'viewed'])->where('c.status', 'open')->select('o.*', 'c.title', 'e.name as eg_name')->orderByDesc('o.sent_at')->get(),
+                ->where('e.ses_id', $sid)->whereIn('o.status', ['sent', 'viewed'])->where('c.status', 'open')->select('o.*', 'c.title', 'c.code as case_code', 'e.name as eg_name', 'e.code as eg_code')->orderByDesc('o.sent_at')->get(),
             'newCases' => $newCases,
             'est' => Billing::items($sid, this_month()),
             'won' => $all->filter(fn ($s) => $s === 'won')->count(), 'appCount' => $all->count(),

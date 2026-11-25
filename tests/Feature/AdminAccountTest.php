@@ -200,7 +200,7 @@ class AdminAccountTest extends TestCase
         $this->assertStringNotContainsString('>修正<', $html);
         $this->assertStringNotContainsString('>直す<', $html);
 
-        $this->get("/admin/admins/$other/edit")->assertOk()->assertSee('管理者の編集：別 管理者')->assertSee('参加中')
+        $this->get("/admin/admins/$other/edit")->assertOk()->assertSee('管理者の編集：AD-')->assertSee('別 管理者')->assertSee('参加中')
             ->assertSee('value="別"', false)->assertSee('value="管理者"', false)->assertSee('value="別企業"', false)->assertSee('value="admin2@park.example"', false);
     }
 

@@ -1,4 +1,4 @@
-@extends('layouts.app', ['title' => $s->name, 'wide' => true])
+@extends('layouts.app', ['title' => id_title($s->code, $s->name), 'wide' => true])
 @section('content')
 <div class="cols"><div>
 <x-card title="会社情報"><x-slot:actions>@if($s->status === 'active')<x-post :action="'/admin/ses/'.$s->id.'/suspend'" label="停止" cls="ghost small" confirm="停止すると、この SES の担当者はログインできなくなります。" />@endif

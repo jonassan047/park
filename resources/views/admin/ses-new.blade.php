@@ -1,4 +1,4 @@
-@extends('layouts.app', ['title' => $approve ? 'SES の承認：'.$approve->name : 'SES の仮登録'])
+@extends('layouts.app', ['title' => $approve ? 'SES の承認：'.id_title($approve->code, $approve->name) : 'SES の仮登録'])
 @section('content')
 @if($approve)
 <p class="muted">申し込みの内容を入れてあります。企業正式名称・SES の姓名・メールをお確かめのうえ、送ってください。SES に仮登録のご案内が届き、申し込んだ方にも承認をお知らせします。</p>

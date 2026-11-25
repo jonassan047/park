@@ -4,7 +4,7 @@
     [$nameSei, $nameMei] = (($e->name_sei ?? null) || ($e->name_mei ?? null)) ? [$e->name_sei ?? null, $e->name_mei ?? null] : split_name($e->name ?? null);
     [$kanaSei, $kanaMei] = (($e->kana_sei ?? null) || ($e->kana_mei ?? null)) ? [$e->kana_sei ?? null, $e->kana_mei ?? null] : split_name($e->kana ?? null);
 @endphp
-@extends('layouts.app', ['title' => 'プロフィールの編集'])
+@extends('layouts.app', ['title' => 'プロフィールの編集'.(isset($e->id) ? '：'.id_title($e->code ?? null, $e->name ?? null) : '')])
 @section('content')
 @if(!($isNew ?? false) && isset($sesName))
 <x-card title="所属">

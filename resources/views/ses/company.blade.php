@@ -1,4 +1,4 @@
-@extends('layouts.app', ['title' => $s->name, 'wide' => true])
+@extends('layouts.app', ['title' => id_title($s->code, $s->name), 'wide' => true])
 @section('content')
 <div class="cols"><div>
 <x-card title="会社情報"><x-slot:actions><a class="btn ghost small" href="{{ url('/account#password') }}">パスワード変更</a>

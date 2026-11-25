@@ -1,5 +1,5 @@
 @php $u = auth()->user(); @endphp
-@extends('layouts.app', ['title' => '請求書 '.$inv->period.' '.$inv->ses_name, 'print' => true, 'noTitle' => true])
+@extends('layouts.app', ['title' => '請求書 '.($inv->code ? $inv->code.' ' : '').$inv->period.' '.$inv->ses_name, 'print' => true, 'noTitle' => true])
 @section('content')
 <div class="noprint toolbar"><a class="btn ghost small" href="{{ url($u->role === 'admin' ? '/admin/invoices' : '/ses/invoices') }}">請求の一覧に戻る</a> <button class="btn small" onclick="print()">印刷・PDF に保存</button>
 @if($u->role === 'admin' && $inv->status === 'draft')<x-post :action="'/admin/invoices/'.$inv->id.'/issue'" label="発行して SES に知らせる" cls="small" />@endif

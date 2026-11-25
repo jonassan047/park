@@ -1,4 +1,4 @@
-@extends('layouts.app', ['title' => '会社情報の編集', 'wide' => true])
+@extends('layouts.app', ['title' => '会社情報の編集：'.id_title($s->code, $s->name), 'wide' => true])
 @section('content')
 <x-card><x-slot:actions><a class="btn ghost small" href="{{ url('/account#password') }}">パスワード変更</a></x-slot:actions><form method="post" action="{{ url('/ses/company') }}">@csrf<div class="grid2">
 <x-field label="企業正式名称" name="name" :value="$s->name" required cls="span2" />

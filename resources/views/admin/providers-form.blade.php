@@ -1,4 +1,4 @@
-@extends('layouts.app', ['title' => $p ? 'プロバイダーの編集：'.$p->name : 'プロバイダーの登録'])
+@extends('layouts.app', ['title' => $p ? 'プロバイダーの編集：'.id_title($p->code, $p->name) : 'プロバイダーの登録'])
 @section('content')
 <x-card><form method="post" action="{{ url($p ? $base.'/'.$p->id : $base) }}">@csrf
 <div class="grid2">

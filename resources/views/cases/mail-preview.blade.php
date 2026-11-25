@@ -1,4 +1,4 @@
-@extends('layouts.app', ['title' => '送る前に確かめる：'.$c->title, 'wide' => true])
+@extends('layouts.app', ['title' => '送る前に確かめる：'.id_title($c->code, $c->title), 'wide' => true])
 @section('content')
 <form method="post" action="{{ url('/cases/'.$c->id.'/mail/send') }}">@csrf
 <input type="hidden" name="scope" value="{{ $scope }}"><input type="hidden" name="mode" value="{{ $mode }}">

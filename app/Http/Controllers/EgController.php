@@ -28,7 +28,7 @@ class EgController extends Controller
             'apps' => DB::table('applications as a')->join('cases as c', 'c.id', '=', 'a.case_id')->where('a.engineer_id', $eid)->whereNotIn('a.status', ['rejected', 'withdrawn'])
                 ->select('a.*', 'c.title', 'c.code as case_code')->orderByDesc('a.updated_at')->get(),
             'ivs' => DB::table('interviews as iv')->join('applications as a', 'a.id', '=', 'iv.application_id')->join('cases as c', 'c.id', '=', 'a.case_id')
-                ->where('a.engineer_id', $eid)->where('iv.result', 'pending')->select('iv.*', 'c.title')->orderBy('iv.scheduled_at')->get(),
+                ->where('a.engineer_id', $eid)->where('iv.result', 'pending')->select('iv.*', 'c.title', 'c.code as case_code')->orderBy('iv.scheduled_at')->get(),
             'needFollow' => $contract && !DB::table('follow_ups')->where('contract_id', $contract->id)->exists(),
             'historyTodo' => W::historyTodo($eid),
             'projectCount' => DB::table('engineer_projects')->where('engineer_id', $eid)->count(),

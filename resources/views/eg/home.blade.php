@@ -1,4 +1,4 @@
-@extends('layouts.app', ['title' => $e->name.' さん', 'wide' => true])
+@extends('layouts.app', ['title' => id_title($e->code, $e->name).' さん', 'wide' => true])
 @section('content')
 <x-todo />
 <p class="muted">あなたの ID：<x-code :v="$e->code" /></p>
@@ -9,11 +9,11 @@
 <x-post :action="'/engineers/'.$e->id.'/confirm'" label="内容を確認しました（責任を持って登録します）" cls="small" :confirm="'登録の内容が正しいことを確認しましたか？'" /></x-card>@endif
 @if(!$projectCount)<x-card title="経験票を入れましょう"><p>経験票（これまでの案件）を入れると、合う案件が届きやすくなります。</p><a class="btn small" href="{{ url('/engineers/'.$e->id.'/projects/new') }}">経験票に追加する</a></x-card>@endif
 @if($historyTodo->count())<x-card title="経歴の更新"><p>案件ごとに、経験票（経歴）を書いてください。次の案件のスキルシートに使います。</p><x-table :head="['案件', '期間', '']">
-@foreach($historyTodo as $k)<tr><td>{{ $k->title }}</td><td>{{ fmt_date($k->start_date) }}〜{{ $k->status === 'ended' ? fmt_date($k->end_date).'（終了）' : '' }}</td><td><a class="btn small" href="{{ url('/engineers/'.$e->id.'/projects/new?contract='.$k->id) }}">{{ $k->status === 'ended' ? '終わった案件を書く' : '経験票に追加' }}</a></td></tr>@endforeach
+@foreach($historyTodo as $k)<tr><td><x-code :v="$k->case_code" />　{{ $k->title }}</td><td>{{ fmt_date($k->start_date) }}〜{{ $k->status === 'ended' ? fmt_date($k->end_date).'（終了）' : '' }}</td><td><a class="btn small" href="{{ url('/engineers/'.$e->id.'/projects/new?contract='.$k->id) }}">{{ $k->status === 'ended' ? '終わった案件を書く' : '経験票に追加' }}</a></td></tr>@endforeach
 </x-table><p class="muted">すでに経験票にある案件は、その案件の「編集」で直してから、ここの「経験票に追加」で新しく書いても構いません（古いほうは消せます）。</p></x-card>@endif
 @if($ivs->count())
 <x-card title="面談の予定"><x-table :head="['日時', '案件', '']">
-@foreach($ivs as $iv)<tr><td>{{ fmt_dt($iv->scheduled_at) }}</td><td>{{ $iv->title }}</td><td><a class="btn small" href="{{ url('/interviews/'.$iv->id) }}">面談対策の Q&A を見る</a></td></tr>@endforeach
+@foreach($ivs as $iv)<tr><td>{{ fmt_dt($iv->scheduled_at) }}</td><td><x-code :v="$iv->case_code" />　{{ $iv->title }}</td><td><a class="btn small" href="{{ url('/interviews/'.$iv->id) }}">面談対策の Q&A を見る</a></td></tr>@endforeach
 </x-table></x-card>
 @endif
 @if($needFollow)<x-card title="配属後のひとこと"><p>「{{ $contract->title }}」が始まりました。困りごとや相性など、短く教えてください。早めに気づけば手を打てます。</p><a class="btn small" href="{{ url('/contracts/'.$contract->id) }}">記入する</a></x-card>@endif

@@ -1,4 +1,4 @@
-@extends('layouts.app', ['title' => 'スキルの編集（'.$e->name.'）'])
+@extends('layouts.app', ['title' => 'スキルの編集：'.id_title($e->code, $e->name)])
 @section('content')
 @php
     // $form＝項目の木（SkillForm::tree）、$state＝チェック・年数・その他の状態（保存済み。入力の誤りで戻ったときは送った値）

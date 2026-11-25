@@ -83,7 +83,7 @@ class UiUnifyTest extends TestCase
     public function test_u2_edit_screen_title(): void
     {
         $other = $this->otherAdmin();
-        $this->admin()->get("/admin/admins/$other/edit")->assertOk()->assertSee('管理者の編集：別 管理者')->assertDontSee('直す')->assertDontSee('の修正');
+        $this->admin()->get("/admin/admins/$other/edit")->assertOk()->assertSee('管理者の編集：AD-')->assertSee('別 管理者')->assertDontSee('直す')->assertDontSee('の修正');
     }
 
     // ---------- U3 登録のときのメールは必須 ----------

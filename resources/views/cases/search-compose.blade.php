@@ -1,4 +1,4 @@
-@extends('layouts.app', ['title' => 'メールを作成：'.$c->code.'　'.$c->title, 'wide' => true])
+@extends('layouts.app', ['title' => 'メールを作成：'.id_title($c->code, $c->title), 'wide' => true])
 @section('content')
 @unless($canSend)<p class="note">いまはメールを「保存のみ」にしています。送った記録は残りますが、実際には届きません。</p>@endunless
 {{-- 段の表示：1. プロパーへ → 2. 担当者へ（残り n 名） --}}

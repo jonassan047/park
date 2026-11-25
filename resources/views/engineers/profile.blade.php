@@ -1,4 +1,4 @@
-@extends('layouts.app', ['title' => '詳しいプロフィール（履歴書・業務経歴書の項目）：'.$e->name, 'wide' => true])
+@extends('layouts.app', ['title' => '詳しいプロフィール（履歴書・業務経歴書の項目）：'.id_title($e->code, $e->name), 'wide' => true])
 @section('content')
 <p class="muted">ここに入れた内容から、履歴書・業務経歴書（Excel）を書き出します。案件とのマッチングにも使います。わかるところから入れてください。</p>
 <form method="post" action="{{ url('/engineers/'.$e->id.'/profile') }}">@csrf

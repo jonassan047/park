@@ -1,4 +1,4 @@
-@extends('layouts.app', ['title' => '管理者の編集：'.$u->name])
+@extends('layouts.app', ['title' => '管理者の編集：'.id_title($u->admin_code, $u->name)])
 @section('content')
 @php
     // 姓・名の列がまだ空の人は、つないだ name から分けて出す

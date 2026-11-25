@@ -1,4 +1,4 @@
-@extends('layouts.app', ['title' => $u->name])
+@extends('layouts.app', ['title' => id_title($u->admin_code, $u->name)])
 @section('content')
 @php
     $state = user_state($u);

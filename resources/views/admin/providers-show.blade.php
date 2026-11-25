@@ -1,4 +1,4 @@
-@extends('layouts.app', ['title' => $p->name])
+@extends('layouts.app', ['title' => id_title($p->code, $p->name)])
 @section('content')
 <x-card title="プロバイダー"><x-slot:actions>
 @if($base === '/admin/providers')<x-post :action="'/admin/providers/'.$p->id.'/delete'" label="削除" cls="danger small" confirm="このプロバイダーを削除します。元に戻せません。よろしいですか？" />

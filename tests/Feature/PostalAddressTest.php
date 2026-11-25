@@ -155,7 +155,7 @@ class PostalAddressTest extends TestCase
     public function test_v2_edit_screen_and_save(): void
     {
         $other = $this->otherAdmin();
-        $this->admin()->get("/admin/admins/$other/edit")->assertOk()->assertSee('管理者の編集：別 管理者')
+        $this->admin()->get("/admin/admins/$other/edit")->assertOk()->assertSee('管理者の編集：AD-')->assertSee('別 管理者')
             ->assertSee('name="position"', false)->assertSee('name="phone"', false)->assertSee('name="postal_code"', false)->assertSee('name="address"', false)
             ->assertSee('href="'.url("/admin/admins/$other").'"', false);
         $this->from("/admin/admins/$other/edit")->post("/admin/admins/$other", ['name_sei' => '別', 'name_mei' => '管理者', 'company_name' => '別企業', 'email' => 'admin2@park.example',

@@ -1,5 +1,5 @@
 @php $u = auth()->user(); $yes = fn ($v) => $v ? '○' : new \Illuminate\Support\HtmlString('<span class="bad-text">要確認</span>'); @endphp
-@extends('layouts.app', ['title' => '選考：'.trim($a->case_code.' '.$a->title), 'wide' => true])
+@extends('layouts.app', ['title' => '選考：'.id_title($a->code, id_title($a->case_code, $a->title)), 'wide' => true])
 @section('content')
 @php $staff = in_array($u->role, ['admin', 'ses']); $confirmed = !$cm || ($pm && $pm->status === 'sent'); @endphp
 <div class="cols"><div>
@@ -7,7 +7,7 @@
 <dt>ID</dt><dd><x-code :v="$a->code" /></dd>
 <dt>案件</dt><dd><a href="{{ url('/cases/'.$a->case_id) }}">{{ $a->title }}</a> <x-code :v="$a->case_code" /></dd>
 <dt>エンジニア</dt><dd><a href="{{ url('/engineers/'.$a->engineer_id) }}">{{ $a->eg_name }}</a> <x-code :v="($u->role !== 'ses' || (int) $a->eg_ses_id === (int) $u->ses_id) ? $a->eg_code : null" />@if($u->role === 'admin' && base_role() === 'admin' && (int) $u->engineer_id === (int) $a->engineer_id) <span class="badge warn">管理者ご本人の応募</span>@endif</dd>
-<dt>SES</dt><dd>{{ $a->ses_name }}</dd><dt>状態</dt><dd>{{ badge('appStatus', $a->status) }}</dd>
+<dt>SES</dt><dd><x-code :v="$a->ses_code ?? null" />　{{ $a->ses_name }}</dd><dt>状態</dt><dd>{{ badge('appStatus', $a->status) }}</dd>
 @php $caseRow = (object) ['id' => $a->case_id, 'price' => $a->case_price, 'source_ses_id' => $a->case_source_ses_id]; $showPrice = $u->role === 'admin' || \App\Services\CaseMail::canSend($u, $caseRow); @endphp
 <dt>提示の金額</dt><dd>{{ $showPrice ? man($a->proposed_price) : \App\Services\CaseMail::priceForSes($u, $caseRow) }}</dd><dt>応募日</dt><dd>{{ fmt_dt($a->applied_at) }}</dd>
 <dt>開始に間に合う</dt><dd>{{ $yes($a->start_ok) }}</dd><dt>金額</dt><dd>{{ $yes($a->price_ok) }}</dd><dt>働き方・場所</dt><dd>{{ $yes($a->style_ok) }}</dd>

@@ -1,4 +1,4 @@
-@extends('layouts.app', ['title' => '担当者の仮登録：'.$s->name])
+@extends('layouts.app', ['title' => '担当者の仮登録：'.id_title($s->code, $s->name)])
 @section('content')
 <p class="muted">姓・名・メールアドレスの3つを入れて、仮登録します。担当の方に仮登録のご案内（7日間有効のリンク）が届き、電話などは担当の方が本登録で入れます。SES にも知らせます。</p>
 <x-card><form method="post" action="{{ url('/admin/ses/'.$s->id.'/users') }}">@csrf

@@ -25,7 +25,7 @@ class EngineerController extends Controller
 {
     private function load(Request $r, int $id)
     {
-        $e = DB::table('engineers as e')->join('ses_companies as s', 's.id', '=', 'e.ses_id')->where('e.id', $id)->select('e.*', 's.name as ses_name')->first();
+        $e = DB::table('engineers as e')->join('ses_companies as s', 's.id', '=', 'e.ses_id')->where('e.id', $id)->select('e.*', 's.name as ses_name', 's.code as ses_code')->first();
         abort_unless($e, 404);
         abort_unless(Perms::engineer($r->user(), $e), 403);
         return $e;

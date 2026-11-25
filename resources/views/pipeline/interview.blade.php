@@ -1,5 +1,5 @@
 @php $u = auth()->user(); $staff = in_array($u->role, ['admin', 'ses']); @endphp
-@extends('layouts.app', ['title' => '面談 '.$iv->round.'回目：'.$a->title, 'wide' => true])
+@extends('layouts.app', ['title' => '面談 '.$iv->round.'回目：'.id_title($a->code, id_title($a->case_code, $a->title)), 'wide' => true])
 @section('content')
 <div class="cols"><div>
 <x-card title="面談"><dl class="dl">

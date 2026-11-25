@@ -410,3 +410,9 @@ function page_slice(\Illuminate\Support\Collection $list, int $per = 20): array
     $page = min($last, max(1, (int) request()->query('page', 1)));
     return [$list->slice(($page - 1) * $per, $per)->values(), ['page' => $page, 'last' => $last, 'total' => $total, 'per' => $per]];
 }
+
+// 画面のタイトルなど、名前を出すところは必ず ID とセットにする（2026-11-25 TEZZO「SE-000011　AAA」の形）。ID が無ければ名前だけ
+function id_title(?string $code, ?string $name): string
+{
+    return trim(($code ? $code.'　' : '').($name ?? ''));
+}

@@ -1,5 +1,5 @@
 @php $u = auth()->user(); $base = $k->price * 10000; @endphp
-@extends('layouts.app', ['title' => '契約：'.$k->title, 'wide' => true])
+@extends('layouts.app', ['title' => '契約：'.id_title($k->code, id_title($k->case_code, $k->title)), 'wide' => true])
 @section('content')
 <div class="cols"><div>
 <x-card title="契約"><dl class="dl">

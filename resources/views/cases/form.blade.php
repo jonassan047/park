@@ -1,4 +1,4 @@
-@extends('layouts.app', ['title' => isset($c->id) ? '案件の編集：'.$c->title : '案件の登録'])
+@extends('layouts.app', ['title' => isset($c->id) ? '案件の編集：'.id_title($c->code, $c->title) : '案件の登録'])
 @section('content')
 @if($import)
 <x-card title="案件メールから取り込む"><form method="post" action="{{ url('/cases/import') }}">@csrf

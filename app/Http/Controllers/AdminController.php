@@ -94,16 +94,16 @@ class AdminController extends Controller
             ],
             'revenue' => Billing::monthTotal(this_month()),
             'todo' => DB::table('applications as a')->join('cases as c', 'c.id', '=', 'a.case_id')->join('engineers as e', 'e.id', '=', 'a.engineer_id')
-                ->whereIn('a.status', ['applied', 'doc_passed', 'interviewed'])->select('a.*', 'c.title', 'e.name as eg_name')->orderBy('a.updated_at')->get(),
+                ->whereIn('a.status', ['applied', 'doc_passed', 'interviewed'])->select('a.*', 'c.title', 'c.code as case_code', 'e.name as eg_name', 'e.code as eg_code')->orderBy('a.updated_at')->get(),
             'openCases' => DB::table('cases as c')->where('status', 'open')->select('c.*')
                 ->selectSub(DB::table('case_offers')->whereColumn('case_id', 'c.id')->selectRaw('count(*)'), 'offers')
                 ->selectSub(DB::table('applications')->whereColumn('case_id', 'c.id')->selectRaw('count(*)'), 'apps')->orderByDesc('id')->limit(10)->get(),
             'upcoming' => DB::table('interviews as iv')->join('applications as a', 'a.id', '=', 'iv.application_id')->join('cases as c', 'c.id', '=', 'a.case_id')
-                ->join('engineers as e', 'e.id', '=', 'a.engineer_id')->where('iv.result', 'pending')->select('iv.*', 'c.title', 'e.name as eg_name')->orderBy('iv.scheduled_at')->limit(10)->get(),
+                ->join('engineers as e', 'e.id', '=', 'a.engineer_id')->where('iv.result', 'pending')->select('iv.*', 'c.title', 'c.code as case_code', 'e.name as eg_name', 'e.code as eg_code')->orderBy('iv.scheduled_at')->limit(10)->get(),
             'ending' => DB::table('contracts as k')->join('cases as c', 'c.id', '=', 'k.case_id')->join('engineers as e', 'e.id', '=', 'k.engineer_id')
-                ->where('k.status', 'active')->where('k.end_date', '<=', $limit)->select('k.*', 'c.title', 'e.name as eg_name')->orderBy('k.end_date')->get(),
+                ->where('k.status', 'active')->where('k.end_date', '<=', $limit)->select('k.*', 'c.title', 'c.code as case_code', 'e.name as eg_name', 'e.code as eg_code')->orderBy('k.end_date')->get(),
             'unread' => DB::table('messages as m')->join('engineers as e', 'e.id', '=', 'm.engineer_id')->where('read_by_admin', false)
-                ->groupBy('m.engineer_id', 'e.name')->select('m.engineer_id', 'e.name', DB::raw('count(*) as n'))->get(),
+                ->groupBy('m.engineer_id', 'e.name', 'e.code')->select('m.engineer_id', 'e.name', 'e.code', DB::raw('count(*) as n'))->get(),
             'funnel' => self::funnel(),
             'unreviewedSkills' => DB::table('skill_terms')->where('reviewed', false)->count(),
         ]);
@@ -478,8 +478,8 @@ class AdminController extends Controller
     // ---------- やり取り・メール ----------
     public function messages()
     {
-        $list = DB::table('messages as m')->join('engineers as e', 'e.id', '=', 'm.engineer_id')->groupBy('e.id', 'e.name')
-            ->select('e.id', 'e.name', DB::raw('max(m.created_at) as last'), DB::raw('count(*) as n'), DB::raw('sum(case when m.read_by_admin = 0 then 1 else 0 end) as unread'))
+        $list = DB::table('messages as m')->join('engineers as e', 'e.id', '=', 'm.engineer_id')->groupBy('e.id', 'e.name', 'e.code')
+            ->select('e.id', 'e.name', 'e.code', DB::raw('max(m.created_at) as last'), DB::raw('count(*) as n'), DB::raw('sum(case when m.read_by_admin = 0 then 1 else 0 end) as unread'))
             ->orderByDesc('last')->get();
         return view('admin.messages', compact('list'));
     }

@@ -1,11 +1,11 @@
 @php $u = auth()->user(); $e = $row['e']; $j = $row['j']; @endphp
-@extends('layouts.app', ['title' => 'エンジニアの詳細：'.$row['name'], 'wide' => true])
+@extends('layouts.app', ['title' => 'エンジニアの詳細：'.(($row['own'] || $u->role === 'admin') ? id_title($e->code, $row['name']) : $row['name']), 'wide' => true])
 @section('content')
 <p class="muted">案件ID：<x-code :v="$c->code" />　{{ $c->title }}</p>
 <div class="cols"><div>
 <x-card :title="$row['name']">
 <x-slot:actions><a class="btn ghost small" href="{{ url('/searches/'.$s->id) }}">一覧に戻る</a></x-slot:actions>
-<p>案件：<a href="{{ url('/cases/'.$c->id) }}">{{ $c->title }}</a></p>
+<p>案件：<x-code :v="$c->code" />　<a href="{{ url('/cases/'.$c->id) }}">{{ $c->title }}</a></p>
 <p class="muted">{{ lbl('engStatus', $e->status) }}・{{ $row['score'] }}点@if($row['own'] || $u->role === 'admin')　<x-code :v="$e->code" />　<a href="{{ url('/engineers/'.$e->id) }}">エンジニアの画面を開く</a>@endif</p>
 @if($row['sent'] !== null)<p class="note">この案件の案内は送信済みです。</p>@endif
 @foreach(['req' => '必須', 'pref' => '尚可'] as $side => $label)

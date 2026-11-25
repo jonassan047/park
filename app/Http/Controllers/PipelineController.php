@@ -131,7 +131,7 @@ class PipelineController extends Controller
     private function contractRow(Request $r, int $id)
     {
         $k = DB::table('contracts as k')->join('cases as c', 'c.id', '=', 'k.case_id')->join('engineers as e', 'e.id', '=', 'k.engineer_id')
-            ->join('ses_companies as s', 's.id', '=', 'k.ses_id')->where('k.id', $id)->select('k.*', 'c.title', 'c.code as case_code', 'e.name as eg_name', 'e.code as eg_code', 'e.ses_id as eg_ses_id', 's.name as ses_name')->first();
+            ->join('ses_companies as s', 's.id', '=', 'k.ses_id')->where('k.id', $id)->select('k.*', 'c.title', 'c.code as case_code', 'e.name as eg_name', 'e.code as eg_code', 'e.ses_id as eg_ses_id', 's.name as ses_name', 's.code as ses_code')->first();
         abort_unless($k, 404);
         abort_unless(Perms::app($r->user(), $k), 403);
         return $k;

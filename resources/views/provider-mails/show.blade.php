@@ -2,7 +2,7 @@
 $u = auth()->user();
 $mailState = ['saved' => '保存のみ（送信の設定が無い）', 'queued' => '送信待ち', 'sent' => '送信済み', 'failed' => '失敗（管理者の「メール」画面で再送できます）'];
 @endphp
-@extends('layouts.app', ['title' => 'プロバイダーへの返信', 'wide' => true])
+@extends('layouts.app', ['title' => 'プロバイダーへの返信'.($c ? '：'.id_title($c->code, $c->title) : ''), 'wide' => true])
 @section('content')
 <x-card title="プロバイダーへの返信">
 <dl class="dl">

@@ -1,4 +1,4 @@
-@extends('layouts.app', ['title' => isset($p->id) ? '案件の編集（経験票）' : '案件の追加（経験票）'])
+@extends('layouts.app', ['title' => (isset($p->id) ? '案件の編集（経験票）' : '案件の追加（経験票）').'：'.id_title($e->code, $e->name)])
 @section('content')
 <x-card><form method="post" action="{{ url($action) }}">@csrf
 @if(!empty($contract))<input type="hidden" name="contract" value="{{ $contract->id }}"><p class="note">PARK で決まった案件「{{ $contract->title }}」の経歴です。担当したこと・成果・使った技術を書いてください。</p>@endif<div class="grid2">

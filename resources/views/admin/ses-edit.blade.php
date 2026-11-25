@@ -1,4 +1,4 @@
-@extends('layouts.app', ['title' => ($s->status === 'provisional' ? '仮登録の内容を直す：' : '会社情報の編集：').$s->name])
+@extends('layouts.app', ['title' => ($s->status === 'provisional' ? '仮登録の内容を直す：' : '会社情報の編集：').id_title($s->code, $s->name)])
 @section('content')
 @if($s->status === 'provisional')
 <p class="muted">本登録が済む前だけ、企業正式名称・SES の姓名・メールを直せます。メールを変えると、新しいアドレスに仮登録のご案内を送り直し、前のリンクは使えなくなります。</p>

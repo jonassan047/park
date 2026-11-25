@@ -8,7 +8,7 @@
   // 1本はあるが、今は相手ではなくなった会社（前の所属ではない）
   $notPartner = $u->role === 'ses' && !$formerSes && !$own && $partnerId !== (int) $u->ses_id;
 @endphp
-@extends('layouts.app', ['title' => '案件のやり取り：'.$egName])
+@extends('layouts.app', ['title' => '案件のやり取り：'.(($own || $formerSes) ? id_title($e->code, $egName) : $egName)])
 @section('content')
 <x-card title="案件">
 <dl class="dl">

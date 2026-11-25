@@ -1,4 +1,4 @@
-@extends('layouts.app', ['title' => '仮登録の内容を直す'])
+@extends('layouts.app', ['title' => '仮登録の内容を直す：'.id_title($t->staff_code ?: $t->admin_code, $t->name)])
 @section('content')
 <p class="muted">本登録が済む前だけ、直せます。メールアドレス{{ $sesOptions ? 'や所属' : '' }}を直して保存すると、新しい仮登録のご案内が届き、前のリンクは使えなくなります。</p>
 <x-card><form method="post" action="{{ url('/people/'.$t->id) }}">@csrf

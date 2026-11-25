@@ -762,7 +762,7 @@ class Workflow
     {
         return DB::table('contracts as k')->join('cases as c', 'c.id', '=', 'k.case_id')->where('k.engineer_id', $engineerId)
             ->where(fn ($q) => $q->whereNull('k.history_updated_at')->orWhere(fn ($q) => $q->where('k.status', 'ended')->whereColumn('k.history_updated_at', '<', 'k.end_date')))
-            ->select('k.*', 'c.title')->orderByDesc('k.start_date')->get();
+            ->select('k.*', 'c.title', 'c.code as case_code')->orderByDesc('k.start_date')->get();
     }
 
     // スキルのチェックの保存の入口（中身は SkillChecks::save）。戻り値は ['ok' => true, 'count' => n, 'names' => [...], 'skipped' => n] か ['bad' => '理由']
@@ -1011,7 +1011,7 @@ class Workflow
     {
         return DB::table('applications as a')->join('cases as c', 'c.id', '=', 'a.case_id')->join('engineers as e', 'e.id', '=', 'a.engineer_id')
             ->join('ses_companies as s', 's.id', '=', 'a.ses_id')->where('a.id', $appId)
-            ->select('a.*', 'c.title', 'c.price as case_price', 'c.source_ses_id as case_source_ses_id', 'c.start_date as case_start', 'c.headcount', 'c.code as case_code', 'e.name as eg_name', 'e.code as eg_code', 'e.ses_id as eg_ses_id', 's.name as ses_name')->first();
+            ->select('a.*', 'c.title', 'c.price as case_price', 'c.source_ses_id as case_source_ses_id', 'c.start_date as case_start', 'c.headcount', 'c.code as case_code', 'e.name as eg_name', 'e.code as eg_code', 'e.ses_id as eg_ses_id', 's.name as ses_name', 's.code as ses_code')->first();
     }
 
     public static function setStatus(int $appId, string $status, $actor, string $reason = '', string $note = ''): void

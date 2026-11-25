@@ -3,7 +3,7 @@ $u = auth()->user();
 // 新しい配置（v0.15.0）：受注 SES の担当者だけ。ほかの人（管理者・ほかの SES・エンジニア）は今までの配置
 $newLayout = $canMail;
 @endphp
-@extends('layouts.app', ['title' => trim($c->code.' '.$c->title), 'wide' => true])
+@extends('layouts.app', ['title' => id_title($c->code, $c->title), 'wide' => true])
 @section('content')
 @if($newLayout)
 {{-- 上：左＝メール本文 → エンジニアとのやり取り、右＝AI の読み直し → エンジニアを検索。その下に、左右にまたがって 案内済メール → プロバイダーへの返信 → この案件への応募（記録ができてから出る） --}}

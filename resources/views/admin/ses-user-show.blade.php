@@ -1,4 +1,4 @@
-@extends('layouts.app', ['title' => $u->name])
+@extends('layouts.app', ['title' => id_title($u->staff_code, $u->name)])
 @section('content')
 @php
     $state = user_state($u);
@@ -17,7 +17,7 @@
 <dl class="dl">
 <dt>ID</dt><dd><x-code :v="$u->staff_code" /></dd>
 <dt>状態</dt><dd>{{ $state }}@if((int) $u->id === (int) $s->rep_user_id)（SES）@elseif((int) $u->id === (int) $s->next_rep_user_id)（次の SES）@endif</dd>
-<dt>SES</dt><dd>{{ $s->name }}</dd>
+<dt>SES</dt><dd><x-code :v="$s->code" />　{{ $s->name }}</dd>
 <dt>氏名</dt><dd>{{ $u->name }}</dd>
 <dt>ふりがな</dt><dd>{{ $u->kana ?: '—' }}</dd>
 <dt>メールアドレス</dt><dd>{{ account_mail($u) }}</dd>
