@@ -379,6 +379,18 @@ class SkillChecks
         return self::withParents($s); // 子だけで親が無い古いデータも、親にチェックが付いた形で出す
     }
 
+    // 推薦文から入った行のうち、年数が必要な項目なのに年数が入っていないもの。[項目の id => true]（画面の警告用）。
+    // 「その他」は、名前のどれか1つでも年数が無ければ true
+    public static function introNoYears(int $engineerId): array
+    {
+        $out = [];
+        foreach (DB::table(self::TABLE)->where('engineer_id', $engineerId)->where('source', 'intro')->whereNull('years_min')->get() as $r) {
+            $n = SkillForm::byPath($r->section, $r->parent, $r->item);
+            if ($n && $n['checkable'] && $n['years'] && !self::isSingleSection($n['section'])) $out[$n['id']] = true;
+        }
+        return $out;
+    }
+
     // 入力の誤りで戻ったときの状態（送った値のとおり）。形の違う値は捨てる
     public static function stateFromInput(array $in): array
     {

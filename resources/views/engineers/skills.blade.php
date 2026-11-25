@@ -3,6 +3,7 @@
 @php
     // $form＝項目の木（SkillForm::tree）、$state＝チェック・年数・その他の状態（保存済み。入力の誤りで戻ったときは送った値）
     $marks = $caseInfo['marks'] ?? [];
+    $introNoYears = $introNoYears ?? [];
     $isOn = fn ($id) => \App\Services\SkillChecks::isOn($state, $id);
     $years = \App\Support\SkillForm::YEARS;
 
@@ -31,10 +32,19 @@
         return '<label class="sf-item'.(isset($marks[$id]) ? ' hit' : '').'"><input type="checkbox" name="chk['.e($id).']" value="1" data-sf="'.e($id).'"'.($isOn($id) ? ' checked' : '').'> '.$name.$markOf($id).'</label>';
     };
     // 項目1つ（親も同じ）。年数のある項目はプルダウンを横に付ける。その他は名前の入力欄を付ける
-    $row = function (array $n, bool $bold = false) use ($labelOf, $yearSelect, $state, $isOn) {
+    // 推薦文から入った項目で、年数が必要なのに年数が入っていないときの警告（赤の太字）。今の画面で年数を選んでいれば出さない
+    $warnText = 'この項目は予めご担当者によってスキルが登録されています。項目を再度ご確認の上、経歴年数が必要な項目には経歴年数をご指定ください。';
+    $needWarn = function (array $n) use ($introNoYears, $state, $isOn) {
         $id = $n['id'];
+        if (empty($introNoYears[$id]) || !$isOn($id)) return false;
+        if ($n['other']) return count(array_filter(array_values($state['othyr'][$id] ?? []), fn ($y) => $y === '' || $y === null)) > 0;
+        return ($state['yr'][$id] ?? '') === '';
+    };
+    $row = function (array $n, bool $bold = false) use ($labelOf, $yearSelect, $state, $isOn, $needWarn, $warnText) {
+        $id = $n['id'];
+        $warn = $needWarn($n) ? '<p class="sf-warn" style="color:#d00;font-weight:bold;margin:2px 0 6px">'.e($warnText).'</p>' : '';
         if (!$n['other']) {
-            return '<div class="sf-row">'.$labelOf($n, $bold).($n['years'] ? $yearSelect('yr['.$id.']', $state['yr'][$id] ?? null) : '').'</div>';
+            return '<div class="sf-row">'.$labelOf($n, $bold).($n['years'] ? $yearSelect('yr['.$id.']', $state['yr'][$id] ?? null) : '').$warn.'</div>';
         }
         $names = array_values($state['oth'][$id] ?? []);
         $yrs = array_values($state['othyr'][$id] ?? []);
@@ -43,7 +53,7 @@
             $h .= '<div class="sf-orow"><input name="oth['.e($id).'][]" maxlength="'.\App\Support\SkillForm::OTHER_MAX.'" value="'.e($nm).'" placeholder="名前">'
                 .($n['years'] ? $yearSelect('othyr['.$id.'][]', $yrs[$i] ?? null) : '').' <button type="button" class="link sf-del">×</button></div>';
         }
-        return $h.'<button type="button" class="btn ghost small sf-add">＋</button></div></div>';
+        return $h.'<button type="button" class="btn ghost small sf-add">＋</button></div>'.$warn.'</div>';
     };
 @endphp
 @if($pickable !== null)

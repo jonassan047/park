@@ -356,7 +356,7 @@ class EngineerController extends Controller
             : SkillChecks::state($id);
         $gone = SkillChecks::gone($id);
         $keep = $failed ? array_map('intval', array_filter((array) old('keep'), 'is_scalar')) : array_map(fn ($g) => $g->id, $gone);
-        return view('engineers.skills', ['e' => $e, 'form' => SkillForm::tree(), 'state' => $state, 'failed' => $failed, 'gone' => $gone, 'keep' => $keep,
+        return view('engineers.skills', ['e' => $e, 'form' => SkillForm::tree(), 'state' => $state, 'failed' => $failed, 'gone' => $gone, 'keep' => $keep, 'introNoYears' => SkillChecks::introNoYears($id),
             'pickable' => $pickable, 'pick' => $pick, 'caseInfo' => $pick ? SkillChecks::caseMarks($state, $pick) : null]);
     }
 
