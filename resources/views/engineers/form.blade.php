@@ -6,6 +6,54 @@
 @endphp
 @extends('layouts.app', ['title' => 'プロフィールの編集'])
 @section('content')
+@if(!$isEg && !($isNew ?? false) && ($e->status ?? '') !== 'left')
+{{-- 紹介メールから取り込む（v0.18.0）。独立したフォーム。貼った本文は保存のフォームに入れず、どこにもしまわない --}}
+<x-card title="紹介メールから取り込む" id="import-mail">
+  <p>プロバイダー・ほかの SES から届いた候補者の紹介メールを、1人分だけ貼ってください。この PC（サーバー）の中だけで読み、外部のサービスには送りません。読んだ内容は、［保存する］を押すまで保存されません。</p>
+  <form method="post" action="{{ url('/engineers/'.$e->id.'/import-mail') }}"
+    onsubmit="if (this.elements['overwrite'].checked) return confirm('入っている欄も、メールの値で書き換えます（保存するまで変わりません）。よろしいですか？'); return true;">@csrf
+    <label class="field"><span>メールの本文</span>
+      <textarea name="mail_text" rows="10" maxlength="10000" placeholder="候補者紹介のメールの本文を、ここに貼り付けます（1人分・10000字まで）"></textarea></label>
+    <label class="check"><input type="checkbox" name="overwrite" value="1"> 入っている欄も、メールの値で上書きする（氏名・メール・所属・状態は変えません）</label>
+    <p><button class="btn">読み取る</button></p>
+  </form>
+</x-card>
+@if(!empty($import))
+<x-card title="読み取った結果">
+  @foreach($import['warn'] as $w)<p class="bad-text"><b>{{ $w }}</b></p>@endforeach
+  @if($import['rows'])
+  <x-table :head="['項目', 'メールの値', '扱い']" :count="count($import['rows'])">
+  @foreach($import['rows'] as $row)
+    <tr><td>{{ $row['label'] }}</td><td>{{ $row['mail'] }}</td><td>{{ $row['status'] }}@if(!empty($row['note']))<div class="muted small">{{ $row['note'] }}</div>@endif</td></tr>
+  @endforeach
+  </x-table>
+  @endif
+  @if(!empty($import['ref']['affiliation']))
+    <p class="muted">参考：メールの所属＝{{ $import['ref']['affiliation'] }}。PARK の所属（プロパー／パートナー）は変えません。変えるときは『所属』のカードで。</p>
+  @endif
+  @if($import['skills'])
+    <h3>スキルに足す</h3>
+    <p class="muted">チェックしたものが、［保存する］で今のスキルに足されます（今のスキルは消えず、年数も変わりません）。</p>
+    @foreach($import['skills'] as $s)
+      @if($s['registered'])<div>{{ $s['name'] }} <span class="muted">登録済み</span></div>
+      @else<label class="check"><input type="checkbox" name="import_skills[]" value="{{ $s['name'] }}" form="engineer-form" checked> {{ $s['name'] }}</label>@endif
+    @endforeach
+  @endif
+  @if($import['notes_added'])
+    <h3>特記事項に足した行</h3>
+    @foreach($import['notes_added'] as $line)<div>{{ $line }}</div>@endforeach
+  @endif
+  <h3>取り込めなかった部分</h3>
+  @if($import['unread'] || $import['unknown_words'])
+    @if($import['unread'])<pre>{{ implode("\n", $import['unread']) }}</pre>@endif
+    @if($import['unknown_words'])<p>技術マスタに無い言葉：{{ implode('、', $import['unknown_words']) }}</p>@endif
+  @else
+    <p class="muted">ありません。</p>
+  @endif
+  <p><b>内容を確かめて、下の［保存する］を押してください。保存しないと何も変わりません。</b></p>
+</x-card>
+@endif
+@endif
 @if(!($isNew ?? false) && isset($sesName))
 <x-card title="所属">
 @if($isEg)
@@ -54,7 +102,7 @@
 </x-card>
 @endif
 @endif
-<x-card><form method="post" action="{{ url($action) }}">@csrf<div class="grid2">
+<x-card><form id="engineer-form" method="post" action="{{ url($action) }}">@csrf<div class="grid2">
 <div class="pair">
 <x-field label="氏名（姓）" name="name_sei" :value="$nameSei" required />
 <x-field label="氏名（名）" name="name_mei" :value="$nameMei" required />
@@ -67,7 +115,7 @@
 @unless($isEg)<x-field label="メールアドレス" name="email" type="email" :value="$e->email ?? null" />@endunless
 <x-field label="生まれた年" name="birth_year" type="number" :value="$e->birth_year ?? null" placeholder="1985" />
 <x-field label="最寄り駅" name="nearest_station" :value="$e->nearest_station ?? null" />
-<x-field label="IT の経験年数" name="years_exp" type="number" step="0.5" :value="num_disp($e->years_exp ?? null)" />
+<x-field label="IT の経験年数" name="years_exp" type="number" step="0.5" min="0" max="60":value="num_disp($e->years_exp ?? null)" />
 <x-field label="希望単価（万円／月）" name="desired_price" type="number" step="0.5" :value="num_disp($e->desired_price ?? null)" />
 <x-field label="下限の単価（万円／月）" name="min_price" type="number" step="0.5" :value="num_disp($e->min_price ?? null)" hint="マッチングにだけ使い、外には出しません" />
 <x-field label="稼働できる日" name="available_from" type="date" :value="$e->available_from ?? null" />
@@ -84,5 +132,27 @@
 </div>
 <x-field label="強み（ひとこと）" name="strengths" :value="$e->strengths ?? null" placeholder="例：業務系 Java の設計〜テストを1人で回せる" />
 <x-field label="自己PR" name="summary" type="textarea" rows="5" :value="$e->summary ?? null" hint="得意分野と、どんな現場で力を出せるか。事実だけを書きます。" />
+<x-field label="特記事項" name="special_notes" type="textarea" rows="4" :value="$e->special_notes ?? null" hint="ご家庭の事情など、案件を選ぶときに気をつけること。ご本人・貴社の SES・担当者・管理者だけが見られ、ほかの会社・案件のメール・スキルシートには出ません。" />
+{{-- 保存が入力の誤りで戻ったときも、取り込んだ詳しいプロフィールの欄とスキルのチェックが消えないよう、前の入力（old）からも出す --}}
+@php
+    $impCols = array_values(array_filter(\App\Services\EngineerMailImport::PROFILE_COLS, fn ($c) => array_key_exists($c, $import['fill'] ?? []) || old($c) !== null));
+    $oldSkills = (!$isEg && empty($import)) ? array_values(array_filter((array) old('import_skills'), 'is_string')) : [];
+@endphp
+@if($oldSkills)
+<h3>スキルに足す（前の取り込み）</h3>
+<p class="muted">保存できなかった前の入力です。チェックしたものが、［保存する］で今のスキルに足されます。</p>
+@foreach($oldSkills as $sk)<label class="check"><input type="checkbox" name="import_skills[]" value="{{ $sk }}" checked> {{ $sk }}</label>@endforeach
+@endif
+@if($impCols)
+<h3>メールから読んだ項目（詳しいプロフィール）</h3>
+<p class="muted">読み取った値です。［保存する］で保存されます。あとから「詳しいプロフィール」でも直せます。</p>
+<div class="grid2">
+@foreach($impCols as $col)
+  @if(in_array($col, ['career_summary', 'appeal'], true))<x-field :label="\App\Services\EngineerMailImport::LABELS[$col]" :name="$col" type="textarea" rows="5" :value="$e->$col ?? null" />
+  @elseif($col === 'walk_minutes')<x-field :label="\App\Services\EngineerMailImport::LABELS[$col]" :name="$col" type="number" :value="$e->$col ?? null" />
+  @else<x-field :label="\App\Services\EngineerMailImport::LABELS[$col]" :name="$col" :value="$e->$col ?? null" />@endif
+@endforeach
+</div>
+@endif
 <a class="btn ghost" href="{{ url('/engineers/'.$e->id) }}">戻る</a> <button class="btn">保存する</button></form></x-card>
 @endsection

@@ -166,6 +166,7 @@ Route::middleware('role:admin,ses')->group(function () {
     Route::get('/engineers/new', [Eng::class, 'create']);
     Route::post('/engineers', [Eng::class, 'store'])->middleware('throttle:20,1');
     Route::post('/engineers/{id}/invite', [Eng::class, 'invite']);
+    Route::post('/engineers/{id}/import-mail', [Eng::class, 'importMail'])->middleware('throttle:30,1'); // 候補者紹介メールの取り込み（v0.18.0。保存はしない）
     // 仮登録の送り直し・直し・取り消し（権限は Registration::canManage で確かめる）
     Route::get('/people/{id}/edit', [People::class, 'edit']);
     Route::post('/people/{id}', [People::class, 'update'])->middleware('throttle:30,1');

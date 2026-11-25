@@ -25,6 +25,7 @@
 <dt>稼働できる日</dt><dd>{{ fmt_date($e->available_from) }}</dd>
 <dt>働き方</dt><dd>{{ lbl('workStyle', $e->work_style) }}・週{{ $e->days_per_week ?: 5 }}日</dd>
 <dt>強み</dt><dd>{{ $e->strengths ?: '—' }}</dd><dt>自己PR</dt><dd>{!! nl2br(e($e->summary)) ?: '—' !!}</dd>
+@if(trim((string) ($e->special_notes ?? '')) !== '')<dt>特記事項</dt><dd>{!! nl2br(e($e->special_notes)) !!}<br><span class="muted small">{{ $mine ? 'ご自身と、所属の会社の SES・担当者、管理者だけが見られます。' : 'ご本人・所属の SES・担当者・管理者だけが見られます。' }}</span></dd>@endif
 <dt>本人の確認</dt><dd>@if($e->self_confirmed_at)済み（{{ fmt_dt($e->self_confirmed_at) }}）@else<b>まだ</b><span class="muted">（ご本人が確かめるまで、応募できません。管理者・SES が書き換えると、もう一度確認が必要になります）</span> @endif</dd>
 <dt>アカウント</dt><dd>{{ $eu ? (user_state($eu) === '参加中' ? '参加中（最終ログイン '.fmt_dt($eu->last_login).'）' : user_state($eu)) : 'なし' }}@if($eu && $u->role === 'admin' && in_array($eu->role, ['ses', 'admin'], true)) <span class="badge info">{{ $eu->role === 'ses' ? 'SES 担当者と兼任' : '管理者と兼任' }}</span>@endif @if($eu)<br><span class="muted">{{ ($eu->role === 'admin' && $u->role !== 'admin') ? '—' : account_mail($eu) }}</span>@endif</dd>
 

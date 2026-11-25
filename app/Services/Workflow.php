@@ -639,7 +639,9 @@ class Workflow
         // 履歴書・業務経歴書の項目（2026-10-16）
         'gender', 'phone', 'postal_code', 'address', 'address_kana', 'nearest_line', 'walk_minutes', 'education', 'graduated_ym', 'career_summary', 'desired_roles', 'english_level', 'appeal', 'wishes', 'birth_date', 'nickname',
         // 氏名・ふりがなの姓・名（2026-10-19。末尾に足した）
-        'name_sei', 'name_mei', 'kana_sei', 'kana_mei'];
+        'name_sei', 'name_mei', 'kana_sei', 'kana_mei',
+        // 特記事項（2026-11-25。末尾に足した。ENG_PROFILE_FIELDS には入れない＝詳しいプロフィールの保存で消えない）
+        'special_notes'];
 
     // 詳しいプロフィールの画面で保存する項目（gender から nickname まで。姓・名は含めない）
     const ENG_PROFILE_FIELDS = ['gender', 'phone', 'postal_code', 'address', 'address_kana', 'nearest_line', 'walk_minutes', 'education', 'graduated_ym', 'career_summary',
