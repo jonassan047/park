@@ -251,6 +251,36 @@ class V0190IntroTest extends TestCase
         $this->save($a1, str_repeat('あ', 10001))->assertSessionMissing('_old_input.body');
     }
 
+    // ---------- v0.19.1：推薦文なしで登録したあとの、推薦文の案内 ----------
+
+    private function regEid(string $as, array $form): int
+    {
+        $this->as($as)->post('/engineers', $form)->assertSessionHas('flash.type', 'ok');
+        return (int) DB::table('users')->where('email', $form['email'])->value('engineer_id');
+    }
+
+    public function test_v0191_prompt_shows_once_after_registration_without_intro(): void
+    {
+        $eid = $this->regEid(self::AS2, ['name_sei' => '架空', 'name_mei' => '案内', 'email' => 'prompt19a@example.test']);
+        $this->get("/engineers/$eid")->assertOk()->assertSee('intro-prompt', false)->assertDontSee(self::MARK);
+        $this->get("/engineers/$eid")->assertOk()->assertDontSee('intro-prompt', false); // リロードで消える
+    }
+
+    public function test_v0191_prompt_not_shown_with_intro_admin_self_or_engineer(): void
+    {
+        $eid = $this->regEid(self::AS2, ['name_sei' => '架空', 'name_mei' => '入力', 'email' => 'prompt19b@example.test', 'intro' => "Java\n".self::MARK]);
+        $this->get("/engineers/$eid")->assertOk()->assertDontSee('intro-prompt', false);
+        // 管理者
+        $eid = $this->regEid(self::ADMIN, ['ses_id' => $this->sesId(self::SES1), 'name_sei' => '架空', 'name_mei' => '管理', 'email' => 'prompt19c@example.test']);
+        $this->get("/engineers/$eid")->assertOk()->assertDontSee('intro-prompt', false);
+        // 自分自身を足したとき
+        $this->as(self::AS2, 'ses')->post('/engineers', ['name_sei' => '架空', 'name_mei' => '本人', 'email' => self::AS2])->assertSessionMissing('intro_prompt');
+        // EG は、詳細を開いても出ない（フラッシュを仕込まれても、登録できる立場でないので出ない）
+        $eid = $this->a1();
+        $mail = $this->egLogin($eid, 'eg-prompt19@example.test');
+        $this->as($mail)->withSession(['intro_prompt' => 'sent'])->get("/engineers/$eid")->assertOk()->assertDontSee('intro-prompt', false);
+    }
+
     public function test_t29_too_long_intro_stops_the_registration(): void
     {
         $users = DB::table('users')->count();
@@ -299,7 +329,7 @@ class V0190IntroTest extends TestCase
 
     public function test_t36_version(): void
     {
-        $this->assertSame('v0.19.0', config('park.version'));
-        $this->get('/login')->assertOk()->assertSee('v0.19.0');
+        $this->assertSame('v0.19.1', config('park.version'));
+        $this->get('/login')->assertOk()->assertSee('v0.19.1');
     }
 }

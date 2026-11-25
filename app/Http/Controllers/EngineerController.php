@@ -125,12 +125,16 @@ class EngineerController extends Controller
                 $introMsg = isset($saved['ok']) ? '推薦文を保存し、スキルを'.count($saved['added']).'件登録しました。' : ($saved['bad'] ?? '推薦文は保存できませんでした。');
             }
         }
+        // 推薦文を入れずに登録した SES・担当者には、詳細の画面で「続けて推薦文を登録しますか？」と1回だけ聞く（管理者・推薦文を入れた・自分自身のときは聞かない）
+        $prompt = $r->user()->role === 'ses' && $intro === null && !$self ? ($res['linked'] ? 'linked' : 'sent') : null;
         if ($res['linked']) {
-            return $this->go("/engineers/$id", ($self
+            $go = $this->go("/engineers/$id", ($self
                 ? 'ご自身をエンジニアとして登録しました。エンジニアの画面は、ログアウトして入り直し、「エンジニア」を選ぶと開けます。'
                 : '登録しました。このメールアドレスの方のアカウントに、エンジニアの役割を足しました（仮登録のご案内は送っていません）。').$introMsg);
+        } else {
+            $go = $this->go("/engineers/$id", '仮登録し、ご本人に仮登録のご案内を送りました。'.$introMsg);
         }
-        return $this->go("/engineers/$id", '仮登録し、ご本人に仮登録のご案内を送りました。'.$introMsg);
+        return $prompt ? $go->with('intro_prompt', $prompt) : $go;
     }
 
     // ---------- 推薦文（v0.19.0。判定は EngineerIntro。見られない人は 403） ----------

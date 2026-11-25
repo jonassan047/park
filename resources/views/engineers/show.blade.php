@@ -110,4 +110,10 @@
 @foreach($apps as $a)<tr><td><x-code :v="$a->code" /></td><td>{{ $a->title }} <x-code :v="$a->case_code" /></td><td>{{ badge('appStatus', $a->status) }}</td><td><a class="btn small" href="{{ url('/applications/'.$a->id) }}">詳細</a></td></tr>@endforeach
 </x-table></x-card>
 </div></div>
+{{-- 推薦文を入れずに登録した直後だけ（セッションのフラッシュ。1回だけ）、続けて推薦文を登録するか聞く。本文・個人情報は出さない --}}
+@if(session('intro_prompt') && $introCanEdit)
+<script>/*intro-prompt*/window.addEventListener('load', function () { setTimeout(function () {
+    if (confirm(@js((session('intro_prompt') === 'linked' ? '登録しました。' : '仮登録のご案内を送りました。').'続けて推薦文があれば登録してください。いま登録しますか？'))) location.href = @js(url('/engineers/'.$e->id.'/intro'));
+}, 0); });</script>
+@endif
 @endsection
