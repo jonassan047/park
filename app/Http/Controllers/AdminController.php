@@ -116,10 +116,11 @@ class AdminController extends Controller
             ->selectSub(DB::table('engineers')->whereColumn('ses_id', 's.id')->selectRaw('count(*)'), 'engs')
             ->selectSub(DB::table('contracts')->whereColumn('ses_id', 's.id')->where('status', 'active')->selectRaw('count(*)'), 'working')
             ->orderBy('name')->get();
+        [$list, $left] = filter_left($list, 'ses'); // 退会済みは、選んだときだけ出す
         [$list, $pager] = page_slice($list); // 名前順・1ページ 20 件
         // SES の人（状態を出すため）
         $reps = DB::table('users')->whereIn('id', $list->pluck('rep_user_id')->filter()->all())->get()->keyBy('id');
-        return view('admin.ses-index', compact('list', 'reps', 'pager'));
+        return view('admin.ses-index', compact('list', 'reps', 'pager', 'left'));
     }
 
     public function sesNew() { return view('admin.ses-new', ['approve' => null, 'v' => (object) []]); }
@@ -159,10 +160,16 @@ class AdminController extends Controller
         foreach ($engs as $e) { $e->account = engineer_state($e, $egUsers[$e->id] ?? null); $e->mail = account_mail($egUsers[$e->id] ?? null); $e->login_id = SesController::provisionalLoginId($egUsers[$e->id] ?? null); }
         // SES の交代で選べる人：この会社の、本登録が済んだ担当者（今の SES を除く）
         $repCandidates = $users->filter(fn ($x) => $x->active && !$x->left_at && $x->registered_at && (int) $x->id !== (int) $s->rep_user_id)->values();
+        // 表に出す行だけ、退会済みを除く（上の数え・交代の候補・「次の SES」は全件のまま）
+        [$usersShown, $usersLeft] = filter_left($users, 'staff');
+        [$dualAdminsShown, $dualLeft] = filter_left($dualAdmins, 'staff');
+        [$engsShown, $egLeft] = filter_left($engs, 'eg');
+        $staffLeft = ['hidden' => $usersLeft['hidden'] + $dualLeft['hidden'], 'shown' => $usersLeft['shown'] + $dualLeft['shown']];
         return view('admin.ses-show', [
             's' => $s, 'repName' => Registration::repName($s)[0],
-            'engs' => $engs, 'repCandidates' => $repCandidates,
-            'users' => $users, 'noUsable' => $noUsable, 'dualAdmins' => $dualAdmins,
+            'engsShown' => $engsShown, 'repCandidates' => $repCandidates,
+            'users' => $users, 'noUsable' => $noUsable,
+            'usersShown' => $usersShown, 'dualAdminsShown' => $dualAdminsShown, 'staffLeft' => $staffLeft, 'egLeft' => $egLeft,
             'me' => DB::table('users')->find(auth()->id()),
             // 停止の確認の文に添える、稼働中の契約と選考中の応募（エンジニアごとに問い合わせず、まとめて取る）
             'working' => DB::table('contracts')->whereIn('engineer_id', $egIds)->where('status', 'active')->pluck('engineer_id')->flip(),
@@ -190,7 +197,7 @@ class AdminController extends Controller
     {
         $s = $this->sesOrFail($id);
         $back = $this->sesBack($r, $id);
-        if ($s->status === 'left') return $this->go($back, 'すでに退会済です。');
+        if ($s->status === 'left') return $this->go($back, 'すでに退会済みです。');
         if (DB::table('contracts')->where('ses_id', $id)->where('status', 'active')->exists()) return $this->go($back, '退会にできません。稼働中の契約があります。先に契約を終了してください。', 'bad');
         DB::transaction(function () use ($id, $r) {
             $egIds = DB::table('engineers')->where('ses_id', $id)->pluck('id');
@@ -204,7 +211,7 @@ class AdminController extends Controller
             DB::table('ses_companies')->where('id', $id)->update(['status' => 'left']);
         });
         N::audit($r->user()->id, 'ses-leave', $s->name);
-        return $this->go($back, 'SES「'.$s->name.'」と所属エンジニアを退会済にしました。');
+        return $this->go($back, 'SES「'.$s->name.'」と所属エンジニアを退会済みにしました。');
     }
 
     public function sesUpdate(Request $r, int $id)
@@ -275,7 +282,7 @@ class AdminController extends Controller
     {
         $s = $this->sesOrFail($id);
         $back = $this->sesBack($r, $id);
-        if ($s->status === 'left') return $this->go($back, '退会済の SES は操作できません。', 'bad');
+        if ($s->status === 'left') return $this->go($back, '退会済みの SES は操作できません。', 'bad');
         if ($s->status === 'suspended') return $this->go($back, 'すでに停止中です。');
         if ($s->status === 'pending') return $this->go($back, '申込中の SES は停止できません。承認するか、退会にしてください。', 'bad');
         if ($s->status === 'provisional') return $this->go($back, '仮登録の SES は停止できません。仮登録を取り消すか、退会にしてください。', 'bad');
@@ -384,12 +391,13 @@ class AdminController extends Controller
         foreach ($list as $e) { $e->skills = $skills[$e->id] ?? ''; $e->account = engineer_state($e, $egUsers[$e->id] ?? null); $e->mail = account_mail($egUsers[$e->id] ?? null); $e->login_id = SesController::provisionalLoginId($egUsers[$e->id] ?? null); }
         if ($st) $list = $list->where('status', $st);
         if ($q !== '') $list = $list->filter(fn ($e) => str_contains(mb_strtolower(implode(' ', [$e->name, $e->kana, $e->skills, $e->ses_name, $e->strengths, $e->code])), mb_strtolower($q)));
+        [$list, $left] = filter_left($list, 'eg', $st === 'left' || show_left()); // 状態で「退会済み」を選んだときは、その条件を優先して出す
         [$list, $pager] = page_slice(sort_kana($list)); // あいうえお順・1ページ 20 件
         $egIds = $list->pluck('id');
         $staff = \App\Services\EgStaff::ofMany($list); // 担当者（まとめて読む）
         foreach ($list as $e) $e->staff_name = ($staff[(int) $e->id] ?? null)?->name;
         return view('admin.engineers', [
-            'list' => $list, 'pager' => $pager, 'q' => $q, 'st' => $st,
+            'list' => $list, 'pager' => $pager, 'q' => $q, 'st' => $st, 'left' => $left,
             // 連絡メールを送れる人（行にチェックを出す）。判定は DirectMail の1か所
             'mailable' => \App\Services\DirectMail::engineerTargets($r->user(), $egIds->all())['ok'],
             // 停止の確認の文に添える、稼働中の契約と選考中の応募（エンジニアごとに問い合わせず、まとめて取る）
@@ -600,7 +608,7 @@ class AdminController extends Controller
     {
         $u = DB::table('users')->where('id', $id)->where('role', 'admin')->first();
         abort_unless($u, 404);
-        if ($u->left_at) return $this->go("/admin/admins/$id", '退会済の人は直せません。', 'bad');
+        if ($u->left_at) return $this->go("/admin/admins/$id", '退会済みの人は直せません。', 'bad');
         return view('admin.admin-edit', ['u' => $u, 'self' => $u->id === auth()->id()]);
     }
 
@@ -608,7 +616,7 @@ class AdminController extends Controller
     {
         $target = DB::table('users')->where('id', $id)->where('role', 'admin')->first();
         abort_unless($target, 404);
-        if ($target->left_at) return $this->go("/admin/admins/$id", '退会済の人は直せません。', 'bad');
+        if ($target->left_at) return $this->go("/admin/admins/$id", '退会済みの人は直せません。', 'bad');
         $res = W::updateAdmin($id, $r->only(['name_sei', 'name_mei', 'kana_sei', 'kana_mei', 'company_name', 'email', 'position', 'phone', 'postal_code', 'address']), $r->user());
         if ($res['type'] === 'bad') return back()->withInput()->with('flash', ['msg' => $res['msg'], 'type' => 'bad']);
         return $this->go("/admin/admins/$id", $res['msg'], $res['type']);

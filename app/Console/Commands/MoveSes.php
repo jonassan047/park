@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Schema;
 class MoveSes extends Command
 {
     protected $signature = 'park:move-ses {from : 付け替え元の SES の id} {to : 付け替え先の SES の id} {--yes : 実際に実行する} {--restore : いちばん新しいバックアップから戻す（元の SES も参加中に戻す）}';
-    protected $description = 'SES の所属（エンジニア・担当者・案件・契約など）を別の SES に付け替え、元の SES を退会済にする';
+    protected $description = 'SES の所属（エンジニア・担当者・案件・契約など）を別の SES に付け替え、元の SES を退会済みにする';
 
     const COLUMNS = [
         'engineers' => ['ses_id'], 'users' => ['ses_id'], 'applications' => ['ses_id'], 'contracts' => ['ses_id'],
@@ -76,7 +76,7 @@ class MoveSes extends Command
             DB::table('ses_companies')->where('id', $from)->update(['status' => 'left', 'updated_at' => now_str()]);
         });
         N::audit(null, 'move-ses', "#{$from} → #{$to} ".json_encode(array_map('count', $plan), JSON_UNESCAPED_UNICODE).' '.basename($path));
-        $this->info('付け替えて、元の SES を退会済にしました。バックアップ：'.basename($path));
+        $this->info('付け替えて、元の SES を退会済みにしました。バックアップ：'.basename($path));
         return self::SUCCESS;
     }
 

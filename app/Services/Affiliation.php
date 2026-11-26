@@ -34,7 +34,7 @@ class Affiliation
     public static function blocker($u, object $e): ?string
     {
         $isAdmin = $u && $u->role === 'admin';
-        if ($e->status === 'left') return '退会済のエンジニアは、所属を変えられません。';
+        if ($e->status === 'left') return '退会済みのエンジニアは、所属を変えられません。';
         // 仮登録中＝本登録が済んでいないアカウント（role=eg）がある人。ログインの無い古い行は対象にしない
         if (DB::table('users')->where('engineer_id', $e->id)->where('role', 'eg')->whereNull('registered_at')->exists()) {
             return $isAdmin

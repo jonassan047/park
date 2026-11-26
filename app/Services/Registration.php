@@ -198,7 +198,7 @@ class Registration
     {
         $u = DB::table('users')->where('email', strtolower($email))->when($exceptUserId, fn ($q) => $q->where('id', '!=', $exceptUserId))->first();
         if (!$u) return null;
-        if ($u->left_at) return 'このメールアドレスは、退会済の方が使っていたため登録できません。';
+        if ($u->left_at) return 'このメールアドレスは、退会済みの方が使っていたため登録できません。';
         if (!$u->active) return 'このメールアドレスは、停止中の方が使っているため登録できません。';
         if (!$u->registered_at) return 'このメールアドレスは、仮登録中の方が使っています。送り直しや直しは、その方の画面から行ってください。';
         return 'このメールアドレスはすでに使われています。';
@@ -531,7 +531,7 @@ class Registration
     public static function resendEngineer(object $e, $actor): array
     {
         $bad = fn (string $m) => ['type' => 'bad', 'msg' => $m];
-        if ($e->status === 'left') return $bad('退会済のため、送れません。');
+        if ($e->status === 'left') return $bad('退会済みのため、送れません。');
         if ($e->suspended_at) return $bad('停止中のため、送れません。');
         if (!$e->email) return $bad('メールアドレスが登録されていません。');
         $mine = DB::table('users')->where('engineer_id', $e->id)->where('role', 'eg')->first();
@@ -613,7 +613,7 @@ class Registration
     public static function resend(object $target, $actor): array
     {
         if ($target->registered_at) return ['type' => 'bad', 'msg' => 'この方は、すでに本登録が済んでいます。'];
-        if ($target->left_at || !$target->active) return ['type' => 'bad', 'msg' => '停止中か退会済の方には送り直せません。'];
+        if ($target->left_at || !$target->active) return ['type' => 'bad', 'msg' => '停止中か退会済みの方には送り直せません。'];
         if (!self::companyAllows($target)) return ['type' => 'bad', 'msg' => '会社が参加中ではないため、送り直せません。'];
         if (!$target->email) return ['type' => 'bad', 'msg' => 'メールアドレスが登録されていません。'];
         self::sendLink($target, $actor);

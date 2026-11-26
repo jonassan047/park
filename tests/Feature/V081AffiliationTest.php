@@ -189,7 +189,7 @@ class V081AffiliationTest extends TestCase
         }
 
         $e = $this->mkEgIn($a, '退会 三郎', 'left@example.test', ['status' => 'left']);
-        $this->move(self::ADMIN, $e, $b)->assertSessionHas('flash.msg', '退会済のエンジニアは、所属を変えられません。');
+        $this->move(self::ADMIN, $e, $b)->assertSessionHas('flash.msg', '退会済みのエンジニアは、所属を変えられません。');
         $this->assertSame($a, $this->engSes($e));
 
         $e = $this->mkEgIn($a, '兼任 四郎', 'dual@example.test');
@@ -366,7 +366,7 @@ class V081AffiliationTest extends TestCase
     // T19：版
     public function test_t19_version(): void
     {
-        $this->assertSame('v0.19.1', config('park.version'));
-        $this->get('/login')->assertOk()->assertSee('v0.19.1');
+        $this->assertSame('v0.20.0', config('park.version'));
+        $this->get('/login')->assertOk()->assertSee('v0.20.0');
     }
 }

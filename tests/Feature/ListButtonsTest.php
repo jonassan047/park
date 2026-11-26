@@ -259,7 +259,7 @@ class ListButtonsTest extends TestCase
         DB::table('ses_companies')->where('id', $s2)->update(['status' => 'suspended']);
         DB::table('ses_companies')->where('id', $s3)->update(['status' => 'left']);
 
-        $r = $this->admin()->get('/admin/ses')->assertOk();
+        $r = $this->admin()->get('/admin/ses?left=1')->assertOk(); // 退会済みの行も出して確かめる
         $r->assertSee("/admin/ses/$s1/suspend", false)->assertSee("/admin/ses/$s1/delete", false)->assertDontSee("/admin/ses/$s1/resume", false);
         $r->assertSee("/admin/ses/$s2/resume", false)->assertDontSee("/admin/ses/$s2/suspend", false);
         $r->assertSee("/admin/ses/$pend/delete", false)->assertDontSee("/admin/ses/$pend/suspend", false)->assertDontSee("/admin/ses/$pend/resume", false);
@@ -320,7 +320,7 @@ class ListButtonsTest extends TestCase
         DB::table('engineers')->where('id', $e2)->update(['suspended_at' => now()]);
         $left = DB::table('engineers')->insertGetId(['ses_id' => $this->sesId('ses1@park.example'), 'name' => '退会 太郎', 'status' => 'left', 'created_at' => now_str(), 'updated_at' => now_str()]);
 
-        $r = $this->admin()->get('/admin/engineers')->assertOk();
+        $r = $this->admin()->get('/admin/engineers?left=1')->assertOk(); // 退会済みの行も出して確かめる
         $r->assertSee("/engineers/$e1/suspend", false)->assertSee("/engineers/$e1/delete", false)->assertSee("/engineers/$e1\"", false);
         $r->assertSee("/engineers/$e2/resume", false)->assertDontSee("/engineers/$e2/suspend", false);
         $r->assertDontSee("/engineers/$left/suspend", false)->assertDontSee("/engineers/$left/delete", false)->assertDontSee("/engineers/$left/resume", false);

@@ -89,7 +89,7 @@ class SuspendLeaveTest extends TestCase
         $mine = $this->addSesUser($sid, 'ses1a@park.example', '同僚 一郎'); // SES ではない担当者（SES ses1 の行は、交代のあとでなければ止められない。台帳 K21）
         $rep = $this->uid('ses1@park.example');
 
-        $r = $this->admin()->get("/admin/ses/$sid")->assertOk();
+        $r = $this->admin()->get("/admin/ses/$sid?left=1")->assertOk(); // 退会済みの行も出して確かめる
         $r->assertSee('担当者を登録')->assertSee('>停止</button>', false)->assertSee('>退会</button>', false);
         $r->assertSee("/admin/ses/$sid/users/$mine/suspend")->assertSee("/admin/ses/$sid/users/$mine/delete");
         // SES の行：「SES」の印と詳細だけで、停止・再開・退会のボタンは出ない
@@ -159,17 +159,17 @@ class SuspendLeaveTest extends TestCase
         $uid = $this->addSesUser($sid, 'ses1f@park.example', '退会 六郎');
         $this->admin()->post("/admin/ses/$sid/users/$uid/delete")->assertRedirect("/admin/ses/$sid");
         $this->assertSame('ok', $this->flash('type'));
-        $this->assertStringContainsString('退会済にしました', $this->flash('msg'));
+        $this->assertStringContainsString('退会済みにしました', $this->flash('msg'));
         $row = DB::table('users')->find($uid);
         $this->assertSame(0, (int) $row->active);
         $this->assertNotNull($row->left_at);
-        $this->assertSame('退会済', user_state($row));
+        $this->assertSame('退会済み', user_state($row));
         $this->assertSame(1, DB::table('audit_log')->where('action', 'ses-user-leave')->count());
 
         foreach (['suspend', 'resume', 'delete'] as $a) {
             $this->admin()->post("/admin/ses/$sid/users/$uid/$a");
             $this->assertSame('bad', $this->flash('type'));
-            $this->assertSame('退会済の人は操作できません。', $this->flash('msg'));
+            $this->assertSame('退会済みの人は操作できません。', $this->flash('msg'));
         }
         $after = DB::table('users')->find($uid);
         $this->assertSame($row->left_at, $after->left_at);
@@ -429,7 +429,7 @@ class SuspendLeaveTest extends TestCase
         $this->assertNotContains($left, $ids(CaseMail::candidates($admin, $c, 'own')));
         $this->assertSame(0, W::distribute($caseId, [$left], $admin));
         $this->admin()->post("/cases/$caseId/apply", ['engineer_id' => $left]);
-        $this->assertSame('このエンジニアは退会済のため、応募できません。', $this->flash('msg'));
+        $this->assertSame('このエンジニアは退会済みのため、応募できません。', $this->flash('msg'));
         $this->assertSame($apps, $this->rowCount('applications'));
         $this->as('ses1@park.example')->get("/cases/$caseId")->assertDontSee('高橋 陽介');
     }
@@ -449,12 +449,12 @@ class SuspendLeaveTest extends TestCase
         $this->assertNotNull(DB::table('engineers')->where('id', $eid)->value('suspended_at'));
         $row = DB::table('users')->where('engineer_id', $eid)->where('role', 'eg')->first();
         $this->assertNotNull($row->left_at);
-        $this->assertSame('退会済', user_state($row));
+        $this->assertSame('退会済み', user_state($row));
 
         foreach (['suspend', 'resume'] as $a) {
             $this->admin()->post("/engineers/$eid/$a");
             $this->assertSame('bad', $this->flash('type'));
-            $this->assertSame('退会済のエンジニアは操作できません。', $this->flash('msg'));
+            $this->assertSame('退会済みのエンジニアは操作できません。', $this->flash('msg'));
         }
         $this->admin()->get("/engineers/$eid")->assertDontSee('>停止</button>', false)->assertDontSee('>再開</button>', false)->assertDontSee('>退会</button>', false);
 

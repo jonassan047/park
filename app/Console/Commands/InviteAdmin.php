@@ -29,7 +29,7 @@ class InviteAdmin extends Command
 
         $u = DB::table('users')->where('email', $email)->first();
         if ($u) {
-            if ($u->left_at) return $this->refuse('このメールアドレスは、退会済の方が使っていたため登録できません。');
+            if ($u->left_at) return $this->refuse('このメールアドレスは、退会済みの方が使っていたため登録できません。');
             if ($u->registered_at || $u->password) return $this->refuse('このメールアドレスは、すでに使われています。');
             if ($u->role !== 'admin') return $this->refuse('このメールアドレスは、管理者ではない立場の仮登録に使われています。');
             if (!$u->active) return $this->refuse('このメールアドレスは、停止中の方が使っています。');

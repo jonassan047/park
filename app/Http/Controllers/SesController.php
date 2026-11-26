@@ -47,6 +47,7 @@ class SesController extends Controller
     {
         $list = DB::table('engineers as e')->where('e.ses_id', $r->user()->ses_id)->select('e.*')
             ->selectSub(DB::table('engineer_projects')->whereColumn('engineer_id', 'e.id')->selectRaw('count(*)'), 'projs')->get();
+        [$list, $left] = filter_left($list, 'eg'); // 自社の行の中から、退会済みは選んだときだけ出す
         [$list, $pager] = page_slice(sort_kana($list)); // あいうえお順・1ページ 20 件
         $skills = SkillChecks::summaryMany($list->pluck('id')->all());
         // ログインの状態：兼任の人も engineer_id で探す（管理者との兼任かどうかは、ここには出さない）
@@ -61,7 +62,7 @@ class SesController extends Controller
         }
         $egIds = $list->pluck('id');
         return view('ses.engineers', [
-            'list' => $list, 'pager' => $pager,
+            'list' => $list, 'pager' => $pager, 'left' => $left,
             // 連絡メールを送れる人（行にチェックを出す）。判定は DirectMail の1か所
             'mailable' => \App\Services\DirectMail::engineerTargets($r->user(), $egIds->all())['ok'],
             // 停止の確認の文に添える、稼働中の契約と選考中の応募（エンジニアごとに問い合わせず、まとめて取る）
@@ -131,10 +132,14 @@ class SesController extends Controller
         $s = DB::table('ses_companies')->find($id);
         $egUsers = DB::table('users')->whereIn('engineer_id', $egIds)->orderByRaw("case when role = 'eg' then 1 else 0 end")->get()->keyBy('engineer_id');
         foreach ($engs as $e) { $e->account = engineer_state($e, $egUsers[$e->id] ?? null); $e->mail = self::mailForSes($egUsers[$e->id] ?? null); $e->login_id = self::provisionalLoginId($egUsers[$e->id] ?? null); }
+        $users = DB::table('users')->where('ses_id', $id)->whereIn('role', ['ses', 'admin'])->orderByRaw("case when role = 'admin' then 1 else 0 end")->orderBy('id')->get(); // 担当者を兼ねる管理者は最後に
+        // 表に出す行だけ、退会済みを除く（下の契約・応募の数えは全件のまま）
+        [$users, $staffLeft] = filter_left($users, 'staff');
+        [$engsShown, $egLeft] = filter_left($engs, 'eg');
         return view('ses.company', [
             's' => $s, 'repName' => Registration::repName($s)[0], 'isRep' => Requirements::isRep($r->user()), 'repId' => $s->rep_user_id,
-            'users' => DB::table('users')->where('ses_id', $id)->whereIn('role', ['ses', 'admin'])->orderByRaw("case when role = 'admin' then 1 else 0 end")->orderBy('id')->get(), // 担当者を兼ねる管理者は最後に
-            'engs' => $engs,
+            'users' => $users, 'staffLeft' => $staffLeft, 'egLeft' => $egLeft,
+            'engs' => $engsShown,
             'working' => DB::table('contracts')->whereIn('engineer_id', $egIds)->where('status', 'active')->pluck('engineer_id')->flip(),
             'inSel' => DB::table('applications')->whereIn('engineer_id', $egIds)->whereIn('status', PipelineController::OPEN)->get(['engineer_id'])->groupBy('engineer_id')->map->count(),
             'invs' => DB::table('invoices')->where('ses_id', $id)->where('status', '!=', 'draft')->orderByDesc('period')->get(),

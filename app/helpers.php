@@ -6,8 +6,8 @@ use Illuminate\Support\HtmlString;
 
 const PARK_LABELS = [
     'role' => ['admin' => '管理者', 'ses' => 'SES', 'eg' => 'エンジニア'],
-    'sesStatus' => ['pending' => '申込中', 'provisional' => '仮登録', 'active' => '参加中', 'suspended' => '停止', 'left' => '退会済'],
-    'engStatus' => ['available' => '待機中', 'proposing' => '提案中', 'working' => '稼働中', 'unavailable' => '休止', 'left' => '退会済'],
+    'sesStatus' => ['pending' => '申込中', 'provisional' => '仮登録', 'active' => '参加中', 'suspended' => '停止', 'left' => '退会済み'],
+    'engStatus' => ['available' => '待機中', 'proposing' => '提案中', 'working' => '稼働中', 'unavailable' => '休止', 'left' => '退会済み'],
     'caseStatus' => ['draft' => '下書き', 'open' => '募集中', 'filled' => '充足', 'closed' => '終了'],
     'offerStatus' => ['sent' => '配信済み', 'viewed' => '既読', 'declined' => '見送り', 'applied' => '応募'],
     'appStatus' => ['applied' => '応募', 'submitted' => '書類提出', 'doc_passed' => '書類通過', 'interview' => '面談調整', 'interviewed' => '面談済み', 'won' => '成約', 'rejected' => '見送り', 'withdrawn' => '辞退', 'note' => 'メモ'],
@@ -71,12 +71,36 @@ function staff_label(?object $u): string
     return trim(($s->name ?? '').' '.$u->name);
 }
 
-// 人のアカウントの状態（1か所で決める。上から順に判定）：退会済・停止・仮登録（心当たりなし／期限切れ）・仮登録・参加中。
+// 一覧で「退会済みを表示する」を選んでいるか。?left=1 のときだけ（空・0・配列などは「表示しない」）
+function show_left(): bool
+{
+    return request()->query('left') === '1';
+}
+
+// 退会済みの行か。$kind は ses（会社）・staff（担当者のアカウント）・eg（エンジニア）
+function is_left_row(string $kind, object $row): bool
+{
+    return match ($kind) {
+        'ses', 'eg' => ($row->status ?? '') === 'left',
+        'staff' => !empty($row->left_at),
+    };
+}
+
+// 一覧の行から退会済みを除く（$show なら除かない）。[表に出す行, ['hidden' => 隠した件数, 'shown' => 出している退会済みの件数]] を返す
+function filter_left(\Illuminate\Support\Collection $list, string $kind, ?bool $show = null): array
+{
+    $show ??= show_left();
+    $rest = $list->reject(fn ($r) => is_left_row($kind, $r))->values();
+    $n = $list->count() - $rest->count();
+    return [$show ? $list : $rest, ['hidden' => $show ? 0 : $n, 'shown' => $show ? $n : 0]];
+}
+
+// 人のアカウントの状態（1か所で決める。上から順に判定）：退会済み・停止・仮登録（心当たりなし／期限切れ）・仮登録・参加中。
 // 「期限切れ」は別の状態ではなく、仮登録の中の表示
 function user_state(?object $u): string
 {
     if (!$u) return 'なし';
-    if (!empty($u->left_at)) return '退会済';
+    if (!empty($u->left_at)) return '退会済み';
     if (!$u->active) return '停止';
     if (empty($u->registered_at)) {
         if (!empty($u->reg_declined_at)) return '仮登録（心当たりなし）';
@@ -108,9 +132,10 @@ function account_mail(?object $u): string
 }
 
 // エンジニアの状態の言葉（一覧・詳細）。$u はそのエンジニアのアカウント（無ければ null）。
-// アカウントの状態が基本。ログインの無い仮登録のエンジニアは「仮登録（未送信）」、兼任の人でエンジニアの立場の登録がまだなら付け足す
+// 退会済みのエンジニアは、ログインが無くても「退会済み」。ほかはアカウントの状態が基本。ログインの無い仮登録のエンジニアは「仮登録（未送信）」、兼任の人でエンジニアの立場の登録がまだなら付け足す
 function engineer_state(object $e, ?object $u): string
 {
+    if (($e->status ?? '') === 'left') return '退会済み';
     if (!$u) return empty($e->registered_at) ? '仮登録（未送信）' : 'なし';
     $s = user_state($u);
     if ($s === '参加中' && empty($e->registered_at)) return '参加中（エンジニアの項目が未入力）';
@@ -126,12 +151,12 @@ function engineer_stop_confirm(bool $working, int $inSelection): string
 }
 
 // 一覧へ戻る URL。$query は一覧で開いていたときの問い合わせの文字（フォームの hidden で送られる）。
-// 決まった鍵（q・status・ses・page）の短い文字だけを付け直す。パスは呼ぶ側が固定で渡す（送られた値から作らない）
+// 決まった鍵（q・status・ses・page・left）の短い文字だけを付け直す。パスは呼ぶ側が固定で渡す（送られた値から作らない）
 function list_back(string $path, ?string $query): string
 {
     parse_str((string) $query, $p);
     $keep = [];
-    foreach (['q', 'status', 'ses', 'page'] as $k) {
+    foreach (['q', 'status', 'ses', 'page', 'left'] as $k) {
         if (isset($p[$k]) && is_string($p[$k]) && mb_strlen($p[$k]) <= 200) $keep[$k] = $p[$k];
     }
     $qs = http_build_query($keep);
@@ -411,8 +436,9 @@ function page_slice(\Illuminate\Support\Collection $list, int $per = 20): array
     return [$list->slice(($page - 1) * $per, $per)->values(), ['page' => $page, 'last' => $last, 'total' => $total, 'per' => $per]];
 }
 
-// 画面のタイトルなど、名前を出すところは必ず ID とセットにする（2026-11-25 TEZZO「SE-000011　AAA」の形）。ID が無ければ名前だけ
-function id_title(?string $code, ?string $name): string
+// 画面のタイトルなど、名前を出すところは必ず ID とセットにする（2026-11-25 TEZZO「SE-000011　AAA」の形）。ID が無ければ名前だけ。
+// $left（退会済み）のときは、後ろに「　退会済み」を付ける
+function id_title(?string $code, ?string $name, bool $left = false): string
 {
-    return trim(($code ? $code.'　' : '').($name ?? ''));
+    return trim(($code ? $code.'　' : '').($name ?? '')).($left ? '　退会済み' : '');
 }

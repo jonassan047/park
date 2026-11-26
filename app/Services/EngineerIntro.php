@@ -12,7 +12,7 @@ class EngineerIntro
 {
     const MAX = 10000;      // 本文の長さ（文字）
     const TABLE = 'engineer_intros';
-    const LEFT = '退会済のエンジニアの推薦文は直せません。';
+    const LEFT = '退会済みのエンジニアの推薦文は直せません。';
     const NONE = '推薦文はありません。';
 
     // 読めるか：管理者と、そのエンジニアが今自社の SES・担当者。EG 本人は読めない。兼任の人（管理者を兼ねる人も）も、自分自身の分は読めない

@@ -77,7 +77,7 @@
   @php $st = $e->status ?? 'available'; $opts = ['available' => '案件を探している', 'unavailable' => '今は休止'] + (in_array($st, ['working', 'proposing']) ? [$st => lbl('engStatus', $st)] : []); @endphp
   <x-field label="今の状態" name="status" type="select" :options="$opts" :value="$st" />
 @elseif(($e->status ?? '') === 'left')
-  <div class="field"><label>状態</label><p>退会済（退会は、詳細の画面の「退会」で行います。ここからは変えられません）</p></div>
+  <div class="field"><label>状態</label><p>退会済み（退会は、詳細の画面の「退会」で行います。ここからは変えられません）</p></div>
 @else
   <x-field label="状態" name="status" type="select" :options="array_diff_key(PARK_LABELS['engStatus'], ['left' => 1])" :value="$e->status ?? 'available'" />
 @endif

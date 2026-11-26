@@ -93,7 +93,7 @@ class SesDetailButtonsTest extends TestCase
         $left = $this->addSesUser($sid, 'ses1c@park.example', '退会 三郎');
         DB::table('users')->where('id', $left)->update(['active' => 0, 'left_at' => now()]);
 
-        $r = $this->admin()->get("/admin/ses/$sid")->assertOk();
+        $r = $this->admin()->get("/admin/ses/$sid?left=1")->assertOk(); // 退会済みの行も出す
         foreach ([$rep, $mine, $stopped, $left] as $u) $r->assertSee("href=\"" . url("/admin/ses/$sid/users/$u") . "\"", false);
         foreach (['suspend', 'resume', 'delete'] as $a) $r->assertDontSee("/admin/ses/$sid/users/$rep/$a");
         $r->assertSee("/admin/ses/$sid/users/$mine/suspend")->assertSee("/admin/ses/$sid/users/$mine/delete");
@@ -149,7 +149,7 @@ class SesDetailButtonsTest extends TestCase
         $sid = $this->sesId('ses1@park.example');
         $e1 = $this->egId('eg1@park.example');
         DB::table('engineers')->where('id', $e1)->update(['status' => 'left']);
-        $r = $this->admin()->get("/admin/ses/$sid")->assertOk();
+        $r = $this->admin()->get("/admin/ses/$sid?left=1")->assertOk(); // 退会済みの行も出す
         foreach (['suspend', 'resume', 'delete'] as $a) $r->assertDontSee("/engineers/$e1/$a");
         $r->assertSee('href="' . url("/engineers/$e1") . '"', false);
     }
@@ -208,7 +208,7 @@ class SesDetailButtonsTest extends TestCase
 
         // 二重の退会：断られて SES の詳細に戻る
         $this->admin()->post("/engineers/$e1/delete", ['back' => 'ses'])->assertRedirect("/admin/ses/$sid");
-        $this->assertSame('すでに退会済です。', $this->flash('msg'));
+        $this->assertSame('すでに退会済みです。', $this->flash('msg'));
         // 退会済は停止などもできない（今の判定のまま）。戻り先だけ確認
         $this->admin()->post("/engineers/$e1/suspend", ['back' => 'ses'])->assertRedirect("/admin/ses/$sid");
         $this->assertSame('left', DB::table('engineers')->where('id', $e1)->value('status'));

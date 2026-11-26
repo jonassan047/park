@@ -78,6 +78,9 @@ table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
 th { font-size: 12px; color: var(--sub); font-weight: 600; white-space: nowrap; }
 table.edit td { padding: 4px; }
+/* 退会済みの行はグレー（詳細のボタンは押せるまま） */
+tr.is-left > td { background: #f2f2f2; color: #8a8a8a; }
+tr.is-left .badge, tr.is-left a:not(.btn) { opacity: .7; }
 .empty { color: var(--sub); }
 .muted { color: var(--sub); }
 .small { font-size: 12px; }

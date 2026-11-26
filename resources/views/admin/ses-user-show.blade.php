@@ -1,4 +1,4 @@
-@extends('layouts.app', ['title' => id_title($u->staff_code, $u->name)])
+@extends('layouts.app', ['title' => id_title($u->staff_code, $u->name, !empty($u->left_at))])
 @section('content')
 @php
     $state = user_state($u);
@@ -11,8 +11,8 @@
 <a class="btn ghost small" href="{{ url('/people/'.$u->id.'/edit') }}">仮登録の内容を直す</a>
 @if((int) $u->id !== (int) $s->rep_user_id)<x-post :action="'/people/'.$u->id.'/cancel'" label="取り消し" cls="danger small" confirm="この仮登録を取り消します。元に戻せません。よろしいですか？" />@endif @endif
 @if(!$isRepRow && $state === '停止')<x-post :action="$base.'/resume'" label="再開" cls="small" :fields="$back" :confirm="$u->name.' さんを再開します。'" />
-@elseif(!$isRepRow && $state !== '退会済')<x-post :action="$base.'/suspend'" label="停止" cls="ghost small" :fields="$back" :confirm="$u->name.' さんを停止します。ログインできなくなります（再開できます）。'" />@endif
-@if(!$isRepRow && $state !== '退会済')<x-post :action="$base.'/delete'" label="退会" cls="danger small" :fields="$back" :confirm="$u->name.' さんを退会済にします。ログインできなくなり、元に戻せません（記録は残ります）。よろしいですか？'" />@endif
+@elseif(!$isRepRow && empty($u->left_at))<x-post :action="$base.'/suspend'" label="停止" cls="ghost small" :fields="$back" :confirm="$u->name.' さんを停止します。ログインできなくなります（再開できます）。'" />@endif
+@if(!$isRepRow && empty($u->left_at))<x-post :action="$base.'/delete'" label="退会" cls="danger small" :fields="$back" :confirm="$u->name.' さんを退会済みにします。ログインできなくなり、元に戻せません（記録は残ります）。よろしいですか？'" />@endif
 </x-slot:actions>
 <dl class="dl">
 <dt>ID</dt><dd><x-code :v="$u->staff_code" /></dd>

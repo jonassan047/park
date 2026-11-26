@@ -133,7 +133,7 @@ class V0190IntroEdgeTest extends TestCase
         $a1 = $this->a1();
         $this->save($a1, self::BODY);
         DB::table('engineers')->where('id', $a1)->update(['status' => 'left']);
-        $this->as(self::AS2)->post("/engineers/$a1/intro/delete")->assertSessionHas('flash.msg', '退会済のエンジニアの推薦文は直せません。');
+        $this->as(self::AS2)->post("/engineers/$a1/intro/delete")->assertSessionHas('flash.msg', '退会済みのエンジニアの推薦文は直せません。');
         $this->assertSame(1, DB::table('engineer_intros')->where('engineer_id', $a1)->count());
     }
 

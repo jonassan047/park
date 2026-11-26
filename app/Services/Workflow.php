@@ -58,7 +58,7 @@ class Workflow
     public static function suspendSesUser(int $sesId, int $uid, $actor): ?array
     {
         if (!($u = self::sesUserOf($sesId, $uid))) return null;
-        if ($u->left_at) return ['type' => 'bad', 'msg' => '退会済の人は操作できません。'];
+        if ($u->left_at) return ['type' => 'bad', 'msg' => '退会済みの人は操作できません。'];
         if (!$u->active) return ['type' => 'ok', 'msg' => 'すでに停止中です。'];
         if ($rep = self::repGuard($u)) return $rep;
         if ($only = self::onlyUsableUser($sesId, $u)) return $only;
@@ -72,7 +72,7 @@ class Workflow
     public static function resumeSesUser(int $sesId, int $uid, $actor): ?array
     {
         if (!($u = self::sesUserOf($sesId, $uid))) return null;
-        if ($u->left_at) return ['type' => 'bad', 'msg' => '退会済の人は操作できません。'];
+        if ($u->left_at) return ['type' => 'bad', 'msg' => '退会済みの人は操作できません。'];
         if ($u->active) return ['type' => 'ok', 'msg' => 'すでに使えます。'];
         DB::table('users')->where('id', $uid)->update(['active' => 1, 'updated_at' => now_str()]);
         N::audit($actor->id ?? null, 'ses-user-resume', self::sesCompanyName($sesId).' '.$u->name);
@@ -85,7 +85,7 @@ class Workflow
     public static function leaveSesUser(int $sesId, int $uid, $actor): ?array
     {
         if (!($u = self::sesUserOf($sesId, $uid))) return null;
-        if ($u->left_at) return ['type' => 'bad', 'msg' => '退会済の人は操作できません。'];
+        if ($u->left_at) return ['type' => 'bad', 'msg' => '退会済みの人は操作できません。'];
         if ($rep = self::repGuard($u)) return $rep;
         if ($only = self::onlyUsableUser($sesId, $u)) return $only;
         // エンジニアを兼ねている人は、SES 担当者の役割だけ外す（エンジニアとしては引き続き入れる）
@@ -100,7 +100,7 @@ class Workflow
         DB::table('users')->where('id', $uid)->update(['active' => 0, 'left_at' => now_str(), 'token' => null, 'token_expires' => null, 'updated_at' => now_str()]);
         N::audit($actor->id ?? null, 'ses-user-leave', self::sesCompanyName($sesId).' '.$u->name);
         EgStaff::release($uid, $actor, 'leave');
-        return ['type' => 'ok', 'msg' => "{$u->name} さんを退会済にしました。"];
+        return ['type' => 'ok', 'msg' => "{$u->name} さんを退会済みにしました。"];
     }
 
     // ---------- 管理者の停止・再開・退会（管理者だけが押せる） ----------
@@ -112,7 +112,7 @@ class Workflow
         $u = DB::table('users')->where('id', $id)->where('role', 'admin')->lockForUpdate()->first();
         if (!$u) return ['null' => true];
         if ($id === (int) ($actor->id ?? 0)) return ['type' => 'bad', 'msg' => 'ご自身は、停止・再開・退会にできません。ほかの管理者にお願いしてください。'];
-        if ($u->left_at) return ['type' => 'bad', 'msg' => '退会済の人は操作できません。'];
+        if ($u->left_at) return ['type' => 'bad', 'msg' => '退会済みの人は操作できません。'];
         if ($stopping) {
             $others = DB::table('users')->where('role', 'admin')->where('id', '!=', $id)->where('active', 1)->whereNull('left_at')->whereNotNull('password')->lockForUpdate()->get(['id'])->count();
             if ($others === 0) return ['type' => 'bad', 'msg' => '使える管理者がほかにいなくなるため、停止・退会にはできません。'];
@@ -168,7 +168,7 @@ class Workflow
             DB::table('users')->where('id', $id)->update(['active' => 0, 'left_at' => now_str(), 'token' => null, 'token_expires' => null, 'updated_at' => now_str()]);
             N::audit($actor->id ?? null, 'admin-leave', "#user {$id}");
             EgStaff::release($id, $actor, 'leave');
-            return ['type' => 'ok', 'msg' => "{$u->name} さんを退会済にしました。"];
+            return ['type' => 'ok', 'msg' => "{$u->name} さんを退会済みにしました。"];
         });
     }
 
@@ -176,7 +176,7 @@ class Workflow
     public static function suspendEngineer(int $id, $actor): array
     {
         $e = DB::table('engineers')->find($id);
-        if ($e->status === 'left') return ['type' => 'bad', 'msg' => '退会済のエンジニアは操作できません。'];
+        if ($e->status === 'left') return ['type' => 'bad', 'msg' => '退会済みのエンジニアは操作できません。'];
         if ($e->suspended_at) return ['type' => 'ok', 'msg' => 'すでに停止中です。'];
         DB::transaction(function () use ($id) {
             DB::table('engineers')->where('id', $id)->update(['suspended_at' => now_str(), 'updated_at' => now_str()]);
@@ -190,7 +190,7 @@ class Workflow
     public static function resumeEngineer(int $id, $actor): array
     {
         $e = DB::table('engineers')->find($id);
-        if ($e->status === 'left') return ['type' => 'bad', 'msg' => '退会済のエンジニアは操作できません。'];
+        if ($e->status === 'left') return ['type' => 'bad', 'msg' => '退会済みのエンジニアは操作できません。'];
         if (!$e->suspended_at) return ['type' => 'ok', 'msg' => '停止していません。'];
         // 停止のとき active=0 にした本人のアカウントを戻す。退会の記録（left_at）がある人は戻さない
         DB::transaction(function () use ($id) {
@@ -966,7 +966,7 @@ class Workflow
         $e = DB::table('engineers')->find($engineerId);
         if (!$c || !$e) throw new \RuntimeException('案件またはエンジニアが見つかりません');
         if ($c->status !== 'open') throw new \RuntimeException('この案件は募集を終えています');
-        if ($e->status === 'left') throw new \RuntimeException('このエンジニアは退会済のため、応募できません。');
+        if ($e->status === 'left') throw new \RuntimeException('このエンジニアは退会済みのため、応募できません。');
         if ($e->suspended_at) throw new \RuntimeException('このエンジニアは停止中のため、応募できません。');
         if (!$e->registered_at) throw new \RuntimeException('このエンジニアは、本登録がまだ済んでいないため、応募できません。');
         // 案内メールの返事で本人が「応募したい」と言っているとき（SES の「応募あり」ボタン）は、登録の内容の確認を待たない

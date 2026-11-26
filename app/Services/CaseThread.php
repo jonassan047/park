@@ -164,7 +164,7 @@ class CaseThread
         }
         // 兼任の人が、担当者・管理者の立場で、自分自身のやり取りに書くことはできない
         if ($u->role !== 'eg' && $u->engineer_id && (int) $u->engineer_id === (int) $e->id) return 'ご自身のやり取りには、エンジニアとして入って書いてください。';
-        if ($e->status === 'left' || $e->suspended_at || !$e->registered_at) return 'このエンジニアは、停止中・退会済・仮登録のため、書けません（過去のやり取りは読めます）。';
+        if ($e->status === 'left' || $e->suspended_at || !$e->registered_at) return 'このエンジニアは、停止中・退会済み・仮登録のため、書けません（過去のやり取りは読めます）。';
         if (DB::table('ses_companies')->where('id', $e->ses_id)->value('status') !== 'active') return '所属の会社が参加中ではないため、書けません。';
         // 相手が別の会社（受注 SES）のとき、その会社も参加中であること（R10）
         if ($partner !== (int) $e->ses_id && DB::table('ses_companies')->where('id', $partner)->value('status') !== 'active') return '受注 SES が参加中ではないため、書けません。';

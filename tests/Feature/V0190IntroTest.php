@@ -151,7 +151,7 @@ class V0190IntroTest extends TestCase
         $a1 = $this->a1();
         $this->save($a1, self::BODY);
         DB::table('engineers')->where('id', $a1)->update(['status' => 'left']);
-        $this->save($a1, 'Java')->assertSessionHas('flash.msg', '退会済のエンジニアの推薦文は直せません。');
+        $this->save($a1, 'Java')->assertSessionHas('flash.msg', '退会済みのエンジニアの推薦文は直せません。');
         $this->as(self::AS2)->get("/engineers/$a1/intro")->assertOk()->assertSee(self::MARK);
     }
 
@@ -329,7 +329,7 @@ class V0190IntroTest extends TestCase
 
     public function test_t36_version(): void
     {
-        $this->assertSame('v0.19.1', config('park.version'));
-        $this->get('/login')->assertOk()->assertSee('v0.19.1');
+        $this->assertSame('v0.20.0', config('park.version'));
+        $this->get('/login')->assertOk()->assertSee('v0.20.0');
     }
 }

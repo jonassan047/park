@@ -1,12 +1,12 @@
 @php $u = auth()->user(); $mine = $u->role === 'eg'; @endphp
-@extends('layouts.app', ['title' => id_title($e->code, $e->name), 'wide' => true])
+@extends('layouts.app', ['title' => id_title($e->code, $e->name, $e->status === 'left'), 'wide' => true])
 @section('content')
 <div class="cols"><div>
 <x-card title="エンジニア情報">
 <x-slot:actions>@if(!$mine && $u->role !== 'eg' && $e->status !== 'left')
 @if($e->suspended_at)<x-post :action="'/engineers/'.$e->id.'/resume'" label="再開" cls="small" confirm="このエンジニアを再開します。ログインでき、案件の配信の候補にも出るようになります。" />
 @else<x-post :action="'/engineers/'.$e->id.'/suspend'" label="停止" cls="ghost small" :confirm="engineer_stop_confirm((bool) $working, (int) $inSelection)" />@endif
-<x-post :action="'/engineers/'.$e->id.'/delete'" label="退会" cls="danger small" confirm="このエンジニアを退会済にします。ログインできなくなり、元に戻せません（記録は残ります）。よろしいですか？" />@endif
+<x-post :action="'/engineers/'.$e->id.'/delete'" label="退会" cls="danger small" confirm="このエンジニアを退会済みにします。ログインできなくなり、元に戻せません（記録は残ります）。よろしいですか？" />@endif
 @if(in_array($u->role, ['admin', 'ses'], true) && $e->email && !($eu && $eu->registered_at) && !$e->suspended_at && $e->status !== 'left')
 <x-post :action="'/engineers/'.$e->id.'/invite'" label="送り直し" cls="ghost small" />
 @endif
@@ -26,7 +26,7 @@
 <dt>働き方</dt><dd>{{ lbl('workStyle', $e->work_style) }}・週{{ $e->days_per_week ?: 5 }}日</dd>
 <dt>強み</dt><dd>{{ $e->strengths ?: '—' }}</dd><dt>自己PR</dt><dd>{!! nl2br(e($e->summary)) ?: '—' !!}</dd>
 <dt>本人の確認</dt><dd>@if($e->self_confirmed_at)済み（{{ fmt_dt($e->self_confirmed_at) }}）@else<b>まだ</b><span class="muted">（ご本人が確かめるまで、応募できません。管理者・SES が書き換えると、もう一度確認が必要になります）</span> @endif</dd>
-<dt>アカウント</dt><dd>{{ $eu ? (user_state($eu) === '参加中' ? '参加中（最終ログイン '.fmt_dt($eu->last_login).'）' : user_state($eu)) : 'なし' }}@if($eu && $u->role === 'admin' && in_array($eu->role, ['ses', 'admin'], true)) <span class="badge info">{{ $eu->role === 'ses' ? 'SES 担当者と兼任' : '管理者と兼任' }}</span>@endif @if($eu)<br><span class="muted">{{ ($eu->role === 'admin' && $u->role !== 'admin') ? '—' : account_mail($eu) }}</span>@endif</dd>
+<dt>アカウント</dt><dd>{{ $e->status === 'left' ? '退会済み' : ($eu ? (user_state($eu) === '参加中' ? '参加中（最終ログイン '.fmt_dt($eu->last_login).'）' : user_state($eu)) : 'なし') }}@if($eu && $u->role === 'admin' && in_array($eu->role, ['ses', 'admin'], true)) <span class="badge info">{{ $eu->role === 'ses' ? 'SES 担当者と兼任' : '管理者と兼任' }}</span>@endif @if($eu)<br><span class="muted">{{ ($eu->role === 'admin' && $u->role !== 'admin') ? '—' : account_mail($eu) }}</span>@endif</dd>
 
 <dt>個人情報の同意</dt><dd>@if($e->consent_at){{ fmt_date($e->consent_at) }}@else<span class="bad-text">未</span>@endif</dd>
 </dl>

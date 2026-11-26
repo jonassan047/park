@@ -226,7 +226,7 @@ class EngineerController extends Controller
     {
         $e = $this->load($r, $id);
         abort_if($r->user()->role === 'eg', 403);
-        if ($e->status === 'left') return $this->go("/engineers/$id", '退会済のエンジニアは、担当者を付け替えられません。', 'bad');
+        if ($e->status === 'left') return $this->go("/engineers/$id", '退会済みのエンジニアは、担当者を付け替えられません。', 'bad');
         $to = $r->input('staff_user_id');
         $ok = is_scalar($to) && ctype_digit((string) $to) && EgStaff::candidates((int) $e->ses_id)->contains(fn ($x) => (int) $x->id === (int) $to);
         if (!$ok) return back()->with('flash', ['msg' => '選べない担当者です。', 'type' => 'bad']);
@@ -256,7 +256,7 @@ class EngineerController extends Controller
         } else {
             // 退会は詳細の「退会」でだけ行う。退会済の人の状態は、ここでは変えられない
             if ($e->status === 'left') unset($body['status']);
-            elseif (($body['status'] ?? '') === 'left') return back()->withInput()->with('flash', ['msg' => '状態を「退会済」にはできません。退会は、詳細の「退会」を使ってください。', 'type' => 'bad']);
+            elseif (($body['status'] ?? '') === 'left') return back()->withInput()->with('flash', ['msg' => '状態を「退会済み」にはできません。退会は、詳細の「退会」を使ってください。', 'type' => 'bad']);
             $email = strtolower((string) str_in($body['email'] ?? ''));
             // すでに使われているアドレスでも、同じ SES の担当者（管理者なら管理者）のアカウントで、このエンジニアにまだログインが無ければ通す（兼任。ここでは紐づけない）
             // 通すのは SES 担当者のアドレスだけ（管理者のアドレスは、実行者が誰でも、ここでは紐づけない）
@@ -295,7 +295,7 @@ class EngineerController extends Controller
     {
         $e = $this->load($r, $id);
         $back = $this->backTo($r, $e);
-        if ($e->status === 'left') return $this->go($back, 'すでに退会済です。');
+        if ($e->status === 'left') return $this->go($back, 'すでに退会済みです。');
         if (DB::table('contracts')->where('engineer_id', $id)->where('status', 'active')->exists()) return $this->go($back, '退会にできません。稼働中の契約があります。先に契約を終了してください。', 'bad');
         DB::table('engineers')->where('id', $id)->update(['status' => 'left']);
         DB::table('users')->where('engineer_id', $id)->where('role', 'eg')->update(['active' => 0, 'left_at' => now_str()]);
@@ -307,7 +307,7 @@ class EngineerController extends Controller
             foreach ($dualIds as $uid) N::audit($r->user()->id, 'dual-unlink', "#user {$uid} ← エンジニア #{$id}");
         }
         N::audit($r->user()->id, 'engineer-leave', $mark.$e->name);
-        return $this->go($back, 'エンジニア「'.$e->name.'」を退会済にしました。');
+        return $this->go($back, 'エンジニア「'.$e->name.'」を退会済みにしました。');
     }
 
     // エンジニアの停止・再開（管理者と所属の SES。権限は load() で確かめる。本人は role ミドルウェアで入れない）

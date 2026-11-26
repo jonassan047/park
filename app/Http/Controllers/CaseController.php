@@ -281,7 +281,7 @@ class CaseController extends Controller
         $e = DB::table('engineers')->where('id', (int) $r->input('engineer_id'))->where('ses_id', $u->ses_id)->first();
         abort_unless($e, 403);
         if ($c->status !== 'open') return $this->go("/cases/$id", '募集を終えた案件です。', 'bad');
-        if ($e->status === 'left' || $e->suspended_at || !$e->registered_at) return $this->go("/cases/$id", 'このエンジニアは仮登録・停止中・退会済のため、推薦できません。', 'bad');
+        if ($e->status === 'left' || $e->suspended_at || !$e->registered_at) return $this->go("/cases/$id", 'このエンジニアは仮登録・停止中・退会済みのため、推薦できません。', 'bad');
         $key = "case {$id} engineer {$e->id}";
         if (DB::table('audit_log')->where('action', 'recommend')->where('detail', $key)->exists()) return $this->go("/cases/$id", 'すでに推薦しています。');
         $ses = DB::table('ses_companies')->where('id', $u->ses_id)->value('name');
