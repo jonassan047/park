@@ -49,7 +49,7 @@ class RegistrationFoundationTest extends TestCase
     public function test_s1_01_version_is_in_the_footer(): void
     {
         $v = config('park.version');
-        $this->assertSame('v0.20.0', $v);
+        $this->assertSame('v0.21.0', $v);
         $this->get('/login')->assertOk()->assertSee($v);
         $this->as('admin@park.example')->get('/admin')->assertOk()->assertSee($v);
     }
@@ -370,7 +370,7 @@ class RegistrationFoundationTest extends TestCase
     public function test_s1_34_status_shows_registration_counts_without_personal_data(): void
     {
         DB::table('users')->insert(['email' => 'status-prov@example.com', 'name' => '仮 人', 'role' => 'ses', 'active' => 1, 'created_at' => now_str(), 'updated_at' => now_str()]);
-        $this->artisan('park:status')->expectsOutputToContain('アカウント：参加中')->expectsOutputToContain('アカウント：仮登録')->expectsOutputToContain('SES のいない会社')
+        $this->artisan('park:status')->expectsOutputToContain('アカウント：参加中')->expectsOutputToContain('アカウント：仮登録')->expectsOutputToContain('SES代表担当者のいない会社')
             ->expectsOutputToContain('本登録の日時が無い')->doesntExpectOutputToContain('status-prov@example.com')->assertExitCode(0);
         $json = json_decode($this->runStatusJson(), true);
         $this->assertSame(0, $json['アカウント：パスワードがあるのに本登録の日時が無い（0 のはず）']);

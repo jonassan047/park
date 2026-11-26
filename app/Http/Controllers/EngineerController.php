@@ -42,11 +42,11 @@ class EngineerController extends Controller
             $ses = (string) $r->query('ses');
             if ($ses !== '') {
                 if (!ctype_digit($ses) || !isset($active[(int) $ses])) {
-                    return redirect('/admin/ses')->with('flash', ['msg' => 'エンジニアは、SES の画面で SES を選んでから登録します。', 'type' => 'warn']);
+                    return redirect('/admin/ses?view=company')->with('flash', ['msg' => 'エンジニアは、SES の画面で SES を選んでから登録します。', 'type' => 'warn']);
                 }
                 $sesFixed = ['id' => (string) (int) $ses, 'name' => $active[(int) $ses]];
             } elseif (!$active) {
-                return redirect('/admin/ses')->with('flash', ['msg' => 'エンジニアを登録できる、参加中の SES がありません。', 'type' => 'warn']);
+                return redirect('/admin/ses?view=company')->with('flash', ['msg' => 'エンジニアを登録できる、参加中の SES がありません。', 'type' => 'warn']);
             } else {
                 $sesOptions = $active;
             }
@@ -231,9 +231,9 @@ class EngineerController extends Controller
         $ok = is_scalar($to) && ctype_digit((string) $to) && EgStaff::candidates((int) $e->ses_id)->contains(fn ($x) => (int) $x->id === (int) $to);
         if (!$ok) return back()->with('flash', ['msg' => '選べない担当者です。', 'type' => 'bad']);
         $x = DB::table('users')->find((int) $to);
-        if ((int) $e->staff_user_id === (int) $to) return $this->go("/engineers/$id/edit#staff", "担当者は、すでに {$x->name} さんです。");
+        if ((int) $e->staff_user_id === (int) $to) return $this->go("/engineers/$id/edit#staff", '担当者は、すでに '.id_title($x->staff_code, $x->name).' さんです。');
         EgStaff::assign($e, (int) $to, $r->user(), 'manual');
-        return $this->go("/engineers/$id/edit#staff", "担当者を {$x->name} さんにしました。");
+        return $this->go("/engineers/$id/edit#staff", '担当者を '.id_title($x->staff_code, $x->name).' さんにしました。');
     }
 
     public function update(Request $r, int $id)
@@ -307,7 +307,7 @@ class EngineerController extends Controller
             foreach ($dualIds as $uid) N::audit($r->user()->id, 'dual-unlink', "#user {$uid} ← エンジニア #{$id}");
         }
         N::audit($r->user()->id, 'engineer-leave', $mark.$e->name);
-        return $this->go($back, 'エンジニア「'.$e->name.'」を退会済みにしました。');
+        return $this->go($back, 'エンジニア「'.id_title($e->code, $e->name).'」を退会済みにしました。');
     }
 
     // エンジニアの停止・再開（管理者と所属の SES。権限は load() で確かめる。本人は role ミドルウェアで入れない）

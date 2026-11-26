@@ -77,8 +77,8 @@ class EmptyStateTest extends TestCase
         $a = $this->admin();
         $r = $this->as($a)->get('/admin')->assertOk();
         $r->assertSee('PARK をはじめましょう');
-        $r->assertSeeInOrder(['href="'.url('/admin/admins/new').'"', 'href="'.url('/admin/ses/new').'"', 'href="'.url('/admin/ses').'"', 'href="'.url('/cases/new').'"'], false);
-        $r->assertSee('ほかの管理者を登録する')->assertSee('SES を仮登録して、SES にご案内を送る')->assertSee('エンジニアを登録する（SES を選んでから）')->assertSee('案件を登録する');
+        $r->assertSeeInOrder(['href="'.url('/admin/admins/new').'"', 'href="'.url('/admin/ses/new').'"', 'href="'.url('/admin/ses?view=company').'"', 'href="'.url('/cases/new').'"'], false);
+        $r->assertSee('ほかの管理者を登録する')->assertSee('SES を仮登録して、SES代表担当者にご案内を送る')->assertSee('エンジニアを登録する（SES を選んでから）')->assertSee('案件を登録する');
         $r->assertDontSee('<span class="badge ok">済み</span>', false);
     }
 

@@ -122,7 +122,7 @@ class SamplePurge
             $guards[] = '移し先の会社が、参加中の SES ではないか、消す見本の会社です。止めました。';
         }
         if ($repGuard) {
-            $guards[] = "見本ではない SES が、見本の人になっています（{$repGuard}社）。消すと SES がいなくなるので、止めました。tezzo に確かめてください。";
+            $guards[] = "見本ではない会社の SES代表担当者が、見本の人になっています（{$repGuard}社）。消すと SES代表担当者がいなくなるので、止めました。tezzo に確かめてください。";
         }
         if ($keptSesUsers) {
             $guards[] = "見本の SES に、見本ではない SES の担当者などが {$keptSesUsers}人入っています。オプションを付けても移せないので、止めました。tezzo に確かめてください。";

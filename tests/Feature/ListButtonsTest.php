@@ -259,7 +259,7 @@ class ListButtonsTest extends TestCase
         DB::table('ses_companies')->where('id', $s2)->update(['status' => 'suspended']);
         DB::table('ses_companies')->where('id', $s3)->update(['status' => 'left']);
 
-        $r = $this->admin()->get('/admin/ses?left=1')->assertOk(); // 退会済みの行も出して確かめる
+        $r = $this->admin()->get('/admin/ses?view=company&left=1')->assertOk(); // 会社の表示で、退会済みの行も出して確かめる
         $r->assertSee("/admin/ses/$s1/suspend", false)->assertSee("/admin/ses/$s1/delete", false)->assertDontSee("/admin/ses/$s1/resume", false);
         $r->assertSee("/admin/ses/$s2/resume", false)->assertDontSee("/admin/ses/$s2/suspend", false);
         $r->assertSee("/admin/ses/$pend/delete", false)->assertDontSee("/admin/ses/$pend/suspend", false)->assertDontSee("/admin/ses/$pend/resume", false);

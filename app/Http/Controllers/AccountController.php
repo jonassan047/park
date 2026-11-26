@@ -33,7 +33,7 @@ class AccountController extends Controller
         abort_unless($n, 404);
         // ほかの立場あてのお知らせは、開かない（既読にもしない）
         if (is_dual() && $n->for_role && $n->for_role !== $r->user()->role) {
-            $name = ['admin' => '管理者', 'ses' => 'SES 担当者', 'eg' => 'エンジニア'][$n->for_role] ?? $n->for_role;
+            $name = ['admin' => '管理者', 'ses' => '担当者', 'eg' => 'エンジニア'][$n->for_role] ?? $n->for_role;
             return $this->go('/notifications', "このお知らせは「{$name}」あてです。ログアウトして、{$name}として入り直すと開けます。", 'warn');
         }
         if (!$n->read_at) DB::table('app_notifications')->where('id', $id)->update(['read_at' => now_str()]);

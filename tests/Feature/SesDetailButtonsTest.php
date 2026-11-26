@@ -309,7 +309,7 @@ class SesDetailButtonsTest extends TestCase
         foreach (['状態', 'SES', '氏名', 'ふりがな', 'メールアドレス', '電話番号', '所属・役職', 'エンジニア兼任', '最終ログイン', '登録日', 'SES の詳細に戻る', $name, $comp, 'ses1@park.example'] as $t) $r->assertSee($t);
         $r->assertSee('—')->assertSee('なし')->assertDontSee('編集');
         // SES の詳細には、停止・退会のボタンは出ない（交代のあとでなければ止められない。台帳 K21）
-        $r->assertSee('（SES）');
+        $r->assertSee('（SES代表担当者）');
         foreach (['suspend', 'resume', 'delete'] as $a) $r->assertDontSee("/admin/ses/$sid/users/$uid/$a");
         $r->assertSee('href="' . url("/admin/ses/$sid") . '"', false);
         // ふつうの担当者の詳細には、停止・退会のボタンがあり、詳細に戻る印（back=detail）が付く

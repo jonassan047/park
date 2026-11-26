@@ -101,7 +101,7 @@ class SesToPeopleRegistrationTest extends TestCase
         $m = DB::table('mail_outbox')->where('to_email', 'newstaff@example.com')->get();
         $this->assertCount(1, $m);
         $this->assertStringContainsString('仮登録のご案内', $m[0]->subject);
-        foreach (['/invite/'.$u->token, '7日以内', 'SES のご担当者'] as $part) $this->assertStringContainsString($part, $m[0]->body);
+        foreach (['/invite/'.$u->token, '7日以内', '一般担当者'] as $part) $this->assertStringContainsString($part, $m[0]->body);
     }
 
     public function test_s2_02_rep_registers_eg(): void

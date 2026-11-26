@@ -31,7 +31,7 @@ class PeopleController extends Controller
                 // 管理者の詳細から押したら詳細へ、一覧から押したら一覧へ戻る
                 return !$gone && url()->previous() === url("/admin/admins/{$t->id}") ? "/admin/admins/{$t->id}" : '/admin/admins';
             }
-            if ($t->role === 'ses') return $sesDeleted ? '/admin/ses' : "/admin/ses/{$t->ses_id}";
+            if ($t->role === 'ses') return $sesDeleted ? '/admin/ses?view=company' : "/admin/ses/{$t->ses_id}";
             return $t->ses_id ? "/admin/ses/{$t->ses_id}" : '/admin/engineers';
         }
         return $t->role === 'eg' ? '/ses/engineers' : '/ses/company';

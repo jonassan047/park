@@ -151,13 +151,13 @@ class V0110AdminStaffDualTest extends TestCase
         $this->start(self::P, $a);
         $this->assertSame(['admin', 'ses'], W::rolesOf($this->row(self::P)));
         $this->as(self::P)->get('/admin')->assertRedirect('/login/role');
-        $this->get('/login/role')->assertOk()->assertSee('SES 担当者（みどり情報システム）')->assertSee('value="admin"', false)->assertSee('value="ses"', false)->assertDontSee('value="eg"', false);
+        $this->get('/login/role')->assertOk()->assertSee('一般担当者（みどり情報システム）')->assertSee('value="admin"', false)->assertSee('value="ses"', false)->assertDontSee('value="eg"', false);
         $this->post('/login/role', ['to' => 'ses'])->assertRedirect('/ses');
 
         $q = $this->mkQ();
         $this->start('adm-q@example.test', $a);
         $this->assertSame(['admin', 'ses', 'eg'], W::rolesOf($this->row('adm-q@example.test')));
-        $this->as('adm-q@example.test')->get('/login/role')->assertOk()->assertSee('SES 担当者（みどり情報システム）')
+        $this->as('adm-q@example.test')->get('/login/role')->assertOk()->assertSee('一般担当者（みどり情報システム）')
             ->assertSee('value="admin"', false)->assertSee('value="ses"', false)->assertSee('value="eg"', false);
         $this->assertSame($q, (int) $this->row('adm-q@example.test')->id);
     }
@@ -246,7 +246,7 @@ class V0110AdminStaffDualTest extends TestCase
         $this->assertSame('ses', $n->for_role);
         $mail = DB::table('mail_outbox')->where('to_email', self::P)->where('subject', 'like', '%X9の担当者あてのお知らせ%')->first();
         $this->assertNotNull($mail);
-        $this->assertStringStartsWith('【SES 担当者あて】', $mail->body);
+        $this->assertStringStartsWith('【担当者あて】', $mail->body);
         $this->as(self::P, 'admin')->get('/notifications')->assertOk()->assertDontSee('X9の担当者あてのお知らせ');
         $this->as(self::P, 'ses')->get('/notifications')->assertOk()->assertSee('X9の担当者あてのお知らせ');
     }
@@ -453,7 +453,7 @@ class V0110AdminStaffDualTest extends TestCase
         $this->start(self::P, $a);
         Artisan::call('park:status', ['--json' => true]);
         $j = json_decode(Artisan::output(), true);
-        $this->assertSame(1, $j['兼任（管理者＋SES 担当者）']);
+        $this->assertSame(1, $j['兼任（管理者＋担当者）']);
         $code = (string) $this->row(self::P)->staff_code;
         $this->assertMatchesRegularExpression('/^ST-\d{6}$/', $code);
         // ID で探せる（管理者は管理者の詳細へ）

@@ -261,7 +261,7 @@ class SuspendLeaveTest extends TestCase
         $this->admin()->get("/admin/ses/$sid")->assertSee('使える担当者がいません。止めている担当者を再開するか');
         // 全員が退会済のときは、「再開」の語を出さない
         DB::table('users')->where('ses_id', $sid)->where('role', 'ses')->update(['active' => 0, 'left_at' => now()]);
-        $this->admin()->get("/admin/ses/$sid")->assertSee('使える担当者がいません。担当者を登録してください。')->assertDontSee('再開するか');
+        $this->admin()->get("/admin/ses/$sid")->assertSee('使える担当者がいません。一般担当者を登録してください。')->assertDontSee('再開するか');
     }
 
     public function test_t7_invite_refused_for_stopped_or_left(): void

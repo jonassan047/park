@@ -20,12 +20,12 @@ class Requirements
     const OPT = 'opt';
 
     // 立場の名前（画面・メールで使う）
-    const ROLE_NAMES = ['admin' => '管理者', 'rep' => 'SES', 'staff' => 'SES のご担当者', 'eg' => 'エンジニア'];
+    const ROLE_NAMES = ['admin' => '管理者', 'rep' => 'SES代表担当者', 'staff' => '一般担当者', 'eg' => 'エンジニア'];
 
     // 同意の入力欄の名前（管理者は同意なし）
     const CONSENT_KEYS = ['rep' => 'agree', 'staff' => 'agree', 'eg' => 'consent'];
 
-    // 立場の種類：admin・rep（SES）・staff（SES の担当者）・eg
+    // 立場の種類：admin・rep（SES代表担当者）・staff（一般担当者）・eg
     public static function kind(string $role, bool $isRep): string
     {
         return $role === 'ses' ? ($isRep ? 'rep' : 'staff') : $role;
@@ -77,7 +77,7 @@ class Requirements
         return self::ROLE_NAMES[self::kind($role, $isRep)];
     }
 
-    // その人が、会社の SES（または次の SES）か
+    // その人が、会社の SES代表担当者（または次の人）か。権限の判定に使う
     public static function isRep(?object $u): bool
     {
         if (!$u || ($u->role ?? '') !== 'ses' || empty($u->ses_id)) return false;

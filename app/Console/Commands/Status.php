@@ -36,7 +36,7 @@ class Status extends Command
             'アカウント：仮登録（心当たりなし）' => $declined,
             'アカウント：停止' => $u()->whereNull('left_at')->where('active', 0)->count(),
             'アカウント：退会済み' =>$u()->whereNotNull('left_at')->count(),
-            'SES：SES のいない会社（申込中を除く）' => DB::table('ses_companies')->where('kind', 'ses')->where('status', '!=', 'pending')->whereNull('rep_user_id')->count(),
+            'SES：SES代表担当者のいない会社（申込中を除く）' => DB::table('ses_companies')->where('kind', 'ses')->where('status', '!=', 'pending')->whereNull('rep_user_id')->count(),
             'アカウント：パスワードがあるのに本登録の日時が無い（0 のはず）' => $u()->whereNotNull('password')->whereNull('registered_at')->count(),
         ];
     }
@@ -126,9 +126,9 @@ class Status extends Command
             '契約：1か月以内に終わる' => DB::table('contracts')->where('status', 'active')->where('end_date', '<=', date('Y-m-d', strtotime('+31 days')))->count(),
             '経歴の更新待ち（成約した案件）' => DB::table('contracts')->whereNull('history_updated_at')->count(),
             '技術マスタ：確かめ待ち' => DB::table('skill_terms')->where('reviewed', false)->count(),
-            '兼任（SES 担当者）' => DB::table('users')->where('role', 'ses')->whereNotNull('ses_id')->whereNotNull('engineer_id')->count(),
+            '兼任（担当者）' => DB::table('users')->where('role', 'ses')->whereNotNull('ses_id')->whereNotNull('engineer_id')->count(),
             '兼任（管理者＋エンジニア）' => DB::table('users')->where('role', 'admin')->whereNotNull('engineer_id')->count(),
-            '兼任（管理者＋SES 担当者）' => DB::table('users')->where('role', 'admin')->whereNotNull('ses_id')->count(),
+            '兼任（管理者＋担当者）' => DB::table('users')->where('role', 'admin')->whereNotNull('ses_id')->count(),
             '管理者で ses_id がある行（担当者の兼任になる。反映の前に、古い行が無いか確かめる）' => DirectMerge::adminsWithSes(),
             'EG の担当者が空' => $this->emptyStaff(),
             self::ID_KEY => $this->missingIds(),

@@ -5,7 +5,7 @@
 @if($isRep)<a class="btn small" href="{{ url('/ses/company/edit') }}">編集</a>@endif
 </x-slot:actions><dl class="dl">
 <dt>ID</dt><dd><x-code :v="$s->code" /></dd>
-<dt>状態</dt><dd>{{ badge('sesStatus', $s->status) }}</dd><dt>SES</dt><dd>{{ $repName ?: '—' }}</dd>
+<dt>状態</dt><dd>{{ badge('sesStatus', $s->status) }}</dd><dt>SES代表担当者</dt><dd><x-code :v="$repCode" /> {{ $repName ?: '—' }}</dd>
 <dt>メール</dt><dd>{{ $s->email ?: '—' }}</dd><dt>電話</dt><dd>{{ $s->phone ?: '—' }}</dd><dt>所在地</dt><dd>{{ postal_address($s->postal_code, $s->address) }}</dd>
 <dt>人数</dt><dd>{{ $s->employees ?? '—' }}</dd><dt>得意な分野</dt><dd>{{ $s->strengths ?: '—' }}</dd><dt>ひとこと</dt><dd>{!! nl2br(e($s->message)) ?: '—' !!}</dd>
 <dt>守秘義務への同意</dt><dd>{{ fmt_dt($s->agreed_at) }}</dd><dt>参加日</dt><dd>{{ fmt_date($s->joined_at) }}</dd>
@@ -13,17 +13,17 @@
 </x-card>
 </div><div>
 @include('partials.left-toggle')
-<x-card title="担当者">@if($isRep && $s->status === 'active')<x-slot:actions><a class="btn small" href="{{ url('/ses/company/users/new') }}">担当者を登録</a></x-slot:actions> @endif
-@unless($isRep)<p class="muted">担当者の登録・停止・退会は、SES だけができます。SES の交代は、管理者にご依頼ください。</p>@endunless
+<x-card title="担当者">@if($isRep && $s->status === 'active')<x-slot:actions><a class="btn small" href="{{ url('/ses/company/users/new') }}">一般担当者を登録</a></x-slot:actions> @endif
+@unless($isRep)<p class="muted">一般担当者の登録・停止・退会は、SES代表担当者だけができます。SES代表担当者の交代は、管理者にご依頼ください。</p>@endunless
 @if($users->count() || !$staffLeft['hidden'])
 <x-table :head="['ID', '名前', 'メール', '状態', '最終ログイン', '']" :count="$users->count()">
 @foreach($users as $u)@php
 $state = user_state($u);
 $base = '/admin/ses/'.$s->id.'/users/'.$u->id;
 $self = (int) $u->id === (int) auth()->id(); // ご自身の行には操作を出さない
-$isRepRow = (int) $u->id === (int) $repId || (int) $u->id === (int) $s->next_rep_user_id; // SES（次の SES）の行は、交代のあとでなければ止められない
+$isRepRow = (int) $u->id === (int) $repId || (int) $u->id === (int) $s->next_rep_user_id; // SES代表担当者（次の人も）の行は、交代のあとでなければ止められない
 $isAdminRow = $u->role === 'admin'; // 担当者を兼ねている管理者。貴社からは止められない（やめるのは本人だけ）
-@endphp<tr @class(['is-left' => is_left_row('staff', $u)])><td><x-code :v="$u->staff_code" /></td><td>{{ $u->name }}@if($isAdminRow) <span class="badge warn">管理者（兼任）</span>@endif @if((int) $u->id === (int) $repId) <span class="badge info">SES</span>@elseif((int) $u->id === (int) $s->next_rep_user_id) <span class="badge info">次の SES</span>@endif
+@endphp<tr @class(['is-left' => is_left_row('staff', $u)])><td><x-code :v="$u->staff_code" /></td><td>{{ $u->name }}@if($isAdminRow) <span class="badge warn">管理者（兼任）</span>@endif @if((int) $u->id === (int) $repId) <span class="badge info">SES代表担当者</span>@elseif((int) $u->id === (int) $s->next_rep_user_id) <span class="badge info">次のSES代表担当者</span>@endif
 @if($u->engineer_id && !$isAdminRow) <a class="badge info" href="{{ url('/engineers/'.$u->engineer_id) }}">エンジニア兼任</a>@endif</td><td>{{ $isAdminRow ? '—' : account_mail($u) }}</td><td>{{ $state }}</td>
 <td>{{ fmt_dt($u->last_login) }}</td><td>@if($isRep && !$isAdminRow && !$isRepRow && is_provisional_state($state))<x-post :action="'/people/'.$u->id.'/resend'" label="送り直し" cls="ghost small" />
 <a class="btn ghost small" href="{{ url('/people/'.$u->id.'/edit') }}">仮登録の内容を直す</a>

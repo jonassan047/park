@@ -195,7 +195,7 @@ class V081AffiliationTest extends TestCase
         $e = $this->mkEgIn($a, '兼任 四郎', 'dual@example.test');
         $staff = $this->mkStaff(self::SES1, 'dual-staff@example.test', '兼任 担当');
         DB::table('users')->where('id', $staff)->update(['engineer_id' => $e]);
-        $this->move(self::ADMIN, $e, $b)->assertSessionHas('flash.msg', 'この方は SES 担当者（または管理者）を兼ねているため、所属を変えられません。管理者にご相談ください。');
+        $this->move(self::ADMIN, $e, $b)->assertSessionHas('flash.msg', 'この方は担当者（または管理者）を兼ねているため、所属を変えられません。管理者にご相談ください。');
         $this->assertSame($a, $this->engSes($e));
 
         // 終わった応募・終わった契約だけなら変えられる
@@ -366,7 +366,7 @@ class V081AffiliationTest extends TestCase
     // T19：版
     public function test_t19_version(): void
     {
-        $this->assertSame('v0.20.0', config('park.version'));
-        $this->get('/login')->assertOk()->assertSee('v0.20.0');
+        $this->assertSame('v0.21.0', config('park.version'));
+        $this->get('/login')->assertOk()->assertSee('v0.21.0');
     }
 }

@@ -52,7 +52,7 @@ class Workflow
     private static function repGuard(object $u): ?array
     {
         if (!Requirements::isRep($u)) return null;
-        return ['type' => 'bad', 'msg' => 'SES は、停止・退会にできません。先に、管理者にSES の交代をご依頼ください。会社ごと止めるときは、SES の「停止」か「退会」を使ってください。'];
+        return ['type' => 'bad', 'msg' => 'SES代表担当者（次のSES代表担当者を含む）は、停止・退会にできません。先に、管理者に SES代表担当者の交代をご依頼ください。会社ごと止めるときは、SES の「停止」か「退会」を使ってください。'];
     }
 
     public static function suspendSesUser(int $sesId, int $uid, $actor): ?array
@@ -66,7 +66,7 @@ class Workflow
         DB::table('users')->where('id', $uid)->update(['active' => 0, 'token' => null, 'token_expires' => null, 'updated_at' => now_str()]);
         N::audit($actor->id ?? null, 'ses-user-suspend', self::sesCompanyName($sesId).' '.$u->name);
         EgStaff::release($uid, $actor, 'suspend'); // その人が担当の EG は、会社の SES に移る
-        return ['type' => 'ok', 'msg' => "{$u->name} さんを停止しました。".(self::isDual($u) ? '（エンジニアとしても入れなくなります）' : '')];
+        return ['type' => 'ok', 'msg' => id_title($u->staff_code, $u->name).' さんを停止しました。'.(self::isDual($u) ? '（エンジニアとしても入れなくなります）' : '')];
     }
 
     public static function resumeSesUser(int $sesId, int $uid, $actor): ?array
@@ -76,7 +76,7 @@ class Workflow
         if ($u->active) return ['type' => 'ok', 'msg' => 'すでに使えます。'];
         DB::table('users')->where('id', $uid)->update(['active' => 1, 'updated_at' => now_str()]);
         N::audit($actor->id ?? null, 'ses-user-resume', self::sesCompanyName($sesId).' '.$u->name);
-        $msg = "{$u->name} さんを再開しました。";
+        $msg = id_title($u->staff_code, $u->name).' さんを再開しました。';
         // パスワードを決めていなかった人は、招待のリンクが無いので、送り直す方法を添える
         if (!$u->registered_at) $msg .= '仮登録のままなので、『送り直し』でご案内を送ってください。';
         return ['type' => 'ok', 'msg' => $msg];
@@ -95,12 +95,12 @@ class Workflow
             DB::table('users')->where('id', $uid)->update(['role' => 'eg', 'active' => $egStopped ? 0 : $u->active, 'updated_at' => now_str()]);
             N::audit($actor->id ?? null, 'ses-user-leave', self::sesCompanyName($sesId).' '.$u->name);
             EgStaff::release($uid, $actor, 'leave');
-            return ['type' => 'ok', 'msg' => "{$u->name} さんを SES 担当者から外しました。エンジニアとしては引き続き入れます。"];
+            return ['type' => 'ok', 'msg' => id_title($u->staff_code, $u->name).' さんを一般担当者から外しました。エンジニアとしては引き続き入れます。'];
         }
         DB::table('users')->where('id', $uid)->update(['active' => 0, 'left_at' => now_str(), 'token' => null, 'token_expires' => null, 'updated_at' => now_str()]);
         N::audit($actor->id ?? null, 'ses-user-leave', self::sesCompanyName($sesId).' '.$u->name);
         EgStaff::release($uid, $actor, 'leave');
-        return ['type' => 'ok', 'msg' => "{$u->name} さんを退会済みにしました。"];
+        return ['type' => 'ok', 'msg' => id_title($u->staff_code, $u->name).' さんを退会済みにしました。'];
     }
 
     // ---------- 管理者の停止・再開・退会（管理者だけが押せる） ----------
@@ -130,7 +130,7 @@ class Workflow
             DB::table('users')->where('id', $id)->update(['active' => 0, 'token' => null, 'token_expires' => null, 'updated_at' => now_str()]);
             N::audit($actor->id ?? null, 'admin-suspend', "#user {$id}");
             if (!empty($u->ses_id)) EgStaff::release($id, $actor, 'suspend'); // 兼任の管理者が担当の EG は、会社の SES に移る
-            return ['type' => 'ok', 'msg' => "{$u->name} さんを停止しました。".(!empty($u->engineer_id) && self::isDual($u) ? '（エンジニアとしても入れなくなります）' : '')];
+            return ['type' => 'ok', 'msg' => id_title($u->admin_code, $u->name).' さんを停止しました。'.(!empty($u->engineer_id) && self::isDual($u) ? '（エンジニアとしても入れなくなります）' : '')];
         });
     }
 
@@ -142,7 +142,7 @@ class Workflow
             if ($u->active) return ['type' => 'ok', 'msg' => 'すでに使えます。'];
             DB::table('users')->where('id', $id)->update(['active' => 1, 'updated_at' => now_str()]);
             N::audit($actor->id ?? null, 'admin-resume', "#user {$id}");
-            $msg = "{$u->name} さんを再開しました。";
+            $msg = id_title($u->admin_code, $u->name).' さんを再開しました。';
             // パスワードを決めていなかった人は、招待のリンクが無いので、送り直す方法を添える
             if (!$u->registered_at) $msg .= '仮登録のままなので、『送り直し』でご案内を送ってください。';
             return ['type' => 'ok', 'msg' => $msg];
@@ -163,12 +163,12 @@ class Workflow
                 DB::table('engineers')->where('id', $e->id)->update(['is_operator' => 0]);
                 N::audit($actor->id ?? null, 'admin-leave', "#user {$id}");
                 EgStaff::release($id, $actor, 'leave');
-                return ['type' => 'ok', 'msg' => "{$u->name} さんを管理者から外しました。エンジニアとしては引き続き入れます。"];
+                return ['type' => 'ok', 'msg' => id_title($u->admin_code, $u->name).' さんを管理者から外しました。エンジニアとしては引き続き入れます。'];
             }
             DB::table('users')->where('id', $id)->update(['active' => 0, 'left_at' => now_str(), 'token' => null, 'token_expires' => null, 'updated_at' => now_str()]);
             N::audit($actor->id ?? null, 'admin-leave', "#user {$id}");
             EgStaff::release($id, $actor, 'leave');
-            return ['type' => 'ok', 'msg' => "{$u->name} さんを退会済みにしました。"];
+            return ['type' => 'ok', 'msg' => id_title($u->admin_code, $u->name).' さんを退会済みにしました。'];
         });
     }
 
@@ -184,7 +184,7 @@ class Workflow
         });
         N::audit($actor->id ?? null, 'engineer-suspend', $e->name);
         self::tellEngineerChange($e, $actor, '停止');
-        return ['type' => 'ok', 'msg' => 'エンジニア「'.$e->name.'」を停止しました。'];
+        return ['type' => 'ok', 'msg' => 'エンジニア「'.id_title($e->code, $e->name).'」を停止しました。'];
     }
 
     public static function resumeEngineer(int $id, $actor): array
@@ -199,7 +199,7 @@ class Workflow
         });
         N::audit($actor->id ?? null, 'engineer-resume', $e->name);
         self::tellEngineerChange($e, $actor, '再開');
-        return ['type' => 'ok', 'msg' => 'エンジニア「'.$e->name.'」を再開しました。'];
+        return ['type' => 'ok', 'msg' => 'エンジニア「'.id_title($e->code, $e->name).'」を再開しました。'];
     }
 
     // 管理者が押したら所属の SES へ、SES が押したら管理者へ（メールは送らない。本人には何も送らない）
@@ -376,7 +376,7 @@ class Workflow
         DB::table('users')->where('id', $userId)->update(['role' => 'ses', 'updated_at' => now_str()]);
         Ids::assign('T', $userId); // 役割を初めて持ったときだけ付く（外して戻しても同じ ID）
         N::audit($actor->id ?? null, 'dual-add-ses', "#user {$userId}");
-        N::notify($userId, 'SES のご担当者としても登録されました', 'ログインのとき「SES 担当者」を選ぶと、SES の画面に入れます。', '/ses', true, 'dual', 'ses');
+        N::notify($userId, '一般担当者としても登録されました', 'ログインのとき「一般担当者」を選ぶと、SES の画面に入れます。', '/ses', true, 'dual', 'ses');
     }
 
     // エンジニアのアカウントに、管理者の役割を足す。$d は管理者の登録の画面の値（企業名・所属・電話・郵便番号・住所）
@@ -408,7 +408,7 @@ class Workflow
             if ($s->status !== 'active') return ['type' => 'bad', 'msg' => '担当者を兼ねられるのは、参加中の SES だけです。'];
             DB::table('users')->where('id', $me->id)->update(['ses_id' => $s->id, 'updated_at' => now_str()]);
             Ids::assign('T', (int) $me->id); // 担当者の ID（ST-）。空のときだけ振る
-            return ['type' => 'ok', 'msg' => '「'.$s->name.'」の担当者を兼ねるようになりました。次にログインするとき「SES 担当者（'.$s->name.'）」を選べます。', 'name' => $me->name];
+            return ['type' => 'ok', 'msg' => '「'.$s->name.'」の担当者を兼ねるようになりました。次にログインするとき「一般担当者（'.$s->name.'）」を選べます。', 'name' => $me->name];
         });
         if ($res['type'] === 'ok' && isset($res['name'])) {
             N::audit($actor->id ?? null, 'admin-staff-dual', "会社 #{$s->id} 開始");

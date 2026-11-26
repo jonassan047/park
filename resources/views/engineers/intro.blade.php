@@ -1,7 +1,7 @@
 @php $u = auth()->user(); $mine = $rows->first(); @endphp
 @extends('layouts.app', ['title' => '推薦文（社内用）：'.id_title($e->code, $e->name)])
 @section('content')
-<p class="muted">推薦文は、個人情報を含む社内用の文です。見られるのは、管理者と、このエンジニアが所属する SES の SES・担当者だけです（ご本人・他社には見えません）。このPCの中で処理し、外部のサービスには送りません。</p>
+<p class="muted">推薦文は、個人情報を含む社内用の文です。見られるのは、管理者と、このエンジニアが所属する SES の担当者だけです（ご本人・他社には見えません）。このPCの中で処理し、外部のサービスには送りません。</p>
 @if($result)
 <x-card title="スキルの抜き出しの結果">
 <dl class="dl">
@@ -29,7 +29,7 @@
 @if($u->role === 'admin')<p class="muted small">{{ $ir->ses_name }}{{ !empty($ir->former) ? '（前の所属）' : '' }}　更新 {{ fmt_date($ir->updated_at) }} {{ $ir->updater_name }}</p>@endif
 <pre class="mailbody">{{ $ir->body }}</pre>
 @endforeach
-@if($u->role === 'admin')<p class="muted small">管理者は読むだけです（登録・更新・消すのは、そのエンジニアの SES・担当者です）。</p>@endif
+@if($u->role === 'admin')<p class="muted small">管理者は読むだけです（登録・更新・消すのは、そのエンジニアが所属する SES の担当者です）。</p>@endif
 </x-card>
 @else
 <p class="empty">推薦文はまだありません。</p>

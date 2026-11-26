@@ -185,10 +185,10 @@ class ProfileAndDirectTest extends TestCase
     {
         $this->as('admin@park.example')->get('/admin')->assertSee('管理者（見本運営）としてログインしています：'.User::where('email', 'admin@park.example')->value('name'));
         // SES と担当者で帯の言葉が分かれる（台帳 K13）
-        $this->as('ses1@park.example')->get('/ses')->assertSee('SES（みどり情報システム）としてログインしています');
+        $this->as('ses1@park.example')->get('/ses')->assertSee('SES代表担当者（みどり情報システム）としてログインしています');
         $staff = W::createUser('ses1s@park.example', '同僚 一郎', 'ses', 'park1234', ['ses_id' => 1]);
         $this->completeProfile($staff);
-        $this->as('ses1s@park.example')->get('/ses')->assertSee('SES（みどり情報システム）のご担当者としてログインしています');
+        $this->as('ses1s@park.example')->get('/ses')->assertSee('一般担当者（みどり情報システム）としてログインしています');
         $this->as('eg1@park.example')->get('/eg')->assertSee('エンジニアとしてログインしています');
         // 印刷用
         $this->as('admin@park.example')->get('/engineers/1/sheet')->assertOk()->assertDontSee('としてログインしています');
@@ -271,7 +271,7 @@ class ProfileAndDirectTest extends TestCase
     public function test_d_admin_registers_ses(): void
     {
         $this->as('admin@park.example');
-        $this->get('/admin/ses/new')->assertOk()->assertSee('仮登録すると、SES に仮登録のご案内（7日以内に本登録）が届きます。');
+        $this->get('/admin/ses/new')->assertOk()->assertSee('仮登録すると、SES代表担当者に仮登録のご案内（7日以内に本登録）が届きます。');
         $notes = DB::table('app_notifications')->count();
         $this->post('/admin/ses', ['name' => '管理者登録 SES', 'rep_sei' => '担当', 'rep_mei' => '花子', 'email' => 'reg-ses@park.example'])->assertRedirect();
         $s = DB::table('ses_companies')->where('name', '管理者登録 SES')->first();
@@ -340,7 +340,7 @@ class ProfileAndDirectTest extends TestCase
     {
         $this->as('admin@park.example');
         // V1-1：直属を新しく登録する入口はない（SES を選んでから登録する）
-        $this->get('/engineers/new?ses=direct')->assertRedirect(url('/admin/ses'))->assertSessionHas('flash.type', 'warn');
+        $this->get('/engineers/new?ses=direct')->assertRedirect(url('/admin/ses?view=company'))->assertSessionHas('flash.type', 'warn');
         $this->get('/admin/engineers?ses=direct')->assertOk(); // 古い URL でも開ける（絞り込みは無い）
         $this->assertSame(0, DB::table('ses_companies')->where('kind', 'direct')->count()); // 開いただけでは作らない
         $this->get('/admin/engineers')->assertOk()->assertDontSee('直属だけ'); // 「直属だけ」のボタンは無い
@@ -562,7 +562,7 @@ class ProfileAndDirectTest extends TestCase
     public function test_i7_new_name_shows_everywhere(): void
     {
         $this->as('ses1@park.example')->post('/ses/company', $this->companyPost(['name' => '株式会社みどり情報システム']));
-        $this->as('ses1@park.example')->get('/ses')->assertSee('SES（株式会社みどり情報システム）');
+        $this->as('ses1@park.example')->get('/ses')->assertSee('SES代表担当者（株式会社みどり情報システム）');
         $this->get('/ses/company')->assertSee('株式会社みどり情報システム');
         $this->as('admin@park.example')->get('/admin/ses')->assertOk()->assertSee('株式会社みどり情報システム');
         $this->get('/admin/ses/1')->assertOk()->assertSee('株式会社みどり情報システム');

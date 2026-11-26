@@ -20,7 +20,7 @@
   @else
     {{-- 確認の文は、選んだ会社の名前を入れるため、ここで作る（JavaScript が無いときは確認なしで送られる。送る側の守りは Affiliation にある） --}}
     <form method="post" action="{{ url('/engineers/'.$e->id.'/affiliation') }}"
-      onsubmit="var s = this.elements['ses_id']; if (!s.value) { alert('変更先を選んでください。'); return false; } return confirm('所属を「' + @js($sesName) + '」から「' + s.options[s.selectedIndex].text + '」に変えます。' + @js($sesName) + ' の SES・担当者からは、この方（スキル・経歴・書類を含む）が見えなくなります。よろしいですか？')">@csrf
+      onsubmit="var s = this.elements['ses_id']; if (!s.value) { alert('変更先を選んでください。'); return false; } return confirm('所属を「' + @js($sesName) + '」から「' + s.options[s.selectedIndex].text + '」に変えます。' + @js($sesName) + ' の担当者からは、この方（スキル・経歴・書類を含む）が見えなくなります。よろしいですか？')">@csrf
       <div class="field"><label>変更先</label>
         <select name="ses_id">
           <option value="">変更先を選んでください</option>
@@ -28,27 +28,31 @@
         </select></div>
       <button class="btn">所属を変える</button>
     </form>
-    <p class="muted">変えると、今の会社の SES・担当者からは見えなくなります。過去の応募・契約・請求の記録は、今の会社のまま残ります。</p>
+    <p class="muted">変えると、今の会社の担当者からは見えなくなります。過去の応募・契約・請求の記録は、今の会社のまま残ります。</p>
     @if(auth()->user()->role === 'ses')<p class="muted">移す先の会社にも、あらかじめお伝えください。</p>@endif
   @endif
 @endif
 </x-card>
 @if(!$isEg && $e->status !== 'left')
 <x-card title="担当者を付け替える" id="staff">
-  <p>今の担当者：{{ $staffNow ? $staffNow->name : '—' }}</p>
+  <p>今の担当者：@if($staffNow)<x-code :v="$staffNow->staff_code" /> {{ $staffNow->name }}@else — @endif</p>
   <p class="muted">同じ会社の担当者の中で付け替えられます。</p>
   <form method="post" action="{{ url('/engineers/'.$e->id.'/staff') }}" onsubmit="return confirm('担当者を付け替えます。新しい担当者と、前の担当者・ご本人にお知らせが届きます。')">@csrf
     <div class="field"><label>担当者</label>
       <select name="staff_user_id">
-        @foreach($staffCandidates as $c)<option value="{{ $c->id }}" @selected($staffNow && (int) $staffNow->id === (int) $c->id)>{{ $c->name }}</option>@endforeach
+        @foreach($staffCandidates as $c)<option value="{{ $c->id }}" @selected($staffNow && (int) $staffNow->id === (int) $c->id)>{{ id_title($c->staff_code, $c->name) }}</option>@endforeach
       </select></div>
     <button class="btn">付け替える</button>
   </form>
   <h3>付け替えの記録</h3>
-  @php $nameOf = DB::table('users')->whereIn('id', $staffLogs->flatMap(fn ($l) => [$l->from_user_id, $l->to_user_id, $l->changed_by])->filter()->unique()->all())->pluck('name', 'id'); @endphp
+  @php
+    $logUsers = DB::table('users')->whereIn('id', $staffLogs->flatMap(fn ($l) => [$l->from_user_id, $l->to_user_id, $l->changed_by])->filter()->unique()->all())->get(['id', 'name', 'ses_id', 'staff_code', 'admin_code'])->keyBy('id');
+    // 記録の人の ID。管理者が見るときは ST-（担当者でない管理者は AD-）。自社の担当者には、今の会社の人の ST- だけ（前の会社の人の ID と AD- は出さない）
+    $codeOf = fn ($x) => auth()->user()->role === 'admin' ? ($x->staff_code ?: $x->admin_code) : ((int) $x->ses_id === (int) $e->ses_id ? $x->staff_code : null);
+  @endphp
   <x-table :head="['日時', '前', '後', 'した人', '理由']" :count="$staffLogs->count()">
   @foreach($staffLogs as $l)
-    <tr><td>{{ fmt_dt($l->created_at) }}</td><td>{{ $l->from_user_id ? ($nameOf[$l->from_user_id] ?? '—') : '—' }}</td><td>{{ $nameOf[$l->to_user_id] ?? '—' }}</td><td>{{ $l->changed_by ? ($nameOf[$l->changed_by] ?? '—') : '—' }}</td><td>{{ \App\Services\EgStaff::REASONS[$l->reason] ?? $l->reason }}</td></tr>
+    <tr><td>{{ fmt_dt($l->created_at) }}</td>@foreach([$l->from_user_id, $l->to_user_id, $l->changed_by] as $uid)@php $x = $uid ? ($logUsers[$uid] ?? null) : null; @endphp<td>@if($x)@if($codeOf($x))<x-code :v="$codeOf($x)" /> @endif{{ $x->name }}@else — @endif</td>@endforeach<td>{{ \App\Services\EgStaff::REASONS[$l->reason] ?? $l->reason }}</td></tr>
   @endforeach
   </x-table>
 </x-card>

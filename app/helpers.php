@@ -5,7 +5,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\HtmlString;
 
 const PARK_LABELS = [
-    'role' => ['admin' => '管理者', 'ses' => 'SES', 'eg' => 'エンジニア'],
+    'role' => ['admin' => '管理者', 'ses' => '担当者', 'eg' => 'エンジニア'], // 担当者＝SES代表担当者と一般担当者
     'sesStatus' => ['pending' => '申込中', 'provisional' => '仮登録', 'active' => '参加中', 'suspended' => '停止', 'left' => '退会済み'],
     'engStatus' => ['available' => '待機中', 'proposing' => '提案中', 'working' => '稼働中', 'unavailable' => '休止', 'left' => '退会済み'],
     'caseStatus' => ['draft' => '下書き', 'open' => '募集中', 'filled' => '充足', 'closed' => '終了'],
@@ -77,13 +77,61 @@ function show_left(): bool
     return request()->query('left') === '1';
 }
 
-// 退会済みの行か。$kind は ses（会社）・staff（担当者のアカウント）・eg（エンジニア）
+// 退会済みの行か。$kind は ses（会社）・staff（担当者のアカウント）・eg（エンジニア）・person（人の一覧。会社が退会済みの人も退会済み。ses_status が要る）
 function is_left_row(string $kind, object $row): bool
 {
     return match ($kind) {
         'ses', 'eg' => ($row->status ?? '') === 'left',
         'staff' => !empty($row->left_at),
+        'person' => !empty($row->left_at) || ($row->ses_status ?? '') === 'left',
     };
+}
+
+// 担当者の区分「SES代表担当者」「一般担当者」。代表は会社の rep_user_id の人だけ（交代の途中の次の人は、まだ一般担当者）。
+// $s は rep_user_id を持つ会社の行（無ければ、その人の ses_id で読む）
+function staff_kind(object $u, ?object $s = null): string
+{
+    $s ??= DB::table('ses_companies')->where('id', $u->ses_id ?? 0)->first(['rep_user_id']);
+    return \App\Support\Requirements::ROLE_NAMES[$s && (int) $s->rep_user_id === (int) $u->id ? 'rep' : 'staff'];
+}
+
+// 会社の中の担当者の並びの順位：0 SES代表担当者／1 次のSES代表担当者／2 一般担当者／3 兼任の管理者
+function staff_rank(object $u, object $s): int
+{
+    if (($u->role ?? '') === 'admin') return 3;
+    if ((int) $s->rep_user_id === (int) $u->id) return 0;
+    return (int) $s->next_rep_user_id === (int) $u->id ? 1 : 2;
+}
+
+// 一覧の並びの選択（値 => 画面の言葉）
+const PARK_ORDERS = ['reg' => '登録順', 'company' => '企業ごと', 'kana' => '名前順'];
+
+// ?order= の値。$allowed に無い値（空・配列なども）は $default
+function list_order(array $allowed, string $default = 'reg'): string
+{
+    $v = request()->query('order');
+    return is_string($v) && in_array($v, $allowed, true) ? $v : $default;
+}
+
+// 問い合わせの文字。文字でなければ（配列など）空
+function query_str(string $key): string
+{
+    $v = request()->query($key);
+    return is_string($v) ? trim($v) : '';
+}
+
+// 登録順：ID（$codeKey。ST-・EG-）の小さい順。ID が空の行は最後、同じなら id の順
+function sort_reg(\Illuminate\Support\Collection $list, string $codeKey): \Illuminate\Support\Collection
+{
+    $key = fn ($r) => [($r->$codeKey ?? '') === '', (string) ($r->$codeKey ?? ''), (int) $r->id];
+    return $list->sort(fn ($a, $b) => $key($a) <=> $key($b))->values();
+}
+
+// 企業ごと：会社の ID（ses_code）の小さい順 → $rank（会社の中の順位。無くてもよい） → ID（$codeKey）の順
+function sort_by_company(\Illuminate\Support\Collection $list, string $codeKey, ?callable $rank = null): \Illuminate\Support\Collection
+{
+    $key = fn ($r) => [($r->ses_code ?? '') === '', (string) ($r->ses_code ?? ''), $rank ? $rank($r) : 0, ($r->$codeKey ?? '') === '', (string) ($r->$codeKey ?? ''), (int) $r->id];
+    return $list->sort(fn ($a, $b) => $key($a) <=> $key($b))->values();
 }
 
 // 一覧の行から退会済みを除く（$show なら除かない）。[表に出す行, ['hidden' => 隠した件数, 'shown' => 出している退会済みの件数]] を返す
@@ -151,12 +199,12 @@ function engineer_stop_confirm(bool $working, int $inSelection): string
 }
 
 // 一覧へ戻る URL。$query は一覧で開いていたときの問い合わせの文字（フォームの hidden で送られる）。
-// 決まった鍵（q・status・ses・page・left）の短い文字だけを付け直す。パスは呼ぶ側が固定で渡す（送られた値から作らない）
+// 決まった鍵（q・status・ses・page・left・view・order・kind）の短い文字だけを付け直す。パスは呼ぶ側が固定で渡す（送られた値から作らない）
 function list_back(string $path, ?string $query): string
 {
     parse_str((string) $query, $p);
     $keep = [];
-    foreach (['q', 'status', 'ses', 'page', 'left'] as $k) {
+    foreach (['q', 'status', 'ses', 'page', 'left', 'view', 'order', 'kind'] as $k) {
         if (isset($p[$k]) && is_string($p[$k]) && mb_strlen($p[$k]) <= 200) $keep[$k] = $p[$k];
     }
     $qs = http_build_query($keep);

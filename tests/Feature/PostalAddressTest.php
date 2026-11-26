@@ -83,7 +83,7 @@ class PostalAddressTest extends TestCase
 
     public function test_v1_direct_entrance_is_gone(): void
     {
-        $this->admin()->get('/engineers/new?ses=direct')->assertRedirect(url('/admin/ses'))->assertSessionHas('flash.type', 'warn')
+        $this->admin()->get('/engineers/new?ses=direct')->assertRedirect(url('/admin/ses?view=company'))->assertSessionHas('flash.type', 'warn')
             ->assertSessionHas('flash.msg', 'エンジニアは、SES の画面で SES を選んでから登録します。');
         $e0 = $this->rows('engineers'); $u0 = $this->rows('users'); $m0 = $this->rows('mail_outbox');
         $this->post('/engineers', ['ses_id' => 'direct', 'name_sei' => '直属', 'name_mei' => '太郎', 'email' => 'pa-d1@park.example'])

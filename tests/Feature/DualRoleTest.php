@@ -201,7 +201,7 @@ class DualRoleTest extends TestCase
         $u0 = $this->users();
         $this->as(self::ADMIN, 'admin')->post("/admin/ses/{$sid}/users", ['name' => '山田 太郎', 'email' => 'eg1@park.example'])
             ->assertSessionHas('flash.type', 'ok')
-            ->assertSessionHas('flash.msg', 'このメールアドレスのエンジニアのアカウントに、SES 担当者の役割を足しました（仮登録のご案内は送っていません）。');
+            ->assertSessionHas('flash.msg', 'このメールアドレスのエンジニアのアカウントに、一般担当者の役割を足しました（仮登録のご案内は送っていません）。');
         $this->assertSame($u0, $this->users());
         $u = $this->row('eg1@park.example');
         $this->assertSame('ses', $u->role);
@@ -301,7 +301,7 @@ class DualRoleTest extends TestCase
         $this->get('/account')->assertRedirect('/login/role');
         $this->get('/notifications')->assertRedirect('/login/role');
         $page = $this->get('/login/role')->assertOk();
-        $page->assertSee('どの立場で入りますか')->assertSee('SES 担当者')->assertSee('エンジニア')->assertSee('みどり情報システム');
+        $page->assertSee('どの立場で入りますか')->assertSee('SES代表担当者（みどり情報システム）')->assertSee('エンジニア')->assertSee('みどり情報システム');
         $page->assertDontSee(self::SES1);
         $page->assertDontSee('管理者</button>', false);
         $this->post('/login/role', ['to' => 'eg'])->assertRedirect('/eg');
@@ -566,7 +566,7 @@ class DualRoleTest extends TestCase
         \App\Services\Notifier::toSes($this->sesId(self::SES1), 'SES あてのテスト', '本文', '/ses', true, 'test');
         $s = DB::table('app_notifications')->where('user_id', $uid)->where('title', 'SES あてのテスト')->first();
         $this->assertNotNull($s);
-        $this->assertGreaterThanOrEqual(1, DB::table('mail_outbox')->where('to_email', self::SES1)->where('body', 'like', '【SES 担当者あて】%')->count());
+        $this->assertGreaterThanOrEqual(1, DB::table('mail_outbox')->where('to_email', self::SES1)->where('body', 'like', '【担当者あて】%')->count());
 
         // SES の立場：一覧にはSESあてだけ。帯にエンジニアあての数。
         $page = $this->as(self::SES1, 'ses')->get('/notifications')->assertOk();
@@ -599,7 +599,7 @@ class DualRoleTest extends TestCase
         $html = $this->get('/ses')->getContent();
         $this->assertStringContainsString('エンジニアあてのお知らせが 2 件', $html);
         $html = $this->as(self::SES1, 'eg')->get('/eg')->getContent();
-        $this->assertStringContainsString('SES 担当者あてのお知らせが 1 件', $html);
+        $this->assertStringContainsString('担当者あてのお知らせが 1 件', $html);
     }
 
     public function test_ac10_admin_dual_to_admins_has_admin_for_role(): void
@@ -695,7 +695,7 @@ class DualRoleTest extends TestCase
         // SES の退会は交代のあと（K21）：先に、ほかの担当者をSES にする
         $this->assertSame('ok', Registration::changeRep($sid, $other, $this->row(self::ADMIN))['type']);
         $this->as(self::ADMIN, 'admin')->post("/admin/ses/$sid/users/$uid/delete")
-            ->assertSessionHas('flash.msg', '緑川 一郎 さんを SES 担当者から外しました。エンジニアとしては引き続き入れます。');
+            ->assertSessionHas('flash.msg', DB::table('users')->where('id', $uid)->value('staff_code').'　緑川 一郎 さんを一般担当者から外しました。エンジニアとしては引き続き入れます。');
         $u = $this->row(self::SES1);
         $this->assertSame('eg', $u->role);
         $this->assertSame(1, (int) $u->active);
@@ -802,7 +802,7 @@ class DualRoleTest extends TestCase
         $sid = $this->sesId(self::SES1);
         $this->as(self::ADMIN, 'admin');
         $this->get('/admin/ses/'.$sid)->assertOk()->assertSee('エンジニア兼任');
-        $this->get("/engineers/$eid")->assertOk()->assertSee('SES 担当者と兼任');
+        $this->get("/engineers/$eid")->assertOk()->assertSee('担当者と兼任');
         // 管理者兼任
         $eid2 = $this->dualAdmin();
         $this->as(self::ADMIN, 'admin');
@@ -830,9 +830,9 @@ class DualRoleTest extends TestCase
         $this->dualAdmin();
         Artisan::call('park:status', ['--json' => true]);
         $j = json_decode(Artisan::output(), true);
-        $this->assertSame(1, $j['兼任（SES 担当者）']);
+        $this->assertSame(1, $j['兼任（担当者）']);
         $this->assertSame(1, $j['兼任（管理者＋エンジニア）']);
-        $this->assertSame(0, $j['兼任（管理者＋SES 担当者）']);
+        $this->assertSame(0, $j['兼任（管理者＋担当者）']);
     }
 
     // ---------- AC15：マニュアル ----------
@@ -840,7 +840,7 @@ class DualRoleTest extends TestCase
     public function test_ac15_manuals_mention_dual(): void
     {
         $this->as(self::ADMIN)->get('/manual/ses')->assertOk()->assertSee('ご自身もエンジニアとして登録する');
-        $this->get('/manual/engineer')->assertOk()->assertSee('SES 担当者・管理者と兼ねている方');
+        $this->get('/manual/engineer')->assertOk()->assertSee('担当者・管理者と兼ねている方');
         $this->get('/manual/admin')->assertOk()->assertSee('兼任');
         foreach (['ses-steps', 'engineer-steps', 'admin-steps'] as $k) $this->get("/manual/$k")->assertOk();
     }

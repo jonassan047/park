@@ -48,13 +48,16 @@ class SesController extends Controller
         $list = DB::table('engineers as e')->where('e.ses_id', $r->user()->ses_id)->select('e.*')
             ->selectSub(DB::table('engineer_projects')->whereColumn('engineer_id', 'e.id')->selectRaw('count(*)'), 'projs')->get();
         [$list, $left] = filter_left($list, 'eg'); // 自社の行の中から、退会済みは選んだときだけ出す
-        [$list, $pager] = page_slice(sort_kana($list)); // あいうえお順・1ページ 20 件
+        $order = list_order(['reg', 'kana']); // 自社だけなので「企業ごと」は無い
+        [$list, $pager] = page_slice($order === 'kana' ? sort_kana($list) : sort_reg($list, 'code')); // 1ページ 20 件
         $skills = SkillChecks::summaryMany($list->pluck('id')->all());
         // ログインの状態：兼任の人も engineer_id で探す（管理者との兼任かどうかは、ここには出さない）
         $users = DB::table('users')->whereIn('engineer_id', $list->pluck('id'))->orderByRaw("case when role = 'eg' then 1 else 0 end")->get()->keyBy('engineer_id');
         $staff = \App\Services\EgStaff::ofMany($list); // 担当者（まとめて読む）
         foreach ($list as $e) {
-            $e->staff_name = ($staff[(int) $e->id] ?? null)?->name; // 担当者の氏名
+            $x = $staff[(int) $e->id] ?? null;
+            $e->staff_name = $x?->name; // 担当者の氏名と ID
+            $e->staff_code = $x?->staff_code;
             $e->skills = $skills[$e->id] ?? ''; // 同じ技術は1回だけ
             $e->account = engineer_state($e, $users[$e->id] ?? null);
             $e->mail = self::mailForSes($users[$e->id] ?? null);
@@ -127,17 +130,18 @@ class SesController extends Controller
     public function company(Request $r)
     {
         $id = $r->user()->ses_id;
-        $engs = DB::table('engineers')->where('ses_id', $id)->orderBy('name')->get();
+        $engs = sort_reg(DB::table('engineers')->where('ses_id', $id)->get(), 'code'); // EG- の順
         $egIds = $engs->pluck('id');
         $s = DB::table('ses_companies')->find($id);
         $egUsers = DB::table('users')->whereIn('engineer_id', $egIds)->orderByRaw("case when role = 'eg' then 1 else 0 end")->get()->keyBy('engineer_id');
         foreach ($engs as $e) { $e->account = engineer_state($e, $egUsers[$e->id] ?? null); $e->mail = self::mailForSes($egUsers[$e->id] ?? null); $e->login_id = self::provisionalLoginId($egUsers[$e->id] ?? null); }
-        $users = DB::table('users')->where('ses_id', $id)->whereIn('role', ['ses', 'admin'])->orderByRaw("case when role = 'admin' then 1 else 0 end")->orderBy('id')->get(); // 担当者を兼ねる管理者は最後に
+        // 並びは 代表 → 次の代表 → 一般（ST- の順）→ 担当者を兼ねる管理者（ST- の順）
+        $users = sort_reg(DB::table('users')->where('ses_id', $id)->whereIn('role', ['ses', 'admin'])->get(), 'staff_code')->sortBy(fn ($x) => staff_rank($x, $s))->values();
         // 表に出す行だけ、退会済みを除く（下の契約・応募の数えは全件のまま）
         [$users, $staffLeft] = filter_left($users, 'staff');
         [$engsShown, $egLeft] = filter_left($engs, 'eg');
         return view('ses.company', [
-            's' => $s, 'repName' => Registration::repName($s)[0], 'isRep' => Requirements::isRep($r->user()), 'repId' => $s->rep_user_id,
+            's' => $s, 'repName' => Registration::repName($s)[0], 'repCode' => $s->rep_user_id ? DB::table('users')->where('id', $s->rep_user_id)->value('staff_code') : null, 'isRep' => Requirements::isRep($r->user()), 'repId' => $s->rep_user_id,
             'users' => $users, 'staffLeft' => $staffLeft, 'egLeft' => $egLeft,
             'engs' => $engsShown,
             'working' => DB::table('contracts')->whereIn('engineer_id', $egIds)->where('status', 'active')->pluck('engineer_id')->flip(),
@@ -146,7 +150,7 @@ class SesController extends Controller
         ]);
     }
 
-    // 担当者の仮登録は SES だけ（担当者は 403。K13）。入れるのは 姓・名・メール の3つだけ
+    // 一般担当者の仮登録は SES代表担当者だけ（一般担当者は 403。K13）。入れるのは 姓・名・メール の3つだけ
     public function userNew(Request $r)
     {
         abort_unless(Requirements::isRep($r->user()), 403);
@@ -161,11 +165,11 @@ class SesController extends Controller
         // 所属は自社に固定（ses_id が混ぜられても使わない）
         $res = Registration::provisionalPerson('ses', (int) $r->user()->ses_id, ['sei' => $sei, 'mei' => $mei, 'email' => $r->input('email')], $r->user());
         if (isset($res['bad'])) return $this->go('/ses/company', $res['bad'], 'bad');
-        if ($res['linked']) return $this->go('/ses/company', 'このメールアドレスのエンジニアのアカウントに、SES 担当者の役割を足しました（仮登録のご案内は送っていません）。');
-        return $this->go('/ses/company', '担当者を仮登録し、仮登録のご案内を送りました。');
+        if ($res['linked']) return $this->go('/ses/company', 'このメールアドレスのエンジニアのアカウントに、一般担当者の役割を足しました（仮登録のご案内は送っていません）。');
+        return $this->go('/ses/company', '一般担当者を仮登録し、仮登録のご案内を送りました。');
     }
 
-    // 会社情報の編集は SES だけ（担当者は見るだけ。K34）
+    // 会社情報の編集は SES代表担当者だけ（一般担当者は見るだけ。K34）
     public function companyEdit(Request $r)
     {
         abort_unless(Requirements::isRep($r->user()), 403);

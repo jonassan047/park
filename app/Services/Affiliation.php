@@ -43,7 +43,7 @@ class Affiliation
         }
         if (!empty($e->suspended_at) && !$isAdmin) return '停止中のエンジニアの所属は、管理者だけが変えられます。';
         if (DB::table('users')->where('engineer_id', $e->id)->whereIn('role', ['ses', 'admin'])->exists()) {
-            return 'この方は SES 担当者（または管理者）を兼ねているため、所属を変えられません。管理者にご相談ください。';
+            return 'この方は担当者（または管理者）を兼ねているため、所属を変えられません。管理者にご相談ください。';
         }
         if (DB::table('contracts')->where('engineer_id', $e->id)->where('status', 'active')->exists()) {
             return '稼働中の契約があるため、所属を変えられません。契約が終わってから変えてください。';

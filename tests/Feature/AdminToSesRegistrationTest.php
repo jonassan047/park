@@ -124,14 +124,14 @@ class AdminToSesRegistrationTest extends TestCase
     public function test_s1_08_list_shows_states_and_resend(): void
     {
         [$sid, $uid, $token] = $this->createSes();
-        $this->as('admin@park.example')->get('/admin/ses')->assertOk()->assertSee('流れ商事株式会社')->assertSee('仮登録')->assertSee('送り直し')->assertDontSee('仮登録（期限切れ）');
+        $this->as('admin@park.example')->get('/admin/ses?view=company')->assertOk()->assertSee('流れ商事株式会社')->assertSee('仮登録')->assertSee('送り直し')->assertDontSee('仮登録（期限切れ）');
         DB::table('users')->where('id', $uid)->update(['token_expires' => date('Y-m-d H:i:s', time() - 60)]);
-        $this->get('/admin/ses')->assertSee('仮登録（期限切れ）')->assertSee('送り直し');
+        $this->get('/admin/ses?view=company')->assertSee('仮登録（期限切れ）')->assertSee('送り直し');
         $this->get("/admin/ses/$sid")->assertOk()->assertSee('送り直し')->assertSee('取り消し')->assertDontSee("/admin/ses/$sid/suspend", false);
         // 本登録のあとは「参加中」で、送り直しはない
         DB::table('users')->where('id', $uid)->update(['registered_at' => now_str(), 'password' => Hash::make('x'), 'token' => null]);
         DB::table('ses_companies')->where('id', $sid)->update(['status' => 'active']);
-        $html = $this->get('/admin/ses')->assertOk()->getContent();
+        $html = $this->get('/admin/ses?view=company')->assertOk()->getContent();
         $this->assertStringContainsString('参加中', $html);
         $this->assertStringNotContainsString('/people/'.$uid.'/resend', $html);
     }
@@ -615,7 +615,7 @@ class AdminToSesRegistrationTest extends TestCase
     {
         [$sid, $uid] = $this->createSes();
         $this->as('admin@park.example')->get("/admin/ses/$sid")->assertSee('取り消し');
-        $this->post("/people/$uid/cancel")->assertRedirect('/admin/ses');
+        $this->post("/people/$uid/cancel")->assertRedirect('/admin/ses?view=company');
         $this->assertNull(DB::table('users')->find($uid));
         $this->assertNull(DB::table('ses_companies')->find($sid));
         $log = DB::table('audit_log')->where('action', 'reg-cancel')->orderByDesc('id')->first();

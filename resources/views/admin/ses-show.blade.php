@@ -5,30 +5,30 @@
 @if($s->status === 'suspended')<x-post :action="'/admin/ses/'.$s->id.'/resume'" label="再開" cls="small" confirm="この SES を再開します。担当者がログインできるようになります。" />@endif
 @if($s->status !== 'left')<x-post :action="'/admin/ses/'.$s->id.'/delete'" label="退会" cls="danger small" confirm="この SES と所属エンジニアを退会済みにします。全員ログインできなくなります（記録は残ります）。よろしいですか？" />@endif
 @if($s->status === 'pending')<a class="btn ghost small" href="{{ url('/admin/ses/'.$s->id.'/approve') }}">承認する（内容を確かめて仮登録）</a>@endif
-@if($s->status === 'provisional' && $s->rep_user_id)<x-post :action="'/people/'.$s->rep_user_id.'/resend'" label="送り直し" cls="ghost small" confirm="SES に、仮登録のご案内を送り直します。前のリンクは使えなくなります。" />
+@if($s->status === 'provisional' && $s->rep_user_id)<x-post :action="'/people/'.$s->rep_user_id.'/resend'" label="送り直し" cls="ghost small" confirm="SES代表担当者に、仮登録のご案内を送り直します。前のリンクは使えなくなります。" />
 <x-post :action="'/people/'.$s->rep_user_id.'/cancel'" label="取り消し" cls="danger small" confirm="この仮登録を取り消します。仮登録の行が消え、元に戻せません。よろしいですか？" />@endif
 <a class="btn small" href="{{ url('/admin/ses/'.$s->id.'/edit') }}">{{ $s->status === 'provisional' ? '仮登録の内容を直す' : '編集' }}</a>
 </x-slot:actions><dl class="dl">
 <dt>ID</dt><dd><x-code :v="$s->code" /></dd>
-<dt>状態</dt><dd>{{ badge('sesStatus', $s->status) }}</dd><dt>SES</dt><dd>{{ $repName ?: '—' }}</dd>
+<dt>状態</dt><dd>{{ badge('sesStatus', $s->status) }}</dd><dt>SES代表担当者</dt><dd><x-code :v="$repCode" /> {{ $repName ?: '—' }}</dd>
 <dt>メール</dt><dd>{{ $s->email ?: '—' }}</dd><dt>電話</dt><dd>{{ $s->phone ?: '—' }}</dd><dt>所在地</dt><dd>{{ postal_address($s->postal_code, $s->address) }}</dd>
 <dt>人数</dt><dd>{{ $s->employees ?? '—' }}</dd><dt>得意な分野</dt><dd>{{ $s->strengths ?: '—' }}</dd><dt>ひとこと</dt><dd>{!! nl2br(e($s->message)) ?: '—' !!}</dd>
 <dt>守秘義務への同意</dt><dd>{{ fmt_dt($s->agreed_at) }}</dd><dt>参加日</dt><dd>{{ fmt_date($s->joined_at) }}</dd><dt>メモ</dt><dd>{!! nl2br(e($s->notes)) ?: '—' !!}</dd>
 </dl>
-<p><a class="btn ghost" href="{{ url('/admin/ses') }}">SES の一覧に戻る</a></p>
+<p><a class="btn ghost" href="{{ url('/admin/ses?view=company') }}">SES・担当者一覧に戻る</a></p>
 </x-card>
 </div><div>
 @include('partials.left-toggle')
-<x-card title="担当者"><x-slot:actions>@if($s->status === 'active')<a class="btn small" href="{{ url('/admin/ses/'.$s->id.'/users/new') }}">担当者を登録</a>@endif</x-slot:actions>
-@if($noUsable === 'stopped')<p class="bad-text">使える担当者がいません。止めている担当者を再開するか、担当者を登録してください。</p>@endif
-@if($noUsable === 'left')<p class="bad-text">使える担当者がいません。担当者を登録してください。</p>@endif
+<x-card title="担当者"><x-slot:actions>@if($s->status === 'active')<a class="btn small" href="{{ url('/admin/ses/'.$s->id.'/users/new') }}">一般担当者を登録</a>@endif</x-slot:actions>
+@if($noUsable === 'stopped')<p class="bad-text">使える担当者がいません。止めている担当者を再開するか、一般担当者を登録してください。</p>@endif
+@if($noUsable === 'left')<p class="bad-text">使える担当者がいません。一般担当者を登録してください。</p>@endif
 @if($usersShown->count() + $dualAdminsShown->count() || !$staffLeft['hidden'])
 <x-table :head="['ID', '名前', 'メール', '状態', '最終ログイン', '']" :count="$usersShown->count() + $dualAdminsShown->count()">
 @foreach($usersShown as $u)@php
 $state = user_state($u);
 $base = '/admin/ses/'.$s->id.'/users/'.$u->id;
-$isRepRow = (int) $u->id === (int) $s->rep_user_id || (int) $u->id === (int) $s->next_rep_user_id; // SES（次の SES）は、交代のあとでなければ止められない
-@endphp<tr @class(['is-left' => is_left_row('staff', $u)])><td><x-code :v="$u->staff_code" /></td><td>{{ $u->name }}@if((int) $u->id === (int) $s->rep_user_id) <span class="badge info">SES</span>@elseif((int) $u->id === (int) $s->next_rep_user_id) <span class="badge info">次の SES</span>@endif
+$isRepRow = (int) $u->id === (int) $s->rep_user_id || (int) $u->id === (int) $s->next_rep_user_id; // SES代表担当者（次の人も）は、交代のあとでなければ止められない
+@endphp<tr @class(['is-left' => is_left_row('staff', $u)])><td><x-code :v="$u->staff_code" /></td><td>{{ $u->name }}@if((int) $u->id === (int) $s->rep_user_id) <span class="badge info">SES代表担当者</span>@elseif((int) $u->id === (int) $s->next_rep_user_id) <span class="badge info">次のSES代表担当者</span>@endif
 @if($u->engineer_id) <a class="badge info" href="{{ url('/engineers/'.$u->engineer_id) }}">エンジニア兼任</a>@endif</td><td>{{ account_mail($u) }}</td><td>{{ $state }}</td>
 <td>{{ fmt_dt($u->last_login) }}</td><td>@if(is_provisional_state($state))<x-post :action="'/people/'.$u->id.'/resend'" label="送り直し" cls="ghost small" />
 <a class="btn ghost small" href="{{ url('/people/'.$u->id.'/edit') }}">仮登録の内容を直す</a>
@@ -45,27 +45,27 @@ $isRepRow = (int) $u->id === (int) $s->rep_user_id || (int) $u->id === (int) $s-
 @include('partials.left-note', $staffLeft)
 {{-- 自分がこの会社の担当者を兼ねる・やめる（自分のことだけ。K5） --}}
 @if((int) $me->ses_id === (int) $s->id)
-<p class="muted">あなたは、この会社の担当者を兼ねています。ログインのとき「SES 担当者（{{ $s->name }}）」を選ぶと、この会社の担当者として案件の案内などができます。</p>
+<p class="muted">あなたは、この会社の担当者を兼ねています。ログインのとき「一般担当者（{{ $s->name }}）」を選ぶと、この会社の担当者として案件の案内などができます。</p>
 <x-post :action="'/admin/ses/'.$s->id.'/staff-dual/stop'" label="兼任をやめる" cls="ghost small" confirm="この会社の担当者を兼ねるのをやめます。この会社の担当者にお知らせが届きます。よろしいですか？" />
 @elseif($s->status === 'active')
-<x-post :action="'/admin/ses/'.$s->id.'/staff-dual'" label="この会社の担当者を兼ねる" cls="small" confirm="あなたが、この会社の担当者を兼ねます。この会社の SES・担当者に、お知らせとメールが届きます。兼ねられるのは1社だけです。よろしいですか？" />
+<x-post :action="'/admin/ses/'.$s->id.'/staff-dual'" label="この会社の担当者を兼ねる" cls="small" confirm="あなたが、この会社の担当者を兼ねます。この会社の担当者に、お知らせとメールが届きます。兼ねられるのは1社だけです。よろしいですか？" />
 @endif
 </x-card>
 @if($s->status === 'active')
-<x-card title="SES の交代">
-@if(!$s->rep_user_id)<p class="bad-text">この会社には SES がいません。本登録が済んだ担当者から選んで、SES にしてください。</p>@endif
+<x-card title="SES代表担当者の交代">
+@if(!$s->rep_user_id)<p class="bad-text">この会社には SES代表担当者がいません。本登録が済んだ一般担当者から選んで、SES代表担当者にしてください。</p>@endif
 @if($repCandidates->count())
 <form method="post" action="{{ url('/admin/ses/'.$s->id.'/rep') }}" class="filters">@csrf
-<x-field label="新しい SES（本登録が済んだ担当者から選びます）" name="user_id" type="select" :options="$repCandidates->pluck('name', 'id')->all()" blank="選んでください" required />
-<button class="btn small" onclick="return confirm('SES を交代します。前の SES は担当者になります。よろしいですか？')">SES にする</button></form>
+<x-field label="新しいSES代表担当者（本登録が済んだ一般担当者から選びます）" name="user_id" type="select" :options="$repCandidates->mapWithKeys(fn ($x) => [$x->id => id_title($x->staff_code, $x->name)])->all()" blank="選んでください" required />
+<button class="btn small" onclick="return confirm('SES代表担当者を交代します。前のSES代表担当者は一般担当者になります。よろしいですか？')">SES代表担当者にする</button></form>
 @else
-<p class="muted">本登録が済んだ担当者がいません。次の SES を仮登録すると、その方の本登録が済んだときに SES が入れ替わります（それまでは今の SES のままです）。</p>
-@if($s->next_rep_user_id && $users->firstWhere('id', $s->next_rep_user_id))<p>次の SES：{{ $users->firstWhere('id', $s->next_rep_user_id)->name }}（上の担当者の表から、送り直し・直し・取り消しができます）</p>
+<p class="muted">本登録が済んだ一般担当者がいません。次のSES代表担当者を仮登録すると、その方の本登録が済んだときに SES代表担当者が入れ替わります（それまでは今のSES代表担当者のままです）。</p>
+@if($s->next_rep_user_id && $users->firstWhere('id', $s->next_rep_user_id))<p>次のSES代表担当者：<x-code :v="$users->firstWhere('id', $s->next_rep_user_id)->staff_code" /> {{ $users->firstWhere('id', $s->next_rep_user_id)->name }}（上の担当者の表から、送り直し・直し・取り消しができます）</p>
 @else
 <form method="post" action="{{ url('/admin/ses/'.$s->id.'/rep') }}">@csrf
 <div class="pair"><x-field label="氏名（姓）" name="name_sei" required /><x-field label="氏名（名）" name="name_mei" required /></div>
 <x-field label="メールアドレス" name="email" type="email" required />
-<button class="btn small">次の SES を仮登録する</button></form>
+<button class="btn small">次のSES代表担当者を仮登録する</button></form>
 @endif
 @endif
 </x-card>

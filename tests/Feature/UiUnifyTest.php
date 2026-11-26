@@ -207,7 +207,7 @@ class UiUnifyTest extends TestCase
         DB::table('ses_companies')->where('id', 2)->update(['status' => 'suspended']);
         $this->admin();
         foreach (['/engineers/new?ses=99999', '/engineers/new?ses=2', '/engineers/new?ses=4', '/engineers/new?ses=abc'] as $url) {
-            $this->get($url)->assertRedirect(url('/admin/ses'))->assertSessionHas('flash.type', 'warn')
+            $this->get($url)->assertRedirect(url('/admin/ses?view=company'))->assertSessionHas('flash.type', 'warn')
                 ->assertSessionHas('flash.msg', 'エンジニアは、SES の画面で SES を選んでから登録します。');
         }
         // SES を指定しないとき（SES の画面を通らないとき）は、参加中の SES から選ぶ画面になる（台帳 K15。停止中・申込中の SES は選べない）
@@ -221,7 +221,7 @@ class UiUnifyTest extends TestCase
         $html = $this->admin()->get('/engineers/new?ses=1')->assertOk()->assertSee('所属：'.$name)->getContent();
         $this->assertStringContainsString('<input type="hidden" name="ses_id" value="1">', $html);
         $this->assertStringNotContainsString('<select name="ses_id"', $html);
-        $this->get('/engineers/new?ses=direct')->assertRedirect(url('/admin/ses')); // 直属は新しく登録できない（V1-1）
+        $this->get('/engineers/new?ses=direct')->assertRedirect(url('/admin/ses?view=company')); // 直属は新しく登録できない（V1-1）
     }
 
     public function test_u5_admin_post_with_bad_ses_is_refused(): void
@@ -281,7 +281,7 @@ class UiUnifyTest extends TestCase
     public function test_detail_buttons(): void
     {
         $this->admin();
-        $show = $this->get('/admin/ses/1')->assertOk()->assertSee('会社情報')->assertSee('担当者を登録')->assertSee('SES の一覧に戻る')->getContent();
+        $show = $this->get('/admin/ses/1')->assertOk()->assertSee('会社情報')->assertSee('一般担当者を登録')->assertSee('SES・担当者一覧に戻る')->getContent();
         $this->assertStringContainsString(url('/admin/ses/1/edit'), $show);
         $this->get('/admin/ses/1/edit')->assertOk()->assertSee('戻る');
         $this->get('/admin/ses/1/users/new')->assertOk()->assertSee('戻る');

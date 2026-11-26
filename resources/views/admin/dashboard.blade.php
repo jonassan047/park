@@ -10,9 +10,9 @@
 @endif
 <x-todo />
 @php $next = ['applied' => 'スキルシートを提出', 'doc_passed' => '面談を設定', 'interviewed' => '成約 or 次の面談']; @endphp
-<x-stats :items="[['SES（参加中）', $counts['ses'], '申込 '.$counts['sesPending'].'・仮登録 '.$counts['sesInvited'], '/admin/ses'], ['エンジニア', $counts['eng'], '待機 '.$counts['engAvail'], '/admin/engineers'],
+<x-stats :items="[['SES（参加中）', $counts['ses'], '申込 '.$counts['sesPending'].'・仮登録 '.$counts['sesInvited'], '/admin/ses?view=company'], ['エンジニア', $counts['eng'], '待機 '.$counts['engAvail'], '/admin/engineers'],
     ['案件（募集中）', $counts['cases'], '全体 '.$counts['casesAll']], ['選考中', $counts['apps']], ['稼働中の契約', $counts['contracts']], ['今月の成功報酬（税別）', yen($revenue), this_month()],
-    ['請求（未入金）', $counts['invUnpaid'].'件', '発行済み・入金待ち'], ['仮登録', $counts['invited'].'人', '管理者・SES・エンジニア']]" />
+    ['請求（未入金）', $counts['invUnpaid'].'件', '発行済み・入金待ち'], ['仮登録', $counts['invited'].'人', '管理者・担当者・エンジニア']]" />
 @if($unreviewedSkills)<div class="flash warn">案件などから自動で追加された、確認待ちの技術が {{ $unreviewedSkills }} 件あります。<a href="{{ url('/admin/skills') }}">技術マスタで分類を確かめる</a></div>@endif
 <div class="cols"><div>
 @if($pendingSes->count())

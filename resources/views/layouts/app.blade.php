@@ -1,7 +1,7 @@
 @php
     $u = auth()->user();
     $nav = [
-        'admin' => [['/admin', 'ダッシュボード'], ['/admin/admins', '管理者'], ['/admin/ses', 'SES一覧'], ['/admin/engineers', 'エンジニア一覧'], ['/admin/providers', 'プロバイダー一覧'], ['/admin/cases', '案件一覧'], ['/admin/applications', '応募・選考一覧'],
+        'admin' => [['/admin', 'ダッシュボード'], ['/admin/admins', '管理者'], ['/admin/ses', 'SES・担当者一覧'], ['/admin/engineers', 'エンジニア一覧'], ['/admin/providers', 'プロバイダー一覧'], ['/admin/cases', '案件一覧'], ['/admin/applications', '応募・選考一覧'],
             ['/admin/contracts', '契約一覧'], ['/admin/invoices', '請求一覧'], ['/threads', '案件のやり取り'], ['/admin/messages', 'エンジニアとのやり取り'], ['/mails', '連絡メール'], ['/admin/mail', 'メール'], ['/admin/inbound', '受信メール'],['/admin/reports', '分析'], ['/admin/ai', 'AI'], ['/admin/settings', '設定'], ['/manual', '使い方']],
         'ses' => [['/ses', 'ダッシュボード'], ['/ses/company', 'SES'], ['/ses/engineers', 'エンジニア一覧'], ['/ses/providers', 'プロバイダー一覧'], ['/ses/cases', '案件一覧'], ['/ses/applications', '応募・選考一覧'], ['/ses/contracts', '契約一覧'], ['/ses/invoices', '請求一覧'], ['/threads', '案件のやり取り'], ['/inbound', '返信メール'], ['/mails', '連絡メール'], ['/manual', '使い方']],
         'eg' => [['/eg', 'ホーム'], ['/eg/offers', '届いた案件'], ['/eg/applications', '応募・面談'], ['/eg/profile', 'プロフィール'], ['/eg/sheet', 'スキルシート'], ['/eg/messages', '管理者とのやり取り'], ['/mails', '連絡メール'], ['/manual', '使い方']],
@@ -37,7 +37,7 @@
     $unreadQ = $u ? DB::table('app_notifications')->where('user_id', $u->id)->whereNull('read_at') : null;
     $unread = $u ? ($dual ? (clone $unreadQ)->where(fn ($w) => $w->whereNull('for_role')->orWhere('for_role', $u->role))->count() : $unreadQ->count()) : 0;
     $otherUnread = ($dual && $acting) ? (clone $unreadQ)->whereNotNull('for_role')->where('for_role', '!=', $u->role)->count() : 0;
-    $otherName = ['admin' => '管理者', 'ses' => 'SES 担当者', 'eg' => 'エンジニア'];
+    $otherName = ['admin' => '管理者', 'ses' => '担当者', 'eg' => 'エンジニア'];
     // 担当者の立場のとき：プロバイダーからの未読の返事（自動のものは除く）。件数・最小の id・案件名を 1 回の問い合わせで取る
     $provMail = null;
     if ($u && $passed && $u->role === 'ses') {
@@ -65,7 +65,7 @@
     <nav>@foreach($nav as [$href, $label])<a href="{{ url($href) }}" class="{{ $current === $href || (!in_array($href, $homes, true) && str_starts_with($current, $href.'/')) ? 'on' : '' }}">{{ $label }}</a>@endforeach</nav>
     <div class="me">
       <a href="{{ url('/notifications') }}" class="bell" title="通知">🔔@if($unread)<b>{{ $unread }}</b>@endif</a>
-      <a href="{{ url('/account') }}"><span class="who">{{ user_label($u) }}</span><small><span class="rolepill">{{ lbl('role', $u->role) }}</span>のアカウント</small></a>
+      <a href="{{ url('/account') }}"><span class="who">{{ user_label($u) }}</span><small><span class="rolepill">{{ $u->role === 'ses' ? staff_kind($u) : lbl('role', $u->role) }}</span>のアカウント</small></a>
       <form method="post" action="{{ url('/logout') }}" class="inline">@csrf<button class="link">ログアウト</button></form>
     </div>
   @else
@@ -76,7 +76,7 @@
 @if($passed)
 <div class="loginbar"><div class="wrap">
   @if($u->role === 'admin')管理者{{ $u->company_name ? '（'.$u->company_name.'）' : '' }}としてログインしています：{{ $u->name }}
-  @elseif($u->role === 'ses')SES（{{ DB::table('ses_companies')->where('id', $u->ses_id)->value('name') }}）{{ \App\Support\Requirements::isRep($u) ? '' : 'のご担当者' }}としてログインしています
+  @elseif($u->role === 'ses'){{ staff_kind($u) }}（{{ DB::table('ses_companies')->where('id', $u->ses_id)->value('name') }}）としてログインしています
   @else エンジニアとしてログインしています
   @endif
   <form method="get" action="{{ url('/find') }}" class="findbar"><input type="text" name="code" placeholder="ID で探す（例：CA-12）" aria-label="ID で探す" maxlength="30"><button type="submit">探す</button></form>

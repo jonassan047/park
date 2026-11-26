@@ -132,13 +132,13 @@ class V0200LeftHiddenTest extends TestCase
 
     public function test_ses_list_hides_left_by_default(): void
     {
-        $html = $this->page(self::ADMIN, '/admin/ses');
+        $html = $this->page(self::ADMIN, '/admin/ses?view=company');
         $this->assertStringNotContainsString('架空退会商事', $html);
         $this->assertStringNotContainsString('架空移管商事', $html);
         $this->assertStringContainsString('退会済みを表示しない', $html);
         $this->assertStringContainsString('退会済み 2 件は表示していません。', $html);
 
-        $html = $this->page(self::ADMIN, '/admin/ses?left=1');
+        $html = $this->page(self::ADMIN, '/admin/ses?view=company&left=1');
         $this->assertGray($html, '架空退会商事');
         $this->assertGray($html, '架空移管商事');
         $this->assertNotGray($html, DB::table('ses_companies')->where('id', $this->a)->value('name'));
@@ -232,7 +232,8 @@ class V0200LeftHiddenTest extends TestCase
     public function test_back_to_list_keeps_left(): void
     {
         $this->as(self::ADMIN)->post("/engineers/{$this->egOk}/delete", ['back' => 'list', 'back_query' => 'left=1'])->assertRedirect('/admin/engineers?left=1');
-        $this->assertSame('エンジニア「架空 参加太郎」を退会済みにしました。', session('flash')['msg']); // A11
+        $code = DB::table('engineers')->where('id', $this->egOk)->value('code');
+        $this->assertSame("エンジニア「{$code}　架空 参加太郎」を退会済みにしました。", session('flash')['msg']); // A11
         $this->assertSame('/p?left=1', list_back('/p', 'left=1'));
     }
 
@@ -292,7 +293,7 @@ class V0200LeftHiddenTest extends TestCase
     public function test_empty_ses_list_shows_one_message(): void
     {
         DB::table('ses_companies')->where('kind', 'ses')->update(['kind' => 'direct']); // 一覧に出る SES が 0 件の形
-        $html = $this->page(self::ADMIN, '/admin/ses');
+        $html = $this->page(self::ADMIN, '/admin/ses?view=company');
         $this->assertSame(1, substr_count($html, 'まだありません'));
         $this->assertStringContainsString('SES はまだありません。「SES を仮登録」から入れます。', $html);
         $this->assertStringNotContainsString('件は表示していません', $html);
@@ -316,7 +317,7 @@ class V0200LeftHiddenTest extends TestCase
     {
         foreach (['left=0', 'left=', 'left[]=1', 'left=yes', 'left='.str_repeat('1', 500)] as $q) {
             $this->assertStringNotContainsString('架空 退会ログイン', $this->page(self::ADMIN, "/admin/engineers?$q"), $q);
-            $this->assertStringNotContainsString('架空退会商事', $this->page(self::ADMIN, "/admin/ses?$q"), $q);
+            $this->assertStringNotContainsString('架空退会商事', $this->page(self::ADMIN, "/admin/ses?view=company&$q"), $q);
         }
     }
 
@@ -327,14 +328,15 @@ class V0200LeftHiddenTest extends TestCase
         $e = $this->mkSes('架空空席商事');
         $this->mkStaff($e, 'v20empty@park.example', '架空 空席担当', true);
         $html = $this->page(self::ADMIN, "/admin/ses/$e");
-        $this->assertStringContainsString('使える担当者がいません。担当者を登録してください。', $html);
+        $this->assertStringContainsString('使える担当者がいません。一般担当者を登録してください。', $html);
         $this->assertStringContainsString('退会済み 1 件は表示していません。', $html);
         $this->assertStringNotContainsString('架空 空席担当', $html);
 
         $next = $this->mkStaff($e, 'v20next@park.example', '架空 次期担当');
         DB::table('users')->where('id', $next)->update(['registered_at' => null]);
         DB::table('ses_companies')->where('id', $e)->update(['next_rep_user_id' => $next]);
-        $this->assertStringContainsString('次の SES：架空 次期担当', $this->page(self::ADMIN, "/admin/ses/$e"));
+        $code = preg_quote((string) DB::table('users')->where('id', $next)->value('staff_code'), '#');
+        $this->assertMatchesRegularExpression('#次のSES代表担当者：\s*<span class="code">'.$code.'</span>\s*架空 次期担当#u', $this->page(self::ADMIN, "/admin/ses/$e"));
 
         // 本登録が済んだ担当者は、交代の候補に出る
         $html = $this->page(self::ADMIN, "/admin/ses/{$this->a}");
@@ -470,7 +472,8 @@ class V0200LeftHiddenTest extends TestCase
 
         // 参加中の担当者を代表が退会 → メッセージと、表から消えて件数が増える
         $this->as(self::SES1)->post("/admin/ses/{$this->a}/users/{$this->staff}/delete");
-        $this->assertSame('架空 現役担当 さんを退会済みにしました。', session('flash')['msg']);
+        $code = DB::table('users')->where('id', $this->staff)->value('staff_code');
+        $this->assertSame("{$code}　架空 現役担当 さんを退会済みにしました。", session('flash')['msg']);
         $html = $this->page(self::SES1, '/ses/company');
         $this->assertStringNotContainsString('架空 現役担当', $html);
         $this->assertSame(1, $this->leftNote($html, 3));
@@ -509,8 +512,8 @@ class V0200LeftHiddenTest extends TestCase
             $this->mkStaff($from, 'v20move@park.example', '架空 引越担当');
             $this->mkEg($from, '架空 引越社員', 'v20moveeg@park.example', false);
             $this->artisan('park:move-ses', ['from' => $from, 'to' => $this->b, '--yes' => true])->assertSuccessful();
-            $this->assertStringNotContainsString('架空引越元商事', $this->page(self::ADMIN, '/admin/ses'));
-            $this->assertGray($this->page(self::ADMIN, '/admin/ses?left=1'), '架空引越元商事');
+            $this->assertStringNotContainsString('架空引越元商事', $this->page(self::ADMIN, '/admin/ses?view=company'));
+            $this->assertGray($this->page(self::ADMIN, '/admin/ses?view=company&left=1'), '架空引越元商事');
             $html = $this->page(self::ADMIN, "/admin/ses/$from");
             $this->assertStringContainsString('　架空引越元商事　退会済み</h1>', $html);
             $this->assertStringNotContainsString('件は表示していません', $html);
@@ -530,7 +533,7 @@ class V0200LeftHiddenTest extends TestCase
         $html = $this->page(self::SES1, '/ses/company');
         $this->assertNotGray($html, '架空 参加太郎');
         $this->assertNotGray($html, '架空 現役担当');
-        $this->assertNotGray($this->page(self::ADMIN, '/admin/ses'), DB::table('ses_companies')->where('id', $this->b)->value('name'));
+        $this->assertNotGray($this->page(self::ADMIN, '/admin/ses?view=company'), DB::table('ses_companies')->where('id', $this->b)->value('name'));
     }
 
     public function test_left_company_people_cannot_see_untitled_company_page(): void
