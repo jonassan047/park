@@ -1,5 +1,6 @@
 @extends('layouts.app', ['title' => id_title($e->code, $e->name).' さん', 'wide' => true])
 @section('content')
+@include('partials.role-hero', ['kind' => 'eg'])
 <x-todo />
 <p class="muted">あなたの ID：<x-code :v="$e->code" /></p>
 <x-stats :items="[['スキルシートの完成度', $check['score'].'%', $check['score'] < 80 ? 'あと少し' : 'いい感じです'], ['届いている案件', $offers->count()],

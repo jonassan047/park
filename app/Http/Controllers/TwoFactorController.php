@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Services\Notifier as N;
 use App\Services\Registration;
+use App\Services\Workflow as W;
 use App\Support\RegistrationText as T;
 use App\Support\TwoFactor as TF;
 use Illuminate\Http\Request;
@@ -12,10 +13,14 @@ use Illuminate\Support\Facades\DB;
 // 2要素認証：パスワードのあと、メールで届いた確認コードを入れる
 class TwoFactorController extends Controller
 {
+    // 立場ごとの区切りのページ
+    private const START_PAGES = ['ses' => '/start/ses', 'eg' => '/start/engineer'];
+
     public function challengeForm(Request $r)
     {
         $u = $r->user();
-        if ((int) $r->session()->get(TF::SESSION_KEY) === (int) $u->id) return redirect($u->home());
+        // 確認コードを聞かないログインもここを通るので、行き先はコードを入れたときと同じにする
+        if ((int) $r->session()->get(TF::SESSION_KEY) === (int) $u->id) return redirect()->intended(url($this->startOf($u)));
         // 使えるコードが無いとき（途中から来た・期限切れ・まちがえすぎ）は、ここで新しく送る
         $st = TF::state($r);
         $next = ' 新しいメールのコードを入れてください。';
@@ -35,7 +40,7 @@ class TwoFactorController extends Controller
             }
         }
         // 送ったときに確認済み・省略で通ったなら、画面を出さずに進む
-        if ((int) $r->session()->get(TF::SESSION_KEY) === (int) $u->id) return redirect($u->home());
+        if ((int) $r->session()->get(TF::SESSION_KEY) === (int) $u->id) return redirect()->intended(url($this->startOf($u)));
         if ($flash) $r->session()->now('flash', $flash);
         return view('two-factor.challenge', ['email' => TF::maskedEmail($u->email), 'devCode' => $r->session()->get(TF::DEV_KEY)]);
     }
@@ -67,7 +72,20 @@ class TwoFactorController extends Controller
         if (Registration::$lastResult === 'done') {
             return redirect(url($u->home()))->with('flash', ['msg' => '本登録が完了しました。'.(Registration::$lastWarn ? Registration::$lastWarn : ''), 'type' => Registration::$lastWarn ? 'warn' : 'ok']);
         }
-        return redirect()->intended(url($u->home()));
+        return redirect()->intended(url($this->startOf($u)));
+    }
+
+    // 確認コードのあとの、既定の行き先。SES とエンジニアは区切りのページ、管理者はダッシュボード
+    // 兼任（使える立場が2つ以上）の人は今のままの行き先（そのあと立場を選ぶ）
+    private function startOf($u): string
+    {
+        $role = $u->role;
+        if (is_dual()) {
+            $usable = W::usableRoles(DB::table('users')->find($u->id));
+            if (count($usable) !== 1) return $u->home();
+            $role = $usable[0];
+        }
+        return self::START_PAGES[$role] ?? $u->home();
     }
 
     public function resend(Request $r)

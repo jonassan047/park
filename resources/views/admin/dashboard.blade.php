@@ -1,5 +1,6 @@
 @extends('layouts.app', ['title' => 'ダッシュボード', 'wide' => true])
 @section('content')
+@include('partials.role-hero', ['kind' => 'admin'])
 @if($start)
 <x-card title="PARK をはじめましょう"><p class="muted">次の順に進めると、実際のデータで PARK が動きはじめます。</p>
 <table><tbody>

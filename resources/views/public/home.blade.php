@@ -1,9 +1,10 @@
 @extends('layouts.app', ['title' => 'PARK', 'noTitle' => true, 'wide' => true])
 @section('content')
-<section class="hero">
+<section class="hero big">
   <div>
+    <img class="sprig hero-sprig" src="{{ asset('img/sprig.jpg') }}" alt="">
     <span class="pill"><i></i>木漏れ日の下で、仕事と仲間がつながる庭</span>
-    <h1>SES 企業のみなさまと、<br>エンジニアが、同じ木の下で。</h1>
+    <h1>SES 企業のみなさまと、<br>エンジニアが、<span class="nb">同じ木の下で。</span></h1>
     <p>小さな SES 企業どうしが1つのグループにまとまり、届いた案件に、グループ全体のエンジニアからいちばん合う人を出します。いちばん大事にするのは、<b>エンジニアの成約率を上げること</b>です。</p>
     <p style="margin-top:22px"><a class="btn" href="{{ url('/apply') }}">参加のお申し込み（SES 企業さま） →</a> <a class="btn ghost" href="{{ url('/login') }}">ログイン</a></p>
   </div>
@@ -12,9 +13,9 @@
 
 <div class="section-title"><h2>PARK の歩き方</h2><p>あなたの立場に合わせて、公園の中のスポットを訪れてみてください。</p></div>
 <div class="spots">
-  <a class="spot" href="{{ url('/manual/ses') }}" style="background-image:url('{{ asset('img/ses.jpg') }}')"><div><em>SES 企業さま</em><b>🏡 グループで、仕事を回す</b>
+  <a class="spot" href="{{ url('/start/ses') }}" style="background-image:url('{{ asset('img/ses.jpg') }}')"><div><em>SES 企業さま</em><b>🏡 グループで、仕事を回す</b>
     <small>1社では受けきれない案件も、仲間のエンジニアで埋められます。自社のエンジニアとの相性もひと目でわかります。</small></div></a>
-  <a class="spot" href="{{ url('/manual/engineer') }}" style="background-image:url('{{ asset('img/engineers.jpg') }}')"><div><em class="orange">エンジニアのみなさま</em><b>🪑 合う案件が、届く</b>
+  <a class="spot" href="{{ url('/start/engineer') }}" style="background-image:url('{{ asset('img/engineers.jpg') }}')"><div><em class="orange">エンジニアのみなさま</em><b>🪑 合う案件が、届く</b>
     <small>管理者と一緒に、事実にもとづいたスキルシートを作り、面談の準備（Q&A）まで支えます。利用は無料です。</small></div></a>
 </div>
 

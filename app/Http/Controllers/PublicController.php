@@ -25,6 +25,33 @@ class PublicController extends Controller
         return view('public.home');
     }
 
+    // 区切りのページの種類（URL）と、その立場
+    private const START_ROLES = ['ses' => 'ses', 'engineer' => 'eg'];
+
+    // 区切りのページ。DB の値は画面に渡さず、下のボタンを決める立場の判定だけをする
+    // state：work（作業を始める）・choose（兼任で立場が未選択）・login（ログイン前）・other（別の立場でログイン中）
+    public function start(Request $r, string $kind)
+    {
+        $u = $r->user();
+        // 確認コードまで済んでいるか（Role ミドルウェアと同じ見方）
+        $in = $u && $u->active && ((int) $r->session()->get(TwoFactor::SESSION_KEY) === (int) $u->id || TwoFactor::confirmed($u));
+        $state = 'login';
+        $back = '/';
+        if ($in) {
+            $role = $u->role; // 兼任で立場を選んだあとは、ActingRole が入れ替えている
+            if (is_dual() && !$r->session()->get('acting_role')) {
+                $usable = W::usableRoles(DB::table('users')->find($u->id));
+                $role = count($usable) === 1 ? $usable[0] : null; // 使える立場が1つなら、選ばずにその立場
+                if (!$role) $state = 'choose';
+            }
+            if ($state !== 'choose') {
+                $state = $role === self::START_ROLES[$kind] ? 'work' : 'other';
+                $back = $role ? '/'.$role : $u->home(); // 立場の名前（admin・ses・eg）が、そのままホームの道
+            }
+        }
+        return view('public.start', ['kind' => $kind, 'state' => $state, 'back' => $back]);
+    }
+
     public function loginForm(Request $r)
     {
         return $r->user() ? redirect($r->user()->home()) : view('public.login', ['lastEmail' => (string) $r->cookie('park-last-email', '')]);

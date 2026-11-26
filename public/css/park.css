@@ -1,6 +1,8 @@
 /* PARK — 公園風のデザイン（41_Park-Project の 99_Data/index.html の見本に合わせた。緑系・丸いフォント） */
 :root {
-  /* --blue は昔の名前のまま、色は公園の緑（park-500）にした */
+  /* --blue は昔の名前のまま、色は公園の緑（park-500）にした。地・文字・ボタン・リンクは、どの立場でもこの緑 */
+  /* --role は立場を見分ける色（ヘッダーの帯・ログイン中の帯・役割の札だけに使う） */
+  --role: #3d9465;
   --ink: #214e37; --sub: #5b7a68; --line: #d3e8dc; --bg: #f2f8f5; --card: #fff;
   --blue: #3d9465; --blue-dark: #2e7750; --blue2: #e1f0e8; --blue3: #c2e2d1; --ok: #2e7750; --warn: #e67e22; --bad: #c0392b;
   --shadow: 0 1px 2px rgba(33, 78, 55, .06), 0 4px 14px rgba(33, 78, 55, .06);
@@ -58,7 +60,7 @@ td:has(> a.btn.small:last-child) { text-align: right; white-space: nowrap; }
 .field > span { display: block; font-size: 12px; color: var(--sub); margin-bottom: 3px; }
 .field > span i { font-style: normal; color: var(--bad); margin-left: 6px; font-size: 11px; }
 .field small { color: var(--sub); font-size: 11px; }
-input, select, textarea { width: 100%; font: inherit; padding: 7px 9px; border: 1px solid #c3d1df; border-radius: 7px; background: #fff; color: var(--ink); }
+input, select, textarea { width: 100%; font: inherit; padding: 7px 9px; border: 1px solid #c2e2d1; border-radius: 7px; background: #fff; color: var(--ink); }
 input:focus, select:focus, textarea:focus { outline: 2px solid var(--blue3); border-color: var(--blue); }
 input[type=checkbox] { width: auto; }
 label.check { display: block; margin: 8px 0; }
@@ -95,7 +97,7 @@ tr.is-left .badge, tr.is-left a:not(.btn) { opacity: .7; }
 .r { text-align: right; }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--blue); }
 
-.badge { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 10px; background: #eef2f6; color: var(--sub); white-space: nowrap; }
+.badge { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 10px; background: #edf3ef; color: var(--sub); white-space: nowrap; }
 .badge.ok { background: #e3f4ea; color: var(--ok); }
 .badge.info { background: var(--blue2); color: var(--blue); }
 .badge.warn { background: #fff1d6; color: var(--warn); }
@@ -114,7 +116,7 @@ a.stat.link { display: block; color: inherit; text-decoration: none; }
 a.stat.link:hover { border-color: var(--blue-dark); }
 
 .score { display: inline-flex; align-items: center; gap: 6px; min-width: 110px; }
-.score span { display: inline-block; height: 8px; border-radius: 4px; background: linear-gradient(90deg, #8fb9e3, var(--blue)); }
+.score span { display: inline-block; height: 8px; border-radius: 4px; background: linear-gradient(90deg, #9fd3b5, var(--blue)); }
 .score::before { content: ""; }
 .score { position: relative; }
 .score b { font-size: 12px; }
@@ -161,8 +163,6 @@ a.stat.link:hover { border-color: var(--blue-dark); }
 .projhead a { margin-left: auto; }
 .ach { background: #f1f8f3; border-left: 3px solid var(--ok); padding: 2px 8px; }
 
-.hero { background: linear-gradient(135deg, #e8f1fb, #fff); border: 1px solid var(--line); border-radius: 16px; padding: 30px; margin: 20px 0; }
-.hero h1 { font-size: 26px; margin-top: 0; }
 .tabs { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .tabs a:not(.btn) { padding: 4px 12px; border-radius: 14px; text-decoration: none; background: #fff; border: 1px solid var(--line); }
 .tabs a.on { background: var(--blue); color: #fff; }
@@ -174,7 +174,7 @@ a.stat.link:hover { border-color: var(--blue-dark); }
 .ticket { display: block; background: #fff; border-radius: 8px; padding: 7px 9px; margin-bottom: 6px; text-decoration: none; color: var(--ink); border: 1px solid var(--line); }
 .ticket span, .ticket small { display: block; font-size: 12px; } .ticket small { color: var(--sub); }
 .timeline { padding-left: 18px; } .timeline li { margin-bottom: 8px; } .timeline small { color: var(--sub); }
-.qa { padding-left: 20px; } .qa li { margin-bottom: 14px; } .qa .q { font-weight: 600; margin: 4px 0 2px; } .qa .hint { margin: 0; color: #36506b; background: var(--blue2); padding: 6px 10px; border-radius: 6px; }
+.qa { padding-left: 20px; } .qa li { margin-bottom: 14px; } .qa .q { font-weight: 600; margin: 4px 0 2px; } .qa .hint { margin: 0; color: #2e5a44; background: var(--blue2); padding: 6px 10px; border-radius: 6px; }
 .qaedit { display: grid; grid-template-columns: 140px 1fr; gap: 4px 8px; margin-bottom: 10px; } .qaedit textarea { grid-column: span 2; }
 .thread { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
 .msg { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; max-width: 80%; }
@@ -188,7 +188,7 @@ a.stat.link:hover { border-color: var(--blue-dark); }
 .sheet header { border-bottom: 3px solid var(--blue); margin-bottom: 14px; display: flex; justify-content: space-between; align-items: end; }
 .sheet h1 { margin: 0; font-size: 22px; }
 .sheet h2 { font-size: 14px; background: var(--blue2); padding: 3px 10px; margin: 18px 0 8px; }
-.sheet table.sheetinfo th, .sheet table.grid th { background: #f3f7fb; width: 110px; }
+.sheet table.sheetinfo th, .sheet table.grid th { background: #f2f8f5; width: 110px; }
 .sheet table.grid, .sheet table.sheetinfo { border: 1px solid var(--line); }
 .sheet td, .sheet th { border: 1px solid var(--line); }
 .sheet .lead { font-weight: 600; color: var(--blue); }
@@ -239,8 +239,8 @@ h2 { font-weight: 800; }
 header.top { background: rgba(255, 255, 255, .92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--blue3); box-shadow: 0 1px 3px rgba(33, 78, 55, .05); }
 header.top .wrap { min-height: 64px; }
 .logo { flex-direction: row; align-items: center; gap: 10px; color: var(--ink); letter-spacing: .04em; }
-.logo .mark { width: 40px; height: 40px; border-radius: 13px; background: var(--blue); color: #fff; display: inline-flex; align-items: center; justify-content: center; box-shadow: 0 3px 8px rgba(61, 148, 101, .35); transform: rotate(3deg); transition: transform .3s; font-size: 20px; }
-.logo:hover .mark { transform: rotate(0); }
+.logo .mark { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--blue), 0 4px 10px rgba(33, 78, 55, .3); margin: 0 2px; transition: transform .3s; }
+.logo:hover .mark { transform: rotate(-6deg) scale(1.06); }
 .logo .name { display: flex; flex-direction: column; line-height: 1.1; font-weight: 800; font-size: 21px; color: var(--blue-dark); }
 .logo small { color: var(--blue); font-weight: 700; font-size: 10px; }
 header nav a { border-radius: 999px; padding: 6px 13px; font-weight: 700; color: var(--sub); }
@@ -279,14 +279,54 @@ input:focus, select:focus, textarea:focus { outline-color: var(--blue2); }
 .manual h2 { border-bottom-color: var(--blue2); color: var(--ink); }
 .manual h3 { color: var(--blue-dark); }
 
-/* トップ（見本のヒーローと「PARK の歩き方」） */
-.hero { display: grid; grid-template-columns: 1.15fr .85fr; gap: 36px; align-items: center; background: linear-gradient(135deg, var(--blue2), var(--bg) 55%, #fff); border: 1px solid var(--blue3); border-radius: 28px; padding: 46px 52px; margin: 26px 0 40px; box-shadow: var(--shadow); }
-.hero .pill { display: inline-flex; align-items: center; gap: 8px; background: rgba(255, 255, 255, .85); border: 1px solid var(--blue3); border-radius: 999px; padding: 5px 14px; font-size: 13px; font-weight: 700; color: var(--blue-dark); }
-.hero .pill i { width: 8px; height: 8px; border-radius: 50%; background: var(--blue); display: inline-block; }
-.hero h1 { font-size: 38px; line-height: 1.35; margin: 16px 0; color: var(--ink); }
-.hero p { color: var(--sub); line-height: 1.9; }
-.hero .photo { position: relative; border-radius: 22px; overflow: hidden; border: 4px solid #fff; box-shadow: 0 10px 30px rgba(33, 78, 55, .2); transform: rotate(2deg); aspect-ratio: 4 / 3; background: var(--blue2) center / cover no-repeat; }
-.hero .photo span { position: absolute; left: 14px; bottom: 14px; background: rgba(27, 64, 46, .78); color: #fff; font-size: 12px; font-weight: 700; padding: 5px 12px; border-radius: 999px; }
+/* 若枝の丸い画像（img/sprig.jpg）。大きさは置く場所ごとに変える */
+.sprig { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex: none; display: inline-block; }
+.ttl { display: flex; align-items: center; gap: 12px; margin: 18px 0 14px; }
+.ttl h1 { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.ttl .sprig { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--blue3); margin-left: 4px; }
+
+/* トップと区切りのページの大きな帯：濃い緑のグラデーションに、白い大きな見出し */
+.hero { position: relative; overflow: hidden; color: #fff; background: radial-gradient(circle at 88% 8%, rgba(190, 235, 140, .45), transparent 42%), radial-gradient(circle at 4% 100%, rgba(110, 200, 140, .35), transparent 45%), linear-gradient(135deg, #0b2b1c, #175236 52%, #2f8458); border-radius: 32px; padding: 60px 56px; margin: 22px 0 40px; box-shadow: 0 18px 44px rgba(18, 62, 41, .35); }
+.hero.big { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 44px; align-items: center; min-height: 520px; }
+.hero > * { min-width: 0; }
+.hero-sprig { width: 96px; height: 96px; display: block; margin-bottom: 18px; box-shadow: 0 0 0 4px #fff, 0 0 0 10px rgba(190, 235, 140, .45), 0 12px 28px rgba(0, 0, 0, .35); }
+.hero .pill { display: inline-flex; align-items: center; gap: 8px; background: rgba(255, 255, 255, .14); border: 1px solid rgba(255, 255, 255, .4); border-radius: 999px; padding: 6px 16px; font-size: 13px; font-weight: 700; color: #fff; }
+.hero .pill i { width: 8px; height: 8px; border-radius: 50%; background: #bdeb8c; display: inline-block; flex: none; }
+.hero h1 { font-size: clamp(25px, 3.5vw, 46px); line-height: 1.35; margin: 18px 0; color: #fff; text-shadow: 0 3px 14px rgba(0, 0, 0, .3); overflow-wrap: anywhere; }
+.hero p { color: rgba(255, 255, 255, .92); line-height: 1.95; font-size: 15px; }
+.hero .btn { white-space: normal; background: #fff; border: 2px solid #fff; color: #12492f; font-size: 15px; padding: 11px 26px; margin: 0 6px 10px 0; box-shadow: 0 8px 20px rgba(0, 0, 0, .25); }
+.hero .btn:hover { background: #e4f7d3; border-color: #e4f7d3; color: #12492f; }
+.hero .btn.ghost { background: transparent; border-color: rgba(255, 255, 255, .75); color: #fff; box-shadow: none; }
+.hero .btn.ghost:hover { background: rgba(255, 255, 255, .16); border-color: #fff; color: #fff; }
+.hero .photo { position: relative; border-radius: 28px; overflow: hidden; border: 6px solid #fff; box-shadow: 0 24px 50px rgba(0, 0, 0, .4); transform: rotate(2deg); aspect-ratio: 1 / 1; background: #1d5a3c center / cover no-repeat; }
+.hero .photo span { position: absolute; left: 16px; bottom: 16px; right: 16px; width: fit-content; background: rgba(11, 43, 28, .85); color: #fff; font-size: 14px; font-weight: 800; padding: 7px 16px; border-radius: 999px; }
+.hero.start { text-align: center; padding: 52px 28px; margin-bottom: 26px; }
+.hero.start .hero-sprig { margin: 0 auto 18px; }
+.hero.start h1 { font-size: clamp(26px, 4.6vw, 52px); margin: 0; }
+
+/* ダッシュボードの先頭の帯 */
+.role-hero { position: relative; overflow: hidden; display: flex; align-items: center; gap: 20px; min-height: 130px; border-radius: 24px; padding: 24px 30px; margin: 0 0 18px; color: #fff; background: #175236 center / cover no-repeat; box-shadow: 0 10px 26px rgba(18, 62, 41, .28); }
+.role-hero::before { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, rgba(11, 43, 28, .94), rgba(23, 82, 54, .82) 55%, rgba(47, 132, 88, .45)); }
+.role-hero > * { position: relative; }
+.role-hero .sprig { width: 72px; height: 72px; box-shadow: 0 0 0 3px #fff, 0 6px 16px rgba(0, 0, 0, .35); }
+.role-hero p { margin: 0; min-width: 0; font-size: 21px; font-weight: 800; line-height: 1.5; text-shadow: 0 2px 10px rgba(0, 0, 0, .4); }
+
+/* 区切りのページの小さなメニュー（仕事の流れ） */
+.flow-steps { margin-bottom: 22px; }
+.flow-heads { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+.flow-heads a { text-align: center; text-decoration: none; font-weight: 800; padding: 9px 8px; border-radius: 999px; border: 2px solid var(--blue3); background: #fff; color: var(--blue-dark); }
+.flow-heads a.on { background: #175236; border-color: #175236; color: #fff; }
+.flow-steps ol { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+.flow-steps li { background: #fff; border: 2px solid var(--blue3); border-radius: 18px; padding: 12px 14px; }
+.flow-steps li.on { background: linear-gradient(150deg, #12492f, #20704a); border-color: #12492f; color: #fff; box-shadow: 0 8px 18px rgba(18, 62, 41, .25); }
+.flow-steps li b { display: block; margin-bottom: 8px; font-size: 14px; }
+.flow-steps .owner { display: block; font-size: 11px; font-weight: 700; line-height: 1.5; color: #fff; border-radius: 8px; padding: 3px 8px; margin-top: 5px; }
+.flow-steps .owner.ses { background: #3d9465; }
+.flow-steps .owner.eg { background: #8a5bb5; }
+.flow-steps .owner.admin { background: #3b6fb6; }
+.flow-steps li.on .owner { box-shadow: 0 0 0 1px rgba(255, 255, 255, .6); }
+.start-actions { text-align: center; margin: 22px 0 10px; }
+.start-actions .btn { white-space: normal; font-size: 16px; padding: 12px 30px; margin: 0 6px 10px; }
 .section-title { text-align: center; margin: 10px 0 18px; } .section-title h2 { font-size: 22px; } .section-title p { color: var(--sub); margin: 4px 0 0; font-size: 13px; }
 .spots { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-bottom: 36px; }
 .spot { position: relative; display: block; border-radius: 22px; overflow: hidden; min-height: 230px; background: var(--blue-dark) center / cover no-repeat; color: #fff; text-decoration: none; box-shadow: var(--shadow); transition: transform .2s; }
@@ -303,10 +343,19 @@ input:focus, select:focus, textarea:focus { outline-color: var(--blue2); }
 .foot .mark { display: inline-flex; width: 28px; height: 28px; border-radius: 9px; background: var(--blue); color: #fff; align-items: center; justify-content: center; font-weight: 800; margin-right: 6px; }
 .foot b { color: var(--blue-dark); font-size: 16px; }
 @media (max-width: 860px) {
-  .hero { grid-template-columns: 1fr; padding: 26px 22px; gap: 22px; }
-  .hero h1 { font-size: 27px; }
+  .hero { padding: 30px 20px; border-radius: 24px; }
+  .hero.big { grid-template-columns: minmax(0, 1fr); gap: 26px; min-height: 0; }
+  .hero-sprig { width: 76px; height: 76px; }
+  .hero .photo { aspect-ratio: 4 / 3; transform: none; }
+  .hero.start { padding: 34px 18px; }
   .spots { grid-template-columns: 1fr; }
   .logo .mark { width: 34px; height: 34px; }
+  .ttl { gap: 10px; }
+  .ttl .sprig { width: 30px; height: 30px; }
+  .role-hero { gap: 14px; padding: 18px 16px; min-height: 100px; }
+  .role-hero .sprig { width: 52px; height: 52px; }
+  .role-hero p { font-size: 16px; }
+  .me { flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
 }
 @media print { .foot { display: none; } }
 
@@ -318,15 +367,17 @@ input[type=file] { padding: 6px; }
 .mailbody{white-space:pre-wrap;font-family:inherit;background:#f7faf7;border-radius:12px;padding:12px;margin:0}
 .todo{margin:0;padding-left:1.4em}.todo li{margin:.35em 0}.todo a{display:block;text-decoration:none;color:inherit;padding:.45em .7em;border-radius:12px;background:#f3f8f1}.todo a:hover{background:#e6f1e2}.todo b{display:block}.todo span{font-size:.9em;color:#4a7a43}
 
-/* 役割ごとの色：SES＝緑（既定）、管理者＝青、エンジニア＝紫。ヘッダーの帯と役割の札で、どの立場かがひと目でわかる */
-body.role-admin { --ink: #1f3a5f; --sub: #5a7090; --line: #d3dfee; --bg: #f1f5fb; --blue: #3b6fb6; --blue-dark: #2a5496; --blue2: #e0eaf7; --blue3: #bfd2ec; --ok: #2a5496; --shadow: 0 1px 2px rgba(31,58,95,.06), 0 4px 14px rgba(31,58,95,.06); }
-body.role-eg { --ink: #432a63; --sub: #7a6694; --line: #e2d8ee; --bg: #f7f3fb; --blue: #8a5bb5; --blue-dark: #6e3f9c; --blue2: #eee4f7; --blue3: #d8c5ea; --ok: #6e3f9c; --shadow: 0 1px 2px rgba(67,42,99,.06), 0 4px 14px rgba(67,42,99,.06); }
-body.role-admin header.top, body.role-ses header.top, body.role-eg header.top { border-top: 5px solid var(--blue); }
-.rolepill { display: inline-block; background: var(--blue); color: #fff; font-weight: 800; font-size: 11px; border-radius: 999px; padding: 0 9px; margin-right: 3px; }
+/* 立場の色：SES＝緑（代表・一般とも）、管理者＝青、エンジニア＝紫。色を変えるのは、ヘッダーの上の帯・ログイン中の帯・役割の札だけ */
+body.role-admin { --role: #3b6fb6; }
+body.role-ses { --role: #3d9465; }
+body.role-eg { --role: #8a5bb5; }
+body.role-admin header.top, body.role-ses header.top, body.role-eg header.top { border-top: 5px solid var(--role); }
+.rolepill { display: inline-block; background: var(--role); color: #fff; font-weight: 800; font-size: 11px; border-radius: 999px; padding: 0 9px; margin-right: 3px; }
 .me .who { font-weight: 800; }
-body.role-admin .logo .mark, body.role-eg .logo .mark { box-shadow: 0 3px 8px rgba(0,0,0,.2); }
-/* ログイン中の立場の帯（役割ごとの --blue をそのまま使う） */
-.loginbar { background: var(--blue); color: #fff; font-weight: 700; font-size: 13px; padding: 4px 0; }
+/* ログイン中の立場の帯 */
+.loginbar { background: var(--role); color: #fff; font-weight: 700; font-size: 13px; padding: 4px 0; }
+.loginbar a { color: #fff; }
+.loginbar .muted { color: rgba(255, 255, 255, .88); }
 .temp-login { background: #fff8e1; border: 1px dashed #e0a800; border-radius: 12px; padding: 10px 14px; margin: 14px 0; font-size: 13px; }
 .temp-login table { border-collapse: collapse; margin-top: 6px; } .temp-login td, .temp-login th { padding: 2px 12px 2px 0; text-align: left; }
 .right { text-align: right; }
@@ -342,3 +393,9 @@ body.role-admin .logo .mark, body.role-eg .logo .mark { box-shadow: 0 3px 8px rg
 #mails ~ .tablewrap td form.inline input[name="note"] { width: 150px; }
 /* タイトル行だけのカード（工事中など） */
 .card.title-only > .body { display: none; } .card.title-only > header { border-bottom: 0; }
+.hero h1 .nb { display: inline-block; }
+/* ヘッダーの「ログイン」：.me a の文字色に負けないようにする */
+.me a.btn { color: #fff; flex-direction: row; }
+.me a.btn:hover { color: #fff; }
+/* 区切りのページ：その立場の担当だけをはっきり見せる */
+.flow-ses .owner:not(.ses), .flow-engineer .owner:not(.eg) { opacity: .35; }

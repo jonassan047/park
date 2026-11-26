@@ -53,6 +53,8 @@ Route::get('/r/{token}/{answer}', [Rep::class, 'form'])->where('token', '[0-9a-f
 Route::post('/r/{token}', [Rep::class, 'save'])->where('token', '[0-9a-f]{32}')->middleware('throttle:20,1');
 Route::get('/manual', [Man::class, 'index']);
 Route::get('/manual/{kind}', [Man::class, 'show']);
+// 区切りのページ「ここからは SES／エンジニアの作業です」（ログインしなくても開ける）
+Route::get('/start/{kind}', [Pub::class, 'start'])->whereIn('kind', ['ses', 'engineer']);
 
 // ---------- 2要素認証（パスワードは通ったが、まだコードを入れていない人も開ける） ----------
 Route::middleware('auth')->group(function () {

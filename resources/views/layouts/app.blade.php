@@ -47,6 +47,8 @@
     }
     $flash = session('flash');
     $print = $print ?? false;
+    // 区切りのページは、名前・ID・会社名などを出さない（メニューとログアウトだけ残す）
+    $noPersonal = $noPersonal ?? false;
 @endphp
 <!doctype html>
 <html lang="ja">
@@ -60,12 +62,14 @@
 <body class="{{ $print ? 'print' : '' }} role-{{ $u->role ?? 'guest' }}">
 @unless($print)
 <header class="top"><div class="wrap">
-  <a class="logo" href="{{ url('/') }}"><span class="mark">🌳</span><span class="name">{{ setting('app_name') }}<small>SES とエンジニアが集う庭</small></span></a>
+  <a class="logo" href="{{ url('/') }}"><img class="mark sprig" src="{{ asset('img/sprig.jpg') }}" alt=""><span class="name">{{ setting('app_name') }}<small>SES とエンジニアが集う庭</small></span></a>
   @if($u)
     <nav>@foreach($nav as [$href, $label])<a href="{{ url($href) }}" class="{{ $current === $href || (!in_array($href, $homes, true) && str_starts_with($current, $href.'/')) ? 'on' : '' }}">{{ $label }}</a>@endforeach</nav>
     <div class="me">
+      @unless($noPersonal)
       <a href="{{ url('/notifications') }}" class="bell" title="通知">🔔@if($unread)<b>{{ $unread }}</b>@endif</a>
       <a href="{{ url('/account') }}"><span class="who">{{ user_label($u) }}</span><small><span class="rolepill">{{ $u->role === 'ses' ? staff_kind($u) : lbl('role', $u->role) }}</span>のアカウント</small></a>
+      @endunless
       <form method="post" action="{{ url('/logout') }}" class="inline">@csrf<button class="link">ログアウト</button></form>
     </div>
   @else
@@ -73,7 +77,7 @@
   @endif
 </div></header>
 {{-- ログイン中の立場（2要素認証が済んだ人だけ） --}}
-@if($passed)
+@if($passed && !$noPersonal)
 <div class="loginbar"><div class="wrap">
   @if($u->role === 'admin')管理者{{ $u->company_name ? '（'.$u->company_name.'）' : '' }}としてログインしています：{{ $u->name }}
   @elseif($u->role === 'ses'){{ staff_kind($u) }}（{{ DB::table('ses_companies')->where('id', $u->ses_id)->value('name') }}）としてログインしています
@@ -89,14 +93,14 @@
 @endif
 @endunless
 <main class="wrap {{ ($wide ?? false) ? 'wide' : '' }}">
-@if($provMail && !$print)
+@if($provMail && !$print && !$noPersonal)
   {{-- プロバイダーから返事が届いていて、まだ開いていないとき（開くと消える） --}}
   <div class="flash warn provmail">プロバイダーからメールが届きました。確認してください（{{ $provMail->n }} 件{{ (int) $provMail->n === 1 && $provMail->first_title ? '：'.$provMail->first_title : '' }}）
     <a class="btn small" href="{{ url((int) $provMail->n === 1 ? '/inbound/'.$provMail->first_id : '/inbound') }}">確認する</a></div>
 @endif
 @if($flash)<div class="flash toast {{ $flash['type'] }}" role="status">{{ $flash['msg'] }}</div>@endif
 @if($errors->any())<div class="flash toast bad" role="alert">@foreach($errors->all() as $err){{ $err }}<br>@endforeach</div>@endif
-@unless($noTitle ?? false)<h1>{{ $title }}</h1>@endunless
+@unless($noTitle ?? false)<div class="ttl">@unless($print)<img class="sprig" src="{{ asset('img/sprig.jpg') }}" alt="">@endunless<h1>{{ $title }}</h1></div>@endunless
 @yield('content')
 </main>
 @unless($print)<footer class="foot"><p><span class="mark">P</span><b>{{ setting('app_name') }}</b></p><p>SES 企業のみなさまと、エンジニアが同じ木の下で。成約したときだけ、成功報酬をいただく仕組みです。</p><p>困ったときの相談先：<a href="mailto:{{ contact_email() }}">{{ contact_email() }}</a></p><p class="muted">{{ config('park.version') }}</p></footer>@endunless

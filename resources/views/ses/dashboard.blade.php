@@ -1,5 +1,6 @@
 @extends('layouts.app', ['title' => id_title($s->code, $s->name).' さま', 'wide' => true])
 @section('content')
+@include('partials.role-hero', ['kind' => 'ses'])
 <x-todo />
 <x-stats :items="[['所属エンジニア', $engs->count(), '待機 '.$engs->where('status', 'available')->count().'名'], ['稼働中', $engs->where('status', 'working')->count()],
     ['選考中', $apps->count()], ['成約（これまで）', $won, '成約率 '.pct($won, $appCount)], ['今月の成功報酬（税別・見込み）', yen($est['subtotal']), this_month()]]" />
