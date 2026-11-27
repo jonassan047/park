@@ -2,7 +2,7 @@
 @section('content')
 <section class="hero big">
   <div>
-    <img class="hero-dome" src="{{ asset('img/hero.jpg') }}" alt="">
+    <img class="hero-dome" src="{{ asset('img/dome.png') }}" alt="">
     <span class="pill"><i></i>木漏れ日の下で、仕事と仲間がつながる庭</span>
     <h1>SES 企業のみなさまと、<br>エンジニアが、<span class="nb">同じ木の下で。</span></h1>
     <p>小さな SES 企業どうしが1つのグループにまとまり、届いた案件に、グループ全体のエンジニアからいちばん合う人を出します。いちばん大事にするのは、<b>エンジニアの成約率を上げること</b>です。</p>

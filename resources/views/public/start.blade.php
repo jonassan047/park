@@ -11,7 +11,7 @@
 @endphp
 <section class="hero start">
   <div class="dome-wrap">
-    <img class="hero-dome" src="{{ asset('img/hero.jpg') }}" alt="">
+    <img class="hero-dome" src="{{ asset('img/dome.png') }}" alt="">
     <h1>{{ $heading }}</h1>
   </div>
 </section>

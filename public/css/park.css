@@ -290,8 +290,8 @@ input:focus, select:focus, textarea:focus { outline-color: var(--blue2); }
 .hero.big { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 44px; align-items: center; min-height: 520px; }
 .hero > * { min-width: 0; }
 .hero-sprig { width: 96px; height: 96px; display: block; margin-bottom: 18px; box-shadow: 0 0 0 4px #fff, 0 0 0 10px rgba(190, 235, 140, .45), 0 12px 28px rgba(0, 0, 0, .35); }
-/* トップと区切りのページの若枝：頭をつぶしたドーム型（クイックスタートの表紙と同じ形。幅:高さ＝1040:340、角は高さと同じ半径の円。2026-11-27 TEZZO） */
-.hero-dome { display: block; width: 72%; aspect-ratio: 1040 / 340; object-fit: cover; object-position: 50% 52%; border-radius: 999px 999px 0 0; margin-bottom: 22px; box-shadow: 0 0 0 4px #fff, 0 0 0 10px rgba(190, 235, 140, .45), 0 12px 28px rgba(0, 0, 0, .35); }
+/* トップと区切りのページの若枝：クイックスタートの表紙から書き出したドームの画像（img/dome.png）をそのまま出す。形・縁・影は画像に入っている（PPT と全く同じにするため。元は 41_Park-Project/98_Outputs/若枝のドーム。2026-11-27 TEZZO）。画像の周りの透明な余白（左右 30/1100・下 50/420）のぶん、幅を広げ、左と下を詰める */
+.hero-dome { display: block; width: 76%; height: auto; margin: 0 0 8px -2%; }
 .hero .pill { display: inline-flex; align-items: center; gap: 8px; background: rgba(255, 255, 255, .14); border: 1px solid rgba(255, 255, 255, .4); border-radius: 999px; padding: 6px 16px; font-size: 13px; font-weight: 700; color: #fff; }
 .hero .pill i { width: 8px; height: 8px; border-radius: 50%; background: #bdeb8c; display: inline-block; flex: none; }
 .hero h1 { font-size: clamp(25px, 3.5vw, 46px); line-height: 1.35; margin: 18px 0; color: #fff; text-shadow: 0 3px 14px rgba(0, 0, 0, .3); overflow-wrap: anywhere; }
@@ -305,7 +305,7 @@ input:focus, select:focus, textarea:focus { outline-color: var(--blue2); }
 .hero.start { text-align: center; padding: 52px 28px; margin-bottom: 26px; }
 .hero.start .hero-sprig { margin: 0 auto 18px; }
 .hero.start .dome-wrap { display: inline-block; max-width: 100%; }
-.hero.start .hero-dome { width: 77%; margin: 0 auto 26px; }
+.hero.start .hero-dome { width: 81%; margin: 0 auto 12px; }
 .hero.start h1 { font-size: clamp(26px, 4.6vw, 52px); margin: 0; }
 
 /* ダッシュボードの先頭の帯 */
