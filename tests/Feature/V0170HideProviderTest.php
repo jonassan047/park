@@ -59,7 +59,7 @@ class V0170HideProviderTest extends TestCase
         $w = $this->world();
         $this->sendReferral($w, '50万円');
         $own = $this->mkCase(['title' => 'Ｂ社の案件十七', 'price' => 70], self::SES2);
-        foreach (['/ses/cases', '/ses'] as $path) {
+        foreach (['/ses/cases'] as $path) { // ダッシュボードの「新しい案件」は 2026-11-27 に外した
             $this->as(self::BX)->get($path)->assertOk()->assertSee('70万円')->assertSee('50万円');
         }
         $this->as(self::BX)->get('/ses/cases?mine=1')->assertOk()->assertSee('70万円');

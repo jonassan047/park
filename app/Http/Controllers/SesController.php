@@ -23,22 +23,34 @@ class SesController extends Controller
 
     public function dashboard(Request $r)
     {
-        $sid = $r->user()->ses_id;
+        $sid = (int) $r->user()->ses_id;
         $engs = DB::table('engineers')->where('ses_id', $sid)->get();
-        $all = DB::table('applications')->where('ses_id', $sid)->pluck('status');
         $withProj = DB::table('engineer_projects')->distinct()->pluck('engineer_id')->all();
-        $newCases = DB::table('cases')->where('status', 'open')->orderByDesc('id')->limit(5)->get();
-        $texts = \App\Services\CaseMail::priceTextsForSes((int) $sid, $newCases->pluck('id')->map(fn ($x) => (int) $x)->all());
-        foreach ($newCases as $c) $c->price_disp = self::priceDisp($r->user(), $c, $texts);
+        // 上の表（2026-11-27 TEZZO の SESダッシュボード.xlsx）：企業内（自社）とグループ内（PARK 全体）の数。グループ内は合計の数だけで、他社の名前は出さない
+        $fy = (int) date('n') >= 4 ? date('Y').'-04-01' : (date('Y') - 1).'-04-01'; // 年度は4月から
+        $count = function (?int $ses) use ($fy) {
+            $e = fn () => DB::table('engineers')->where('status', '!=', 'left')->when($ses, fn ($q) => $q->where('ses_id', $ses));
+            $c = fn () => DB::table('contracts')->when($ses, fn ($q) => $q->where('ses_id', $ses));
+            return [
+                $e()->count(), $e()->where('status', 'working')->count(), $e()->whereIn('status', ['available', 'proposing'])->count(),
+                DB::table('applications')->whereIn('status', PipelineController::OPEN)->when($ses, fn ($q) => $q->where('ses_id', $ses))->count(),
+                $c()->where('created_at', '>=', date('Y-m-01'))->count(), $c()->where('created_at', '>=', $fy)->count(),
+            ];
+        };
+        // 下の5つの表：自社の応募を、成約に近い順に状態で分ける
+        $apps = DB::table('applications as a')->join('cases as c', 'c.id', '=', 'a.case_id')->join('engineers as e', 'e.id', '=', 'a.engineer_id')
+            ->where('a.ses_id', $sid)->whereIn('a.status', PipelineController::OPEN)
+            ->select('a.*', 'c.title', 'c.code as case_code', 'e.name as eg_name', 'e.code as eg_code')->orderByDesc('a.updated_at')->get();
+        $by = fn (array $st) => $apps->whereIn('status', $st)->values();
         return view('ses.dashboard', [
             's' => DB::table('ses_companies')->find($sid), 'engs' => $engs,
-            'apps' => DB::table('applications as a')->join('cases as c', 'c.id', '=', 'a.case_id')->join('engineers as e', 'e.id', '=', 'a.engineer_id')
-                ->where('a.ses_id', $sid)->whereNotIn('a.status', ['won', 'rejected', 'withdrawn'])->select('a.*', 'c.title', 'c.code as case_code', 'e.name as eg_name', 'e.code as eg_code')->orderByDesc('a.updated_at')->get(),
+            'rows' => ['企業内' => $count($sid), 'グループ内' => $count(null)],
+            'decide' => $by(['interviewed']),          // 合否決定待ち（面談済み）
+            'meet' => $by(['interview']),              // 面談予定（面談調整）
+            'pv' => $by(['submitted', 'doc_passed']),  // プロバイダーの回答待ち（書類提出・書類通過）
             'offers' => DB::table('case_offers as o')->join('cases as c', 'c.id', '=', 'o.case_id')->join('engineers as e', 'e.id', '=', 'o.engineer_id')
-                ->where('e.ses_id', $sid)->whereIn('o.status', ['sent', 'viewed'])->where('c.status', 'open')->select('o.*', 'c.title', 'c.code as case_code', 'e.name as eg_name', 'e.code as eg_code')->orderByDesc('o.sent_at')->get(),
-            'newCases' => $newCases,
-            'est' => Billing::items($sid, this_month()),
-            'won' => $all->filter(fn ($s) => $s === 'won')->count(), 'appCount' => $all->count(),
+                ->where('e.ses_id', $sid)->whereIn('o.status', ['sent', 'viewed'])->where('c.status', 'open')->select('o.*', 'c.title', 'c.code as case_code', 'e.name as eg_name', 'e.code as eg_code')->orderByDesc('o.sent_at')->get(), // EG の回答待ち
+            'making' => $by(['applied']),              // 提案を作成中（EG が応募し、まだプロバイダーへ出していない）
             'noSheet' => $engs->filter(fn ($e) => !in_array($e->id, $withProj)),
         ]);
     }

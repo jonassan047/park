@@ -204,7 +204,7 @@ class EmptyStateTest extends TestCase
         // SES のタブは空でも全部開く。ダッシュボードにはエンジニアの登録の案内
         $this->as('contact@example.com');
         $this->get('/ses')->assertOk()->assertSee('エンジニアを登録しましょう')->assertSee('貴社のエンジニアを登録すると、合う案件が届くようになります。')
-            ->assertSee('まだ案件はありません。案件が入ると、ここに出ます。')->assertSee('成約率 —');
+            ->assertSee('エンジニアと成約の状況')->assertSee('合否決定待ちの案件（0件）'); // 2026-11-27 SESダッシュボード.xlsx の構成に
         foreach (['/ses/engineers', '/ses/cases', '/ses/applications', '/ses/contracts', '/ses/invoices', '/ses/company', '/engineers/new', '/cases/new'] as $t) {
             $this->get($t)->assertOk();
         }
