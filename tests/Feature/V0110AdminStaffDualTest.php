@@ -332,7 +332,7 @@ class V0110AdminStaffDualTest extends TestCase
         $this->assertSame('interested', DB::table('case_mails')->find($mid)->reply);
         $this->assertSame(0, DB::table('applications')->where('case_id', $cid)->where('engineer_id', $eb)->count());
         // 今やること：他社の人は氏名ではなくイニシャル
-        $this->get('/ses')->assertOk()->assertSee('T.T さんが「応募したい」')->assertDontSee('他社 太郎');
+        $this->get('/ses/cases')->assertOk()->assertSee('T.T さんが「応募したい」')->assertDontSee('他社 太郎');
         // 自社の人は、今までどおり記録できる
         $ea = $this->mkEng($a, '自社 太郎', 'J.T');
         $mid2 = (int) DB::table('case_mails')->insertGetId(['case_id' => $cid, 'engineer_id' => $ea, 'ses_id' => null, 'sent_by' => $this->row(self::P)->id, 'route' => 'group', 'mode' => 'same',

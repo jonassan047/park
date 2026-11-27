@@ -44,6 +44,22 @@ class Todo
             ->select('a.*', 'c.title', 'e.name as eg_name');
     }
 
+    // SES の「今やること」は、ダッシュボードから外し、その件が起きた過程のタブの画面に出す（2026-11-28 TEZZO）。
+    // 行き先の URL でタブを決める。どれにも当たらないものは「連絡・問合せ」
+    public static function area(string $url): string
+    {
+        foreach (['cases' => ['/cases', '/provider-mails'], 'apps' => ['/applications', '/interviews'], 'contracts' => ['/contracts', '/invoices', '/ses/contracts', '/ses/invoices'], 'engineers' => ['/engineers']] as $area => $prefixes) {
+            foreach ($prefixes as $pre) if ($url === $pre || str_starts_with($url, $pre.'/') || str_starts_with($url, $pre.'#')) return $area;
+        }
+        return 'contact';
+    }
+
+    public static function sesArea($u, string $area): array
+    {
+        if (!$u || $u->role !== 'ses') return [];
+        return array_values(array_filter(self::for($u), fn ($t) => self::area($t['url']) === $area));
+    }
+
     public static function ses(int $sesId, ?int $ownEngineerId = null): array
     {
         $out = [];

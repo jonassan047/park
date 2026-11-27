@@ -1,6 +1,7 @@
 @php $u = auth()->user(); @endphp
 @extends('layouts.app', ['title' => '案件のやり取り', 'wide' => true])
 @section('content')
+<x-todo-here area="contact" />
 <p class="muted">エンジニアが、案件について担当者に確かめた内容です。{{ $u->role === 'admin' ? '管理者は、すべてのやり取りを読むだけです（書けません）。' : '貴社のエンジニアの1本と、貴社が受注 SES の案件で他社のエンジニアと話す1本が出ます。' }}</p>
 @if($u->role === 'admin' && $sesOptions)
 <form method="get" class="inline">

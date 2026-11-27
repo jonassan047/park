@@ -1,6 +1,7 @@
 @php $u = auth()->user(); $tabs = ['in' => '受け取った', 'out' => '送った'] + ($u->role === 'admin' ? ['all' => 'すべて'] : []); @endphp
 @extends('layouts.app', ['title' => '連絡メール', 'wide' => true])
 @section('content')
+<x-todo-here area="contact" />
 <p class="muted">人から人へ、自由な件名・本文でメールを送る機能です（案件の案内メールとは別です）。@if($u->role === 'eg')所属の会社の担当者に送れます。@else「エンジニア」の一覧で相手を選んで送ります。@endif</p>
 <p class="tabs">@foreach($tabs as $k => $v)<a href="{{ url('/mails?box='.$k) }}" class="{{ $k === $box ? 'on' : '' }}">{{ $v }}</a>@endforeach
 @if($u->role === 'eg')<a class="btn small" href="{{ url('/mails/new') }}">担当者にメールを送る</a>

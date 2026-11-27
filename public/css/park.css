@@ -338,6 +338,14 @@ input:focus, select:focus, textarea:focus { outline-color: var(--blue2); }
 .role-hero::before { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, rgba(11, 43, 28, .94), rgba(23, 82, 54, .82) 55%, rgba(47, 132, 88, .45)); }
 .role-hero > * { position: relative; }
 .role-hero .sprig { width: 72px; height: 72px; box-shadow: 0 0 0 3px #fff, 0 6px 16px rgba(0, 0, 0, .35); }
+.role-hero.slim { min-height: 0; padding: 10px 28px; border-radius: 14px; margin: 0 0 12px; }
+.role-hero.slim p { font-size: 18px; }
+.dash-list h3 { margin: 14px 0 6px; font-size: 15px; color: var(--ink); }
+.dash-list h3:first-child { margin-top: 0; }
+.dash-list .dl-row { display: grid; grid-template-columns: 84px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 7px 4px; border-bottom: 1px solid var(--line); }
+.dash-list .dl-main small { display: block; color: var(--sub); margin-top: 2px; }
+.dash-list .dl-empty { margin: 0 0 4px 94px; }
+@media (max-width: 560px) { .dash-list .dl-row { grid-template-columns: minmax(0, 1fr) auto; } .dash-list .dl-new:empty { display: none; } .dash-list .dl-new { grid-column: 1 / -1; } .dash-list .dl-empty { margin-left: 0; } }
 .role-hero p { margin: 0; min-width: 0; font-size: 21px; font-weight: 800; line-height: 1.5; text-shadow: 0 2px 10px rgba(0, 0, 0, .4); }
 
 /* 区切りのページの小さなメニュー（仕事の流れ） */

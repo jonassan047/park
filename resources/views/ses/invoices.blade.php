@@ -1,5 +1,6 @@
 @extends('layouts.app', ['title' => '請求'])
 @section('content')
+<x-todo-here area="contracts" />
 <x-card :title="'今月（'.this_month().'）の見込み'"><x-table :head="['内容', '基準額', '率', '金額']" :count="count($est['items'])" empty="今月の成功報酬はありません。">
 @foreach($est['items'] as $it)<tr><td>{{ $it['label'] }}</td><td>{{ yen($it['base']) }}</td><td>{{ round($it['rate'] * 1000) / 10 }}%</td><td>{{ yen($it['amount']) }}</td></tr>@endforeach
 </x-table><p>小計 {{ yen($est['subtotal']) }}／税込 {{ yen($est['total']) }}（確定は請求書で）</p></x-card>

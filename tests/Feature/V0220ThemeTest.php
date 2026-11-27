@@ -202,8 +202,6 @@ class V0220ThemeTest extends TestCase
         $this->mkGeneral();
         $cases = [
             [self::ADMIN, '/admin', 'グループの案件と、みなさんの進み具合を見守ります。'],
-            [self::SES, '/ses', 'グループで、仕事を回す。'],
-            [self::GEN, '/ses', 'グループで、仕事を回す。'],
             [self::EG, '/eg', '合う案件が、届く。'],
         ];
         foreach ($cases as [$email, $url, $word]) {
@@ -214,6 +212,14 @@ class V0220ThemeTest extends TestCase
             $this->assertStringContainsString('<p>'.$word.'</p>', $m[1], $email);
             $this->assertStringNotContainsString('<h1', $m[1]);
             $this->assertSame(1, substr_count($html, '<h1>'), "$email $url の h1");
+        }
+        // SES は 2026-11-27 の SESダッシュボード.xlsx で、大きな帯をやめて「稼働状況」の細い帯にした（今やることも外した）
+        foreach ([self::SES, self::GEN] as $email) {
+            $html = $this->as($email)->get('/ses')->assertOk()->getContent();
+            $this->assertStringContainsString('<div class="role-hero slim"', $html);
+            $this->assertStringContainsString('<p>稼働状況</p>', $html);
+            $this->assertStringNotContainsString('グループで、仕事を回す。', $html);
+            $this->assertStringNotContainsString('class="todo"', $html);
         }
     }
 

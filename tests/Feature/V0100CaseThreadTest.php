@@ -386,7 +386,7 @@ class V0100CaseThreadTest extends TestCase
     public function test_t17_ses_todo_and_list(): void
     {
         $this->send(self::EG1, $this->caseId, $this->eg1, '未読の質問');
-        $this->as(self::SES1)->get('/ses')->assertOk()->assertSee('さんから案件の質問：架空の案件V0100');
+        $this->as(self::SES1)->get('/ses/cases')->assertOk()->assertSee('さんから案件の質問：架空の案件V0100');
         $this->get('/threads')->assertOk()->assertSee('未読');
         $this->get("/cases/{$this->caseId}/threads/{$this->eg1}")->assertOk();
         $this->get('/ses')->assertDontSee('さんから案件の質問');
@@ -545,8 +545,8 @@ class V0100CaseThreadTest extends TestCase
         // 担当者の立場では、自分のやり取りに書けない
         $this->bad($this->send('dual-ses@example.test', $this->caseId, $dEng, '自分に返事', 'ses'), 'ご自身のやり取り');
         // 担当者の立場の「今やること」に、自分の質問は出ない。ほかの担当者には出る
-        $this->as('dual-ses@example.test', 'ses')->get('/ses')->assertOk()->assertDontSee('兼任 三郎 さんから案件の質問');
-        $this->as(self::SES1)->get('/ses')->assertOk()->assertSee('兼任 三郎 さんから案件の質問');
+        $this->as('dual-ses@example.test', 'ses')->get('/ses/cases')->assertOk()->assertDontSee('兼任 三郎 さんから案件の質問');
+        $this->as(self::SES1)->get('/ses/cases')->assertOk()->assertSee('兼任 三郎 さんから案件の質問');
         // 担当者の立場で開いて既読にしても、書けないだけで壊れない
         $this->as('dual-ses@example.test', 'ses')->get("/cases/{$this->caseId}/threads/$dEng")->assertOk();
     }

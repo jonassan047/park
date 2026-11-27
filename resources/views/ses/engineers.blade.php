@@ -1,5 +1,6 @@
 @extends('layouts.app', ['title' => 'エンジニア', 'wide' => true])
 @section('content')
+<x-todo-here area="engineers" />
 <p class="right"><a class="btn small" href="{{ url('/engineers/new') }}">エンジニアを登録</a></p>
 @include('partials.left-toggle', ['orders' => array_intersect_key(PARK_ORDERS, ['reg' => 1, 'kana' => 1])])
 @include('partials.mail-pick', ['part' => 'top'])

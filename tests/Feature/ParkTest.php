@@ -298,7 +298,7 @@ class ParkTest extends TestCase
         $this->assertDatabaseHas('mail_outbox', ['to_email' => 'eg1@park.example', 'kind' => 'reply-ack']);
         $this->get('/r/'.str_repeat('0', 32).'/question')->assertNotFound();
         // 「今やること」に出る
-        $this->as('ses1@park.example')->get('/ses')->assertSee('今やること')->assertSee('山田 太郎 さんから質問');
+        $this->as('ses1@park.example')->get('/ses/cases')->assertSee('やること（')->assertSee('山田 太郎 さんから質問');
         $this->as('eg1@park.example')->get('/eg')->assertSee('今やること');
         $this->as('admin@park.example')->get('/admin')->assertSee('今やること');
 
