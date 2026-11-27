@@ -10,8 +10,10 @@
     [$heading, $listTitle] = $kind === 'ses' ? ['ここからは SES の作業です', 'SES でやること'] : ['ここからはエンジニアの作業です', 'エンジニアでやること'];
 @endphp
 <section class="hero start">
-  <img class="hero-dome" src="{{ asset('img/hero.jpg') }}" alt="">
-  <h1>{{ $heading }}</h1>
+  <div class="dome-wrap">
+    <img class="hero-dome" src="{{ asset('img/hero.jpg') }}" alt="">
+    <h1>{{ $heading }}</h1>
+  </div>
 </section>
 
 @include('partials.flow-steps', ['kind' => $kind])
