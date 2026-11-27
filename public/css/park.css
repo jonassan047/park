@@ -312,6 +312,7 @@ input:focus, select:focus, textarea:focus { outline-color: var(--blue2); }
 .hero.cover .pill { font-size: 17px; padding: 6px 18px; }
 .hero.cover h1 { font-size: clamp(24px, 2.9vw, 46px); white-space: nowrap; margin: 24px 0 18px; letter-spacing: .02em; }
 .hero.cover h1 br { display: none; }
+.hero.cover h1 .brand { margin-right: 1em; letter-spacing: .08em; }
 .hero.cover .lead { max-width: 760px; margin: 0 auto; font-size: 16px; }
 .hero.cover .acts { margin-top: 24px; }
 .hero.cover .btn { margin: 0 4px 10px; }
