@@ -290,6 +290,8 @@ input:focus, select:focus, textarea:focus { outline-color: var(--blue2); }
 .hero.big { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 44px; align-items: center; min-height: 520px; }
 .hero > * { min-width: 0; }
 .hero-sprig { width: 96px; height: 96px; display: block; margin-bottom: 18px; box-shadow: 0 0 0 4px #fff, 0 0 0 10px rgba(190, 235, 140, .45), 0 12px 28px rgba(0, 0, 0, .35); }
+/* トップの若枝：半円のドーム型（見出しの幅の 8 割ほど。2026-11-27 TEZZO） */
+.hero-dome { display: block; width: 72%; aspect-ratio: 2 / 1; object-fit: cover; object-position: 50% 55%; border-radius: 999px 999px 0 0; margin-bottom: 22px; box-shadow: 0 0 0 4px #fff, 0 0 0 10px rgba(190, 235, 140, .45), 0 12px 28px rgba(0, 0, 0, .35); }
 .hero .pill { display: inline-flex; align-items: center; gap: 8px; background: rgba(255, 255, 255, .14); border: 1px solid rgba(255, 255, 255, .4); border-radius: 999px; padding: 6px 16px; font-size: 13px; font-weight: 700; color: #fff; }
 .hero .pill i { width: 8px; height: 8px; border-radius: 50%; background: #bdeb8c; display: inline-block; flex: none; }
 .hero h1 { font-size: clamp(25px, 3.5vw, 46px); line-height: 1.35; margin: 18px 0; color: #fff; text-shadow: 0 3px 14px rgba(0, 0, 0, .3); overflow-wrap: anywhere; }
