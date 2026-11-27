@@ -1,10 +1,36 @@
 @php
     $u = auth()->user();
+    // 上のタブ（2026-11-27 TEZZO の見本：4つずつ2段のボタン。使い方はログアウトの近く）
+    // [タブの名前, [[href, 画面の名前], …], 追加の class]。タブを押すと最初の画面を開く。画面が複数あるタブは、選んだときに下の段に並べる
     $nav = [
-        'admin' => [['/admin', 'ダッシュボード'], ['/admin/admins', '管理者'], ['/admin/ses', 'SES・担当者一覧'], ['/admin/engineers', 'エンジニア一覧'], ['/admin/providers', 'プロバイダー一覧'], ['/admin/cases', '案件一覧'], ['/admin/applications', '応募・選考一覧'],
-            ['/admin/contracts', '契約一覧'], ['/admin/invoices', '請求一覧'], ['/threads', '案件のやり取り'], ['/admin/messages', 'エンジニアとのやり取り'], ['/mails', '連絡メール'], ['/admin/mail', 'メール'], ['/admin/inbound', '受信メール'],['/admin/reports', '分析'], ['/admin/ai', 'AI'], ['/admin/settings', '設定'], ['/manual', '使い方']],
-        'ses' => [['/ses', 'ダッシュボード'], ['/ses/company', 'SES'], ['/ses/engineers', 'エンジニア一覧'], ['/ses/providers', 'プロバイダー一覧'], ['/ses/cases', '案件一覧'], ['/ses/applications', '応募・選考一覧'], ['/ses/contracts', '契約一覧'], ['/ses/invoices', '請求一覧'], ['/threads', '案件のやり取り'], ['/inbound', '返信メール'], ['/mails', '連絡メール'], ['/manual', '使い方']],
-        'eg' => [['/eg', 'ホーム'], ['/eg/offers', '届いた案件'], ['/eg/applications', '応募・面談'], ['/eg/profile', 'プロフィール'], ['/eg/sheet', 'スキルシート'], ['/eg/messages', '管理者とのやり取り'], ['/mails', '連絡メール'], ['/manual', '使い方']],
+        'admin' => [
+            ['ダッシュボード', [['/admin', 'ダッシュボード'], ['/admin/reports', '分析'], ['/admin/ai', 'AI'], ['/admin/admins', '管理者一覧'], ['/admin/settings', '設定']]],
+            ['SES・担当者', [['/admin/ses', 'SES・担当者一覧']]],
+            ['エンジニア', [['/admin/engineers', 'エンジニア一覧']]],
+            ['プロバイダー', [['/admin/providers', 'プロバイダー一覧']]],
+            ['案件', [['/admin/cases', '案件一覧']]],
+            ['応募・選考', [['/admin/applications', '応募・選考一覧']]],
+            ['契約', [['/admin/contracts', '契約一覧'], ['/admin/invoices', '請求一覧']]],
+            ['連絡・問合せ', [['/threads', '案件のやり取り'], ['/admin/messages', 'エンジニアとのやり取り'], ['/mails', '連絡メール'], ['/admin/mail', 'メール'], ['/admin/inbound', '受信メール']], 'contact'],
+        ],
+        'ses' => [
+            ['ダッシュボード', [['/ses', 'ダッシュボード']]],
+            ['SES・担当者', [['/ses/company', 'SES']]],
+            ['エンジニア', [['/ses/engineers', 'エンジニア一覧']]],
+            ['プロバイダー', [['/ses/providers', 'プロバイダー一覧']]],
+            ['案件', [['/ses/cases', '案件一覧']]],
+            ['応募・選考', [['/ses/applications', '応募・選考一覧']]],
+            ['契約', [['/ses/contracts', '契約一覧'], ['/ses/invoices', '請求一覧']]],
+            ['連絡・問合せ', [['/threads', '案件のやり取り'], ['/inbound', '返信メール'], ['/mails', '連絡メール']], 'contact'],
+        ],
+        'eg' => [
+            ['ホーム', [['/eg', 'ホーム']]],
+            ['届いた案件', [['/eg/offers', '届いた案件']]],
+            ['応募・面談', [['/eg/applications', '応募・面談']]],
+            ['プロフィール', [['/eg/profile', 'プロフィール']]],
+            ['スキルシート', [['/eg/sheet', 'スキルシート']]],
+            ['連絡・問合せ', [['/eg/messages', '管理者とのやり取り'], ['/mails', '連絡メール']], 'contact'],
+        ],
     ][$u->role ?? ''] ?? [];
     // 2要素認証が済むまでは、メニューを出さない
     $passed = $u && (int) session(\App\Support\TwoFactor::SESSION_KEY) === (int) $u->id;
@@ -33,6 +59,10 @@
     if (($u->role ?? '') === 'admin' && str_starts_with($path, '/inbound')) $current = '/admin/inbound';
     if (($u->role ?? '') === 'eg' && str_starts_with($path, '/engineers/')) $current = str_ends_with($path, '/sheet') ? '/eg/sheet' : (str_ends_with($path, '/messages') ? '/eg/messages' : '/eg/profile');
     if (str_starts_with($path, '/ses/')) $current = $path;
+    // 選択中の画面と、それを含むタブ
+    $isOn = fn ($href) => $current === $href || (!in_array($href, $homes, true) && str_starts_with($current, $href.'/'));
+    $activeTab = null;
+    foreach ($nav as $i => $tab) foreach ($tab[1] as [$href]) if ($isOn($href)) { $activeTab = $i; break 2; }
     // ベルの数：兼任の人は、いまの立場の分だけ。もう一方の立場あての未読は、帯に出す
     $unreadQ = $u ? DB::table('app_notifications')->where('user_id', $u->id)->whereNull('read_at') : null;
     $unread = $u ? ($dual ? (clone $unreadQ)->where(fn ($w) => $w->whereNull('for_role')->orWhere('for_role', $u->role))->count() : $unreadQ->count()) : 0;
@@ -64,18 +94,24 @@
 <header class="top"><div class="wrap">
   <a class="logo" href="{{ url('/') }}"><img class="mark sprig" src="{{ asset('img/sprig.jpg') }}" alt=""><span class="name">{{ setting('app_name') }}<small>SES とエンジニアが集う庭</small></span></a>
   @if($u)
-    <nav>@foreach($nav as [$href, $label])<a href="{{ url($href) }}" class="{{ $current === $href || (!in_array($href, $homes, true) && str_starts_with($current, $href.'/')) ? 'on' : '' }}">{{ $label }}</a>@endforeach</nav>
+    <nav class="tabs">@foreach($nav as $i => $tab)<a href="{{ url($tab[1][0][0]) }}" class="{{ implode(' ', array_filter(['tab', $tab[2] ?? '', $activeTab === $i ? 'on' : ''])) }}">{{ $tab[0] }}</a>@endforeach</nav>
     <div class="me">
       @unless($noPersonal)
       <a href="{{ url('/notifications') }}" class="bell" title="通知">🔔@if($unread)<b>{{ $unread }}</b>@endif</a>
       <a href="{{ url('/account') }}"><span class="who">{{ user_label($u) }}</span><small><span class="rolepill">{{ $u->role === 'ses' ? staff_kind($u) : lbl('role', $u->role) }}</span>のアカウント</small></a>
       @endunless
+      @if($passed)<a href="{{ url('/manual') }}" class="howto {{ $isOn('/manual') ? 'on' : '' }}">使い方</a>@endif
       <form method="post" action="{{ url('/logout') }}" class="inline">@csrf<button class="link">ログアウト</button></form>
     </div>
   @else
     <nav></nav><div class="me"><a href="{{ url('/manual') }}">使い方</a><a href="{{ url('/apply') }}">参加のお申し込み</a><a class="btn small" href="{{ url('/login') }}">ログイン</a></div>
   @endif
-</div></header>
+</div>
+@if($u && $activeTab !== null && count($nav[$activeTab][1]) > 1)
+  {{-- 選んだタブに画面が複数あるときの、下の段 --}}
+  <div class="subtabs"><div class="wrap">@foreach($nav[$activeTab][1] as [$href, $label])<a href="{{ url($href) }}" class="{{ $isOn($href) ? 'on' : '' }}">{{ $label }}</a>@endforeach</div></div>
+@endif
+</header>
 @endunless
 @unless($print)
 {{-- ログイン中の立場（2要素認証が済んだ人だけ） --}}

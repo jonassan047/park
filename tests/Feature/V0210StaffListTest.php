@@ -173,7 +173,7 @@ class V0210StaffListTest extends TestCase
 
     public function test_menu_and_people_list(): void
     {
-        $this->as(self::ADMIN)->get('/admin')->assertOk()->assertSee('SES・担当者一覧')->assertDontSee('SES一覧');
+        $this->as(self::ADMIN)->get('/admin')->assertOk()->assertSee('>SES・担当者</a>', false)->assertDontSee('SES一覧');
 
         $a = $this->ses['a'];
         $html = $this->page(self::ADMIN, '/admin/ses');

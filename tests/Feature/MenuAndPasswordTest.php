@@ -23,6 +23,6 @@ class MenuAndPasswordTest extends TestCase
     {
         $this->as('ses1@park.example')->get('/ses/company')->assertOk()->assertSee('パスワード変更');
         $this->get('/account/profile')->assertOk()->assertSee('/account#password', false);
-        $this->as('admin@park.example')->get('/engineers/1')->assertOk()->assertSee('<a href="'.url('/admin/engineers').'" class="on">', false);
+        $this->as('admin@park.example')->get('/engineers/1')->assertOk()->assertSee('<a href="'.url('/admin/engineers').'" class="tab on">', false);
     }
 }

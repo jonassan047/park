@@ -67,10 +67,11 @@ class AdminAccountTest extends TestCase
     {
         $r = $this->as('admin@park.example')->get('/admin/settings')->assertOk();
         $r->assertDontSee('仮登録してメールを送る')->assertDontSee('仮登録のご案内（7日以内に本登録）');
-        $r->assertSeeInOrder(['href="'.url('/admin').'"', 'href="'.url('/admin/admins').'"', 'href="'.url('/admin/ses').'"'], false);
+        // 管理者一覧は、ダッシュボードのタブの下の段（設定と同じ段）にある
+        $r->assertSeeInOrder(['href="'.url('/admin').'" class="tab on"', 'href="'.url('/admin/ses').'"', 'class="subtabs"', 'href="'.url('/admin/admins').'"'], false);
         // 直す画面では「管理者」が選択中になる
         $id = $this->activeAdmin();
-        $this->get("/admin/admins/$id")->assertOk()->assertSee('class="on">管理者</a>', false);
+        $this->get("/admin/admins/$id")->assertOk()->assertSee('class="on">管理者一覧</a>', false);
     }
 
     public function test_p1_ses_and_engineer_get_403_on_admin_admins(): void

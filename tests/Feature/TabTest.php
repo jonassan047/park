@@ -23,13 +23,13 @@ class TabTest extends TestCase
     // 上のメニュー（最初の nav）だけを取り出す
     private function nav(string $html): string
     {
-        preg_match('#<nav>.*?</nav>#us', $html, $m);
+        preg_match('#<nav class="tabs">.*?</nav>#us', $html, $m);
         return $m[0] ?? '';
     }
 
     private function on(string $path): string
     {
-        return 'href="'.url($path).'" class="on"';
+        return 'href="'.url($path).'" class="tab on"';
     }
 
     public function test_r1_admin_tabs(): void
@@ -45,7 +45,7 @@ class TabTest extends TestCase
     public function test_r1_admin_only_one_tab_is_on(): void
     {
         $html = $this->as('admin@park.example')->get('/admin/cases')->assertOk()->getContent();
-        $this->assertSame(1, substr_count($this->nav($html), 'class="on"'));
+        $this->assertSame(1, substr_count($this->nav($html), ' on"'));
         $this->assertStringContainsString($this->on('/admin/cases'), $html);
     }
 
@@ -56,7 +56,7 @@ class TabTest extends TestCase
         $this->get('/ses')->assertOk()
             ->assertSee($this->on('/ses'), false)->assertDontSee($this->on('/ses/engineers'), false);
         $html = $this->get('/ses/engineers')->getContent();
-        $this->assertSame(1, substr_count($this->nav($html), 'class="on"'));
+        $this->assertSame(1, substr_count($this->nav($html), ' on"'));
     }
 
     public function test_r3_engineer_tabs(): void
@@ -66,6 +66,6 @@ class TabTest extends TestCase
         $this->get('/eg')->assertOk()
             ->assertSee($this->on('/eg'), false)->assertDontSee($this->on('/eg/offers'), false);
         $html = $this->get('/eg/offers')->getContent();
-        $this->assertSame(1, substr_count($this->nav($html), 'class="on"'));
+        $this->assertSame(1, substr_count($this->nav($html), ' on"'));
     }
 }
