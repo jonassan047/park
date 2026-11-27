@@ -10,7 +10,7 @@
     [$heading, $listTitle] = $kind === 'ses' ? ['ここからは SES の作業です', 'SES でやること'] : ['ここからはエンジニアの作業です', 'エンジニアでやること'];
 @endphp
 <section class="hero start">
-  <img class="sprig hero-sprig" src="{{ asset('img/sprig.jpg') }}" alt="">
+  <img class="hero-dome" src="{{ asset('img/hero.jpg') }}" alt="">
   <h1>{{ $heading }}</h1>
 </section>
 

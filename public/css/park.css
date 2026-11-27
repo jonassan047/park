@@ -304,6 +304,7 @@ input:focus, select:focus, textarea:focus { outline-color: var(--blue2); }
 .hero .photo span { position: absolute; left: 16px; bottom: 16px; right: 16px; width: fit-content; background: rgba(11, 43, 28, .85); color: #fff; font-size: 14px; font-weight: 800; padding: 7px 16px; border-radius: 999px; }
 .hero.start { text-align: center; padding: 52px 28px; margin-bottom: 26px; }
 .hero.start .hero-sprig { margin: 0 auto 18px; }
+.hero.start .hero-dome { width: min(640px, 72%); margin: 0 auto 22px; }
 .hero.start h1 { font-size: clamp(26px, 4.6vw, 52px); margin: 0; }
 
 /* ダッシュボードの先頭の帯 */
