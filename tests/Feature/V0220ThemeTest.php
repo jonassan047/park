@@ -188,7 +188,7 @@ class V0220ThemeTest extends TestCase
         $html = $this->get('/')->assertOk()->getContent();
         $this->assertStringContainsString('<section class="hero big cover">', $html);
         $this->assertStringContainsString('<img class="hero-dome" src="'.asset('img/dome.png').'" alt="">', $html);
-        foreach (['木漏れ日の下で、仕事と仲間がつながる庭', '<span class="brand">PARK</span><br><span class="nb">SES企業とエンジニアのみなさまが集う庭</span>', 'エンジニアの成約率を上げること', 'PARK の歩き方', 'グループで、仕事を回す', '合う案件が、届く', '利用は無料です。'] as $t) {
+        foreach (['木漏れ日の下で、仕事と仲間がつながる庭', '<span class="nb">SES企業とエンジニア</span><span class="brand">PARK</span><span class="nb">みなさまが集う庭</span>', 'エンジニアの成約率を上げること', 'PARK の歩き方', 'グループで、仕事を回す', '合う案件が、届く', '利用は無料です。'] as $t) {
             $this->assertStringContainsString($t, $html, $t);
         }
         preg_match_all('#<a class="spot" href="([^"]+)"#', $html, $m);

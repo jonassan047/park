@@ -423,3 +423,23 @@ body.role-admin header.top, body.role-ses header.top, body.role-eg header.top { 
 .me a.btn:hover { color: #fff; }
 /* 区切りのページ：その立場の担当だけをはっきり見せる */
 .flow-ses .owner:not(.ses), .flow-engineer .owner:not(.eg) { opacity: .35; }
+
+/* トップ：ロゴとメニューを帯の中に置く（白い上の段は出さない。2026-11-27 TEZZO） */
+.hero.cover { margin-top: 18px; padding-top: 22px; }
+.hero.cover .hero-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px 18px; flex-wrap: wrap; margin: 0 -14px 26px; text-align: left; z-index: 2; }
+.hero-bar .logo .name { color: #fff; text-shadow: 0 2px 8px rgba(0, 0, 0, .3); }
+.hero-bar .logo small { color: #d9f5b8; }
+.hero-bar .logo .mark { box-shadow: 0 0 0 2px #fff, 0 0 0 4px rgba(190, 235, 140, .7), 0 4px 10px rgba(0, 0, 0, .35); }
+.hero-bar .me { gap: 18px; }
+.hero-bar .me a { color: #fff; font-weight: 700; font-size: 15px; }
+.hero-bar .me a:hover { color: #d9f5b8; }
+.hero.cover .hero-bar .me a.btn { color: #12492f; font-size: 14px; padding: 7px 20px; margin: 0; }
+.hero.cover .hero-bar .me a.btn:hover { color: #12492f; }
+/* 大きな題：「SES企業とエンジニア　PARK　みなさまが集う庭」。PARK を大きく目立たせる */
+.hero.cover h1.title3 { display: flex; align-items: center; justify-content: center; gap: .7em; white-space: nowrap; }
+.hero.cover h1.title3 .brand { margin: 0; font-size: 2em; font-weight: 800; letter-spacing: .1em; line-height: 1; color: #fff; text-shadow: 0 0 22px rgba(190, 235, 140, .55), 0 4px 16px rgba(0, 0, 0, .4); }
+@media (max-width: 760px) {
+  .hero.cover .hero-bar { margin: 0 -4px 20px; justify-content: center; }
+  .hero-bar .me { gap: 12px; flex-wrap: wrap; justify-content: center; }
+  .hero.cover h1.title3 { flex-direction: column; gap: .2em; white-space: normal; }
+}

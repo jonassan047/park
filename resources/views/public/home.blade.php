@@ -1,13 +1,18 @@
-@extends('layouts.app', ['title' => 'PARK', 'noTitle' => true, 'wide' => true])
+@extends('layouts.app', ['title' => 'PARK', 'noTitle' => true, 'wide' => true, 'noHeader' => true])
 @section('content')
 <section class="hero big cover">
   {{-- クイックスタートの表紙と同じ組み立て：中央に大きなドーム → 札 → 大きな題 → 説明とボタン。隅に薄い写真（2026-11-27 TEZZO「PPT と全く同じに」） --}}
   <div class="deco" style="background-image:url('{{ asset('img/hero.jpg') }}')"></div>
   <div class="deco d2" style="background-image:url('{{ asset('img/hero.jpg') }}')"></div>
+  {{-- 上の白い段のロゴとメニューを、帯の中（左上・右上）に移した（2026-11-27 TEZZO「ここにあったものを、ここに持ってきて」） --}}
+  <div class="hero-bar">
+    <a class="logo" href="{{ url('/') }}"><img class="mark sprig" src="{{ asset('img/sprig.jpg') }}" alt=""><span class="name">{{ setting('app_name') }}<small>SES とエンジニアが集う庭</small></span></a>
+    <div class="me"><a href="{{ url('/manual') }}">使い方</a><a href="{{ url('/apply') }}">参加のお申し込み</a><a class="btn small" href="{{ url('/login') }}">ログイン</a></div>
+  </div>
   <div class="cover-wrap">
     <img class="hero-dome" src="{{ asset('img/dome.png') }}" alt="">
     <span class="pill"><i></i>木漏れ日の下で、仕事と仲間がつながる庭</span>
-    <h1><span class="brand">PARK</span><br><span class="nb">SES企業とエンジニアのみなさまが集う庭</span></h1>
+    <h1 class="title3"><span class="nb">SES企業とエンジニア</span><span class="brand">PARK</span><span class="nb">みなさまが集う庭</span></h1>
   </div>
   <p class="lead">小さな SES 企業どうしが1つのグループにまとまり、届いた案件に、グループ全体のエンジニアからいちばん合う人を出します。いちばん大事にするのは、<b>エンジニアの成約率を上げること</b>です。</p>
   <p class="acts"><a class="btn" href="{{ url('/apply') }}">参加のお申し込み（SES 企業さま） →</a> <a class="btn ghost" href="{{ url('/login') }}">ログイン</a></p>

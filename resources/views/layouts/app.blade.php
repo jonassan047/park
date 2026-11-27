@@ -60,7 +60,7 @@
 <link rel="stylesheet" href="{{ asset('css/park.css') }}?v={{ filemtime(public_path('css/park.css')) }}">
 </head>
 <body class="{{ $print ? 'print' : '' }} role-{{ $u->role ?? 'guest' }}">
-@unless($print)
+@unless($print || ($noHeader ?? false))
 <header class="top"><div class="wrap">
   <a class="logo" href="{{ url('/') }}"><img class="mark sprig" src="{{ asset('img/sprig.jpg') }}" alt=""><span class="name">{{ setting('app_name') }}<small>SES とエンジニアが集う庭</small></span></a>
   @if($u)
@@ -76,6 +76,8 @@
     <nav></nav><div class="me"><a href="{{ url('/manual') }}">使い方</a><a href="{{ url('/apply') }}">参加のお申し込み</a><a class="btn small" href="{{ url('/login') }}">ログイン</a></div>
   @endif
 </div></header>
+@endunless
+@unless($print)
 {{-- ログイン中の立場（2要素認証が済んだ人だけ） --}}
 @if($passed && !$noPersonal)
 <div class="loginbar"><div class="wrap">
