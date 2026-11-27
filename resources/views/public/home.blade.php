@@ -1,14 +1,16 @@
 @extends('layouts.app', ['title' => 'PARK', 'noTitle' => true, 'wide' => true])
 @section('content')
-<section class="hero big">
-  <div>
+<section class="hero big cover">
+  {{-- クイックスタートの表紙と同じ組み立て：中央に大きなドーム → 札 → 大きな題 → 説明とボタン。隅に薄い写真（2026-11-27 TEZZO「PPT と全く同じに」） --}}
+  <div class="deco" style="background-image:url('{{ asset('img/hero.jpg') }}')"></div>
+  <div class="deco d2" style="background-image:url('{{ asset('img/hero.jpg') }}')"></div>
+  <div class="cover-wrap">
     <img class="hero-dome" src="{{ asset('img/dome.png') }}" alt="">
     <span class="pill"><i></i>木漏れ日の下で、仕事と仲間がつながる庭</span>
     <h1>SES 企業のみなさまと、<br>エンジニアが、<span class="nb">同じ木の下で。</span></h1>
-    <p>小さな SES 企業どうしが1つのグループにまとまり、届いた案件に、グループ全体のエンジニアからいちばん合う人を出します。いちばん大事にするのは、<b>エンジニアの成約率を上げること</b>です。</p>
-    <p style="margin-top:22px"><a class="btn" href="{{ url('/apply') }}">参加のお申し込み（SES 企業さま） →</a> <a class="btn ghost" href="{{ url('/login') }}">ログイン</a></p>
   </div>
-  <div class="photo" style="background-image:url('{{ asset('img/hero.jpg') }}')"><span>🌱 成約したときだけ、成功報酬</span></div>
+  <p class="lead">小さな SES 企業どうしが1つのグループにまとまり、届いた案件に、グループ全体のエンジニアからいちばん合う人を出します。いちばん大事にするのは、<b>エンジニアの成約率を上げること</b>です。</p>
+  <p class="acts"><a class="btn" href="{{ url('/apply') }}">参加のお申し込み（SES 企業さま） →</a> <a class="btn ghost" href="{{ url('/login') }}">ログイン</a></p>
 </section>
 
 <div class="section-title"><h2>PARK の歩き方</h2><p>あなたの立場に合わせて、公園の中のスポットを訪れてみてください。</p></div>

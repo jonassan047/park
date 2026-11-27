@@ -302,6 +302,19 @@ input:focus, select:focus, textarea:focus { outline-color: var(--blue2); }
 .hero .btn.ghost:hover { background: rgba(255, 255, 255, .16); border-color: #fff; color: #fff; }
 .hero .photo { position: relative; border-radius: 28px; overflow: hidden; border: 6px solid #fff; box-shadow: 0 24px 50px rgba(0, 0, 0, .4); transform: rotate(2deg); aspect-ratio: 1 / 1; background: #1d5a3c center / cover no-repeat; }
 .hero .photo span { position: absolute; left: 16px; bottom: 16px; right: 16px; width: fit-content; background: rgba(11, 43, 28, .85); color: #fff; font-size: 14px; font-weight: 800; padding: 7px 16px; border-radius: 999px; }
+/* トップの帯：クイックスタートの表紙と同じ組み立て（2026-11-27 TEZZO「PPT と全く同じに」）。表紙（1600×900）の値を帯の大きさに合わせて 0.8 倍ほどにしている */
+.hero.big.cover { display: block; text-align: center; padding: 64px 40px 56px; min-height: 0; }
+.hero.cover > :not(.deco) { position: relative; }
+.hero.cover .deco { position: absolute; border-radius: 24px; border: 5px solid #fff; box-shadow: 0 20px 40px rgba(0, 0, 0, .4); background: center / cover no-repeat; opacity: .22; width: 344px; height: 344px; right: -120px; bottom: -216px; transform: rotate(8deg); }
+.hero.cover .deco.d2 { width: 240px; height: 240px; right: auto; bottom: auto; left: -48px; top: -56px; transform: rotate(-6deg); opacity: .14; }
+.hero.cover .cover-wrap { display: inline-block; max-width: 100%; }
+.hero.cover .hero-dome { width: 81.4%; max-width: 900px; margin: 0 auto 6px; }
+.hero.cover .pill { font-size: 17px; padding: 6px 18px; }
+.hero.cover h1 { font-size: clamp(24px, 2.9vw, 46px); white-space: nowrap; margin: 24px 0 18px; letter-spacing: .02em; }
+.hero.cover h1 br { display: none; }
+.hero.cover .lead { max-width: 760px; margin: 0 auto; font-size: 16px; }
+.hero.cover .acts { margin-top: 24px; }
+.hero.cover .btn { margin: 0 4px 10px; }
 .hero.start { text-align: center; padding: 52px 28px; margin-bottom: 26px; }
 .hero.start .hero-sprig { margin: 0 auto 18px; }
 .hero.start .dome-wrap { display: inline-block; max-width: 100%; }
@@ -352,6 +365,12 @@ input:focus, select:focus, textarea:focus { outline-color: var(--blue2); }
   .hero-sprig { width: 76px; height: 76px; }
   .hero .photo { aspect-ratio: 4 / 3; transform: none; }
   .hero.start { padding: 34px 18px; }
+  .hero.big.cover { padding: 40px 18px 36px; }
+  .hero.cover h1 { white-space: normal; }
+  .hero.cover h1 br { display: inline; }
+  .hero.cover .pill { font-size: 13px; }
+  .hero.cover .deco { width: 200px; height: 200px; right: -80px; bottom: -120px; }
+  .hero.cover .deco.d2 { width: 140px; height: 140px; left: -40px; top: -40px; }
   .spots { grid-template-columns: 1fr; }
   .logo .mark { width: 34px; height: 34px; }
   .ttl { gap: 10px; }

@@ -186,9 +186,9 @@ class V0220ThemeTest extends TestCase
     public function test_ac6_ac12_home_is_big_hero_and_spots_go_to_start_pages(): void
     {
         $html = $this->get('/')->assertOk()->getContent();
-        $this->assertStringContainsString('<section class="hero big">', $html);
+        $this->assertStringContainsString('<section class="hero big cover">', $html);
         $this->assertStringContainsString('<img class="hero-dome" src="'.asset('img/dome.png').'" alt="">', $html);
-        foreach (['木漏れ日の下で、仕事と仲間がつながる庭', 'SES 企業のみなさまと、<br>エンジニアが、<span class="nb">同じ木の下で。</span>', 'エンジニアの成約率を上げること', 'PARK の歩き方', '🌱', 'グループで、仕事を回す', '合う案件が、届く', '利用は無料です。'] as $t) {
+        foreach (['木漏れ日の下で、仕事と仲間がつながる庭', 'SES 企業のみなさまと、<br>エンジニアが、<span class="nb">同じ木の下で。</span>', 'エンジニアの成約率を上げること', 'PARK の歩き方', 'グループで、仕事を回す', '合う案件が、届く', '利用は無料です。'] as $t) {
             $this->assertStringContainsString($t, $html, $t);
         }
         preg_match_all('#<a class="spot" href="([^"]+)"#', $html, $m);
