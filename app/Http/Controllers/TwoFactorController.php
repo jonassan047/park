@@ -13,9 +13,6 @@ use Illuminate\Support\Facades\DB;
 // 2要素認証：パスワードのあと、メールで届いた確認コードを入れる
 class TwoFactorController extends Controller
 {
-    // 立場ごとの区切りのページ
-    private const START_PAGES = ['ses' => '/start/ses', 'eg' => '/start/engineer'];
-
     public function challengeForm(Request $r)
     {
         $u = $r->user();
@@ -75,7 +72,7 @@ class TwoFactorController extends Controller
         return redirect()->intended(url($this->startOf($u)));
     }
 
-    // 確認コードのあとの、既定の行き先。SES とエンジニアは区切りのページ、管理者はダッシュボード
+    // 確認コードのあとの、既定の行き先。どの立場もダッシュボード
     // 兼任（使える立場が2つ以上）の人は今のままの行き先（そのあと立場を選ぶ）
     private function startOf($u): string
     {
@@ -85,7 +82,7 @@ class TwoFactorController extends Controller
             if (count($usable) !== 1) return $u->home();
             $role = $usable[0];
         }
-        return self::START_PAGES[$role] ?? $u->home();
+        return '/'.$role; // 立場の名前（admin・ses・eg）が、そのままダッシュボードの道。2026-11-27：区切りのページはログインの前（1stアクセス画面）に移したので、ログインのあとはダッシュボードへ
     }
 
     public function resend(Request $r)

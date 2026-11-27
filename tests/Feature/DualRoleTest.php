@@ -783,7 +783,7 @@ class DualRoleTest extends TestCase
 
     public function test_ac13_non_dual_users_unchanged(): void
     {
-        foreach ([[self::ADMIN, '/admin', '/admin'], [self::SES1, '/ses', '/start/ses'], ['eg1@park.example', '/eg', '/start/engineer']] as [$email, $home, $after]) {
+        foreach ([[self::ADMIN, '/admin', '/admin'], [self::SES1, '/ses', '/ses'], ['eg1@park.example', '/eg', '/eg']] as [$email, $home, $after]) {
             $this->login($email)->assertRedirect(url($after));
             $this->get($home)->assertOk();
             $this->assertNull(session('acting_role'));

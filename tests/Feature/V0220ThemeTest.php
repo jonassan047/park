@@ -229,9 +229,12 @@ class V0220ThemeTest extends TestCase
 
     public function test_ac9_headings_and_facts_without_eg_word(): void
     {
-        foreach (['ses' => 'ここからは SES の作業です', 'engineer' => 'ここからはエンジニアの作業です'] as $kind => $heading) {
+        foreach (['ses', 'engineer'] as $kind) {
             $html = $this->get("/start/$kind")->assertOk()->getContent();
-            $this->assertStringContainsString("<h1>$heading</h1>", $html);
+            // 1stアクセス画面の帯（2026-11-27）
+            $this->assertStringContainsString('<h1><span>はじめて PARK システムへアクセスされた方へ</span><span class="l2">PARK システムの概要をご説明いたします。</span></h1>', $html);
+            $this->assertStringNotContainsString('class="hero-bar"', $html);
+            foreach (['PARK のプレイヤー', '管理者', 'SES代表担当者', '一般担当者', 'エンジニア', 'プロバイダー'] as $t) $this->assertStringContainsString($t, $html);
             preg_match('#<main.*?</main>#s', $html, $m);
             $this->assertDoesNotMatchRegularExpression('/\bEG\b/', strip_tags($m[0]), $kind);
         }
@@ -266,10 +269,9 @@ class V0220ThemeTest extends TestCase
     public function test_ac10_guest_gets_login_and_manual(): void
     {
         foreach (['ses', 'engineer'] as $kind) {
+            // 1stアクセス画面：未ログインでも「作業を始める」。押すとログインへ（2026-11-27）
             $a = $this->actions($this->get("/start/$kind")->getContent());
-            $this->assertMatchesRegularExpression($this->link('/login', 'ログイン'), $a);
-            $this->assertMatchesRegularExpression($this->link("/manual/$kind", '使い方'), $a);
-            $this->assertStringNotContainsString('作業を始める', $a);
+            $this->assertMatchesRegularExpression($this->link('/login', '作業を始める（ダッシュボードへ）'), $a);
         }
     }
 
@@ -284,9 +286,7 @@ class V0220ThemeTest extends TestCase
         }
         foreach ([[self::EG, 'ses', '/eg'], [self::SES, 'engineer', '/ses'], [self::GEN, 'engineer', '/ses'], [self::ADMIN, 'ses', '/admin'], [self::ADMIN, 'engineer', '/admin']] as [$email, $kind, $home]) {
             $a = $this->actions($this->as($email)->get("/start/$kind")->getContent());
-            $this->assertMatchesRegularExpression($this->link($home, '今の画面へ戻る'), $a, "$email $kind");
-            $this->assertMatchesRegularExpression($this->link("/manual/$kind", '使い方'), $a);
-            $this->assertStringNotContainsString('作業を始める', $a);
+            $this->assertMatchesRegularExpression($this->link($home, $start), $a, "$email $kind");
         }
     }
 
@@ -294,8 +294,7 @@ class V0220ThemeTest extends TestCase
     {
         $this->loginPassword(self::SES);
         $a = $this->actions($this->get('/start/ses')->assertOk()->getContent());
-        $this->assertMatchesRegularExpression($this->link('/login', 'ログイン'), $a);
-        $this->assertStringNotContainsString('作業を始める', $a);
+        $this->assertMatchesRegularExpression($this->link('/login', '作業を始める（ダッシュボードへ）'), $a);
         // 区切りのページを開いただけでは、確認コードを通ったことにならない
         $this->get('/ses')->assertRedirect(url('/two-factor/challenge'));
     }
@@ -311,7 +310,7 @@ class V0220ThemeTest extends TestCase
         $a = $this->actions($this->as(self::SES, 'eg')->get('/start/engineer')->getContent());
         $this->assertMatchesRegularExpression($this->link('/eg', '作業を始める（ダッシュボードへ）'), $a);
         $a = $this->actions($this->as(self::SES, 'eg')->get('/start/ses')->getContent());
-        $this->assertMatchesRegularExpression($this->link('/eg', '今の画面へ戻る'), $a);
+        $this->assertMatchesRegularExpression($this->link('/eg', '作業を始める（ダッシュボードへ）'), $a);
         $a = $this->actions($this->as(self::SES, 'ses')->get('/start/ses')->getContent());
         $this->assertMatchesRegularExpression($this->link('/ses', '作業を始める（ダッシュボードへ）'), $a);
     }
@@ -336,7 +335,7 @@ class V0220ThemeTest extends TestCase
     public function test_ac13_default_destination_by_role(): void
     {
         $this->mkGeneral();
-        foreach ([[self::SES, '/start/ses'], [self::GEN, '/start/ses'], [self::EG, '/start/engineer'], [self::ADMIN, '/admin']] as [$email, $to]) {
+        foreach ([[self::SES, '/ses'], [self::GEN, '/ses'], [self::EG, '/eg'], [self::ADMIN, '/admin']] as [$email, $to]) {
             $this->flushSession();
             $this->loginPassword($email);
             $this->enterCode($email)->assertRedirect(url($to));
@@ -360,7 +359,7 @@ class V0220ThemeTest extends TestCase
     public function test_ac13_confirmed_login_goes_to_start_page(): void
     {
         $this->mkGeneral();
-        foreach ([[self::SES, '/start/ses'], [self::GEN, '/start/ses'], [self::EG, '/start/engineer'], [self::ADMIN, '/admin']] as [$email, $to]) {
+        foreach ([[self::SES, '/ses'], [self::GEN, '/ses'], [self::EG, '/eg'], [self::ADMIN, '/admin']] as [$email, $to]) {
             $this->confirmed($email);
             $this->flushSession();
             $this->loginPassword($email);
@@ -386,7 +385,7 @@ class V0220ThemeTest extends TestCase
     public function test_ac13_skipped_login_goes_to_start_page(): void
     {
         config(['app.skip_2fa_domain' => 'park.example']);
-        foreach ([[self::SES, '/start/ses'], [self::EG, '/start/engineer'], [self::ADMIN, '/admin']] as [$email, $to]) {
+        foreach ([[self::SES, '/ses'], [self::EG, '/eg'], [self::ADMIN, '/admin']] as [$email, $to]) {
             $this->flushSession();
             $this->loginPassword($email);
             $this->get('/two-factor/challenge')->assertRedirect(url($to));
@@ -397,7 +396,7 @@ class V0220ThemeTest extends TestCase
     // 確認コードの画面を開いた中で、通ったことになる道（コードも、通った印も無いセッション）
     public function test_ac13_passed_while_opening_challenge_form(): void
     {
-        foreach ([[self::SES, '/start/ses'], [self::EG, '/start/engineer'], [self::ADMIN, '/admin']] as [$email, $to]) {
+        foreach ([[self::SES, '/ses'], [self::EG, '/eg'], [self::ADMIN, '/admin']] as [$email, $to]) {
             $this->confirmed($email);
             $this->flushSession();
             $u = User::where('email', $email)->firstOrFail();
@@ -430,9 +429,8 @@ class V0220ThemeTest extends TestCase
         $this->mkDual();
         DB::table('engineers')->where('id', $this->row(self::SES)->engineer_id)->update(['suspended_at' => now_str()]);
         $this->loginPassword(self::SES);
-        $this->enterCode(self::SES)->assertRedirect(url('/start/ses'));
-        $a = $this->actions($this->get('/start/ses')->assertOk()->getContent());
-        $this->assertMatchesRegularExpression($this->link('/ses', '作業を始める（ダッシュボードへ）'), $a);
+        $this->enterCode(self::SES)->assertRedirect(url('/ses'));
+        $this->get('/ses')->assertOk();
     }
 
     // 招待からの本登録の完了は、今のまま（区切りのページを挟まない）

@@ -1,4 +1,4 @@
-@extends('layouts.app', ['title' => $kind === 'ses' ? 'SES の作業' : 'エンジニアの作業', 'noTitle' => true, 'wide' => true, 'noPersonal' => true])
+@extends('layouts.app', ['title' => $kind === 'ses' ? 'SES の作業' : 'エンジニアの作業', 'noTitle' => true, 'wide' => true, 'noPersonal' => true, 'noHeader' => true])
 @section('content')
 @php
     // やることの箇条書き（マニュアルに書いてあることだけ）
@@ -9,11 +9,10 @@
     ][$kind];
     [$heading, $listTitle] = $kind === 'ses' ? ['ここからは SES の作業です', 'SES でやること'] : ['ここからはエンジニアの作業です', 'エンジニアでやること'];
 @endphp
-<section class="hero start">
-  <div class="dome-wrap">
-    <img class="hero-dome" src="{{ asset('img/dome.png') }}" alt="">
-    <h1>{{ $heading }}</h1>
-  </div>
+{{-- 1stアクセス画面（2026-11-27 TEZZO の見本 1stアクセス.xlsx）。上の白い段は出さず、左にドーム・右に2行の文の横長の帯 --}}
+<section class="hero first">
+  <a class="first-dome" href="{{ url('/') }}" title="トップへ"><img class="hero-dome" src="{{ asset('img/dome.png') }}" alt="PARK"></a>
+  <h1><span>はじめて PARK システムへアクセスされた方へ</span><span class="l2">PARK システムの概要をご説明いたします。</span></h1>
 </section>
 
 @include('partials.flow-steps', ['kind' => $kind])
@@ -22,18 +21,26 @@
 <ul class="tips">@foreach($todos as $t)<li>{{ $t }}</li>@endforeach</ul>
 </x-card>
 
+@php
+    // PARK に出てくる立場（見本の「プレイヤー」。プロバイダーは PARK を使わない上位の会社）
+    $players = [
+        ['管理者', 'PARK の運営者。案件の登録、スキルシートの確認、契約と請求書を受け持ちます。'],
+        ['SES代表担当者', 'SES 企業に1人。会社を PARK につなぎ、一般担当者とエンジニアを登録します。'],
+        ['一般担当者', 'SES代表担当者が登録した担当者。案件の案内から成約まで、代表と同じように作業します。'],
+        ['エンジニア', '案件に参加する人。プロフィール・スキル・経験票を整え、届いた案件に返事をします。利用は無料です。'],
+        ['プロバイダー', 'SES に案件を出してくる上位の会社。PARK にはログインしません（SES が案件を登録します）。'],
+    ];
+@endphp
+<x-card title="PARK のプレイヤー">
+<dl class="players">@foreach($players as [$who, $what])<dt>{{ $who }}</dt><dd>{{ $what }}</dd>@endforeach</dl>
+</x-card>
+
 <p class="start-actions">
-@if($state === 'work')
-  <a class="btn" href="{{ url($kind === 'ses' ? '/ses' : '/eg') }}">作業を始める（ダッシュボードへ）</a>
-@elseif($state === 'choose')
+@if($state === 'choose')
   <a class="btn" href="{{ url('/login/role') }}">立場を選ぶ</a>
 @else
-  @if($state === 'login')
-    <a class="btn" href="{{ url('/login') }}">ログイン</a>
-  @else
-    <a class="btn" href="{{ url($back) }}">今の画面へ戻る</a>
-  @endif
-  <a class="btn ghost" href="{{ url('/manual/'.$kind) }}">使い方</a>
+  {{-- ログイン前はログインへ。ログインのあとは、その人のダッシュボードへ（見本：この画面 → ログイン → ダッシュボード） --}}
+  <a class="btn" href="{{ url($state === 'login' ? '/login' : $back) }}">作業を始める（ダッシュボードへ）</a>
 @endif
 </p>
 @endsection

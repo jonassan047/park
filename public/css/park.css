@@ -322,6 +322,17 @@ input:focus, select:focus, textarea:focus { outline-color: var(--blue2); }
 .hero.start .hero-dome { width: 81%; margin: 0 auto 12px; }
 .hero.start h1 { font-size: clamp(26px, 4.6vw, 52px); margin: 0; }
 
+/* 1stアクセス画面の帯（2026-11-27 TEZZO の見本）：左にドーム、右に2行の文。2行目は右へずらす */
+.hero.first { display: flex; align-items: center; gap: 48px; padding: 22px 44px; border-radius: 0 0 24px 24px; margin: 0 0 26px; background: linear-gradient(100deg, #0b2b1c, #175236 48%, #5a9a62); }
+.hero.first .first-dome { flex: none; width: 250px; display: block; }
+.hero.first .hero-dome { width: 100%; margin: 0; }
+.hero.first h1 { flex: 1; margin: 0; font-size: clamp(18px, 2.2vw, 30px); font-weight: 700; line-height: 1.9; letter-spacing: .04em; }
+.hero.first h1 span { display: block; }
+.hero.first h1 .l2 { text-align: right; }
+.players { display: grid; grid-template-columns: max-content 1fr; gap: 10px 18px; margin: 0; }
+.players dt { font-weight: 800; color: #12492f; }
+.players dd { margin: 0; }
+
 /* ダッシュボードの先頭の帯 */
 .role-hero { position: relative; overflow: hidden; display: flex; align-items: center; gap: 20px; min-height: 130px; border-radius: 24px; padding: 24px 30px; margin: 0 0 18px; color: #fff; background: #175236 center / cover no-repeat; box-shadow: 0 10px 26px rgba(18, 62, 41, .28); }
 .role-hero::before { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, rgba(11, 43, 28, .94), rgba(23, 82, 54, .82) 55%, rgba(47, 132, 88, .45)); }
@@ -366,6 +377,10 @@ input:focus, select:focus, textarea:focus { outline-color: var(--blue2); }
   .hero-sprig { width: 76px; height: 76px; }
   .hero .photo { aspect-ratio: 4 / 3; transform: none; }
   .hero.start { padding: 34px 18px; }
+  .hero.first { flex-direction: column; gap: 14px; padding: 22px 18px; text-align: center; }
+  .hero.first .first-dome { width: 200px; }
+  .hero.first h1 .l2 { text-align: center; }
+  .players { grid-template-columns: 1fr; gap: 2px; } .players dd { margin-bottom: 10px; }
   .hero.big.cover { padding: 40px 18px 36px; }
   .hero.cover h1 { white-space: normal; }
   .hero.cover h1 br { display: inline; }

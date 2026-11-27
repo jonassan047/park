@@ -60,7 +60,7 @@ class TwoFactorAuditTest extends TestCase
         $this->assertStringContainsString('from=login', $sent[0]);
         $this->assertMatchesRegularExpression('/ s=[0-9a-f]{8}$/', $sent[0]);
 
-        $this->post('/two-factor/challenge', ['code' => $this->lastCode()])->assertRedirect(url('/start/engineer'));
+        $this->post('/two-factor/challenge', ['code' => $this->lastCode()])->assertRedirect(url('/eg'));
         $ok = $this->details('2fa-ok');
         $this->assertCount(1, $ok);
         $this->assertMatchesRegularExpression('/^s=[0-9a-f]{8}$/', $ok[0]);
@@ -110,7 +110,7 @@ class TwoFactorAuditTest extends TestCase
         $sent = $this->details('2fa-sent');
         $this->assertCount(2, $sent);
         $this->assertStringContainsString('from=challenge-form-timeout', $sent[1]);
-        $this->post('/two-factor/challenge', ['code' => $this->lastCode()])->assertRedirect(url('/start/engineer'));
+        $this->post('/two-factor/challenge', ['code' => $this->lastCode()])->assertRedirect(url('/eg'));
     }
 
     public function test_timeout_direct_get_resends(): void
@@ -120,7 +120,7 @@ class TwoFactorAuditTest extends TestCase
         $this->travel(11)->minutes();
         $this->get('/two-factor/challenge')->assertOk()->assertSee('前のコードの期限が切れたので');
         $this->assertCount(2, $this->details('2fa-sent'));
-        $this->post('/two-factor/challenge', ['code' => $this->lastCode()])->assertRedirect(url('/start/engineer'));
+        $this->post('/two-factor/challenge', ['code' => $this->lastCode()])->assertRedirect(url('/eg'));
     }
 
     public function test_live_pending_does_not_resend(): void
@@ -130,7 +130,7 @@ class TwoFactorAuditTest extends TestCase
         $this->travel(5)->minutes();
         $this->get('/two-factor/challenge')->assertOk();
         $this->assertCount(1, $this->details('2fa-sent'));
-        $this->post('/two-factor/challenge', ['code' => $code])->assertRedirect(url('/start/engineer'));
+        $this->post('/two-factor/challenge', ['code' => $code])->assertRedirect(url('/eg'));
     }
 
     public function test_too_many_on_fifth_wrong_and_afterwards(): void
@@ -170,7 +170,7 @@ class TwoFactorAuditTest extends TestCase
         $sent = $this->details('2fa-sent');
         $this->assertCount(2, $sent);
         $this->assertStringContainsString('from=challenge-form-too-many', end($sent));
-        $this->post('/two-factor/challenge', ['code' => $this->lastCode()])->assertRedirect(url('/start/engineer'));
+        $this->post('/two-factor/challenge', ['code' => $this->lastCode()])->assertRedirect(url('/eg'));
     }
 
     public function test_no_pending_post_sends_new_code(): void
@@ -194,7 +194,7 @@ class TwoFactorAuditTest extends TestCase
         $sent = $this->details('2fa-sent');
         $this->assertCount(1, $sent);
         $this->assertStringContainsString('from=challenge-form-mismatch', $sent[0]);
-        $this->post('/two-factor/challenge', ['code' => $this->lastCode()])->assertRedirect(url('/start/engineer'));
+        $this->post('/two-factor/challenge', ['code' => $this->lastCode()])->assertRedirect(url('/eg'));
     }
 
     public function test_resend_button_is_outside_details(): void
