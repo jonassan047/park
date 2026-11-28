@@ -655,6 +655,6 @@ class V0101CaseThreadPartnerTest extends TestCase
     // ---------- 版 ----------
     public function test_version(): void
     {
-        $this->assertSame('v0.24.0', config('park.version'));
+        $this->assertSame('v0.24.1', config('park.version'));
     }
 }

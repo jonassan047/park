@@ -396,7 +396,7 @@ class ParkTest extends TestCase
         $this->get('/manual/engineer-steps')->assertOk()->assertSee('確認コード');
         $this->get('/manual/admin-steps')->assertForbidden();
         $this->as('admin@park.example')->get('/manual/admin')->assertOk()->assertSee('案件の登録と案内');
-        $this->as('admin@park.example')->get('/manual/admin-steps')->assertOk()->assertSee('今やること');
+        $this->as('admin@park.example')->get('/manual/admin-steps')->assertOk()->assertSee('いま管理者がやること');
         $this->as('eg1@park.example')->get('/manual')->assertOk()->assertSee('エンジニア 操作手順書')->assertDontSee('SES 企業さま');
     }
 }

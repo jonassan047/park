@@ -340,6 +340,13 @@ function num_disp($n): string
 }
 function pct($a, $b): string { return $b ? (round($a / $b * 1000) / 10).'%' : '—'; }
 function age_text($y): string { return $y ? (date('Y') - $y).'歳前後' : ''; }
+// 画面の一覧・詳細で使う短い形（2026-11-28 TEZZO）。外に出すスキルシートは age_text のまま
+function age_short($y): string { return $y ? (date('Y') - $y).'±' : '—'; }
+// 一覧用の短い形：65万／即日・26/12/05／市区町村まで／スキルの（）書きを省く
+function man_short($n): string { return preg_replace('/万円$/u', '万', man($n)); }
+function date_short($d): string { if (!$d) return '—'; $d = substr((string) $d, 0, 10); return $d <= today_str() ? '即日' : date('y/m/d', strtotime($d)); }
+function city_only($a): string { if (!$a) return '—'; return preg_match('/^((?:東京都|北海道|(?:京都|大阪)府|.{2,3}県)?(?:(?:四日市|廿日市|野々市|大和郡山|郡山|郡上|蒲郡|小郡|東村山|武蔵村山|十日町)市|[^市区郡]{1,6}郡.{1,6}?[町村]|.{1,6}?市.{1,4}?区|.{1,6}?[市区町村]))/u', trim((string) $a), $m) ? $m[1] : (string) $a; }
+function skills_short($s): string { return preg_replace('/（[^（）]*）/u', '', (string) $s); }
 
 // 「Java、Spring Boot / AWS」をリストにする
 function parse_list($s): array

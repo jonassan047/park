@@ -456,7 +456,7 @@ class V0220ThemeTest extends TestCase
 
     public function test_ac14_version(): void
     {
-        $this->assertSame('v0.24.0', config('park.version'));
-        foreach (['/', '/login', '/start/ses', '/start/engineer'] as $url) $this->get($url)->assertOk()->assertSee('v0.24.0');
+        $this->assertSame('v0.24.1', config('park.version'));
+        foreach (['/', '/login', '/start/ses', '/start/engineer'] as $url) $this->get($url)->assertOk()->assertSee('v0.24.1');
     }
 }

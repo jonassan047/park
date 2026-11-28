@@ -19,7 +19,7 @@
 <dt>氏名</dt><dd>{{ $e->name }} <span class="muted">{{ $e->kana }}（{{ $e->initials ?: '—' }}）</span></dd>
 <dt>所属 SES</dt><dd><x-code :v="$e->ses_code ?? null" />　{{ $e->ses_name }}</dd>
 <dt>担当者</dt><dd>@if($staffNow)@if($u->role !== 'eg')<x-code :v="$staffNow->staff_code" /> @endif{{ $staffNow->name.((int) $staffNow->id !== (int) $e->staff_user_id ? '（代わり）' : '') }}@else — @endif</dd><dt>稼働状況</dt><dd>{{ work_badge($e) }}</dd>
-<dt>年齢</dt><dd>{{ age_text($e->birth_year) ?: '—' }}</dd><dt>最寄り駅</dt><dd>{{ trim($e->nearest_line.' '.$e->nearest_station) ?: '—' }}{{ $e->walk_minutes ? '（徒歩'.$e->walk_minutes.'分）' : '' }}</dd>
+<dt>年齢</dt><dd>{{ age_short($e->birth_year) }}</dd><dt>最寄り駅</dt><dd>{{ trim($e->nearest_line.' '.$e->nearest_station) ?: '—' }}{{ $e->walk_minutes ? '（徒歩'.$e->walk_minutes.'分）' : '' }}</dd>
 <dt>経験年数</dt><dd>{{ $e->years_exp ? num_disp($e->years_exp).'年' : '—' }}</dd>
 <dt>希望単価</dt><dd>{{ man($e->desired_price) }}</dd><dt>下限</dt><dd>{{ man($e->min_price) }}</dd>
 <dt>稼働できる日</dt><dd>{{ fmt_date($e->available_from) }}</dd>
