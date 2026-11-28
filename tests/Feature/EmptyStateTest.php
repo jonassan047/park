@@ -78,7 +78,7 @@ class EmptyStateTest extends TestCase
         $r = $this->as($a)->get('/admin')->assertOk();
         $r->assertSee('PARK をはじめましょう');
         $r->assertSeeInOrder(['href="'.url('/admin/admins/new').'"', 'href="'.url('/admin/ses/new').'"', 'href="'.url('/admin/ses?view=company').'"', 'href="'.url('/cases/new').'"'], false);
-        $r->assertSee('ほかの管理者を登録する')->assertSee('SES を仮登録して、SES代表担当者にご案内を送る')->assertSee('エンジニアを登録する（SES を選んでから）')->assertSee('案件を登録する');
+        $r->assertSee('ほかの管理者を登録する')->assertSee('SES を仮登録して、PARK窓口担当者にご案内を送る')->assertSee('エンジニアを登録する（SES を選んでから）')->assertSee('案件を登録する');
         $r->assertDontSee('<span class="badge ok">済み</span>', false);
     }
 
@@ -104,7 +104,7 @@ class EmptyStateTest extends TestCase
         $a = $this->admin();
         $r = $this->as($a)->get('/admin')->assertOk();
         $r->assertSee('登録の状況')->assertSee('まだ誰も登録していません。上の手順から始めます。')->assertSee('最初 管理者')->assertSee('最初の会社')->assertSee('参加中');
-        $r->assertSeeInOrder(['立場', '名前', '所属', '状態', '最後のログイン']);
+        $r->assertSeeInOrder(['立場', '名前', '所属', '登録状況', '最後のログイン']);
     }
 
     public function test_p3_states_pending_expired_stopped_and_unregistered_ses(): void

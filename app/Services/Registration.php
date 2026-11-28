@@ -34,17 +34,46 @@ class Registration
         return is_string($v) ? $v : null;
     }
 
-    // 会社情報の編集（POST /ses/company・POST /admin/ses/{id}）の入力を、Requirements の項目名にそろえる
+    // 企業情報の編集（POST /ses/company・POST /admin/ses/{id}）の入力を、Requirements の項目名にそろえる
+    // 企業代表者の ceo_same は、送られなければ「窓口に同じ」（'1'）として扱う
     public static function companyInput(array $all): array
     {
         return ['ses_name' => clean_name(self::s($all['name'] ?? null)), 'name_sei' => clean_name(self::s($all['rep_sei'] ?? null)), 'name_mei' => clean_name(self::s($all['rep_mei'] ?? null)),
-            'phone' => str_in(self::s($all['phone'] ?? null)), 'postal_code' => self::s($all['postal_code'] ?? null), 'address' => clean_name(self::s($all['address'] ?? null))];
+            'phone' => str_in(self::s($all['phone'] ?? null)), 'postal_code' => self::s($all['postal_code'] ?? null), 'address' => clean_name(self::s($all['address'] ?? null)),
+            'ceo_same' => array_key_exists('ceo_same', $all) ? self::s($all['ceo_same']) : '1', 'ceo_name' => clean_name(self::s($all['ceo_name'] ?? null))];
     }
 
-    // 会社情報の長さと形の検査（本登録の画面と同じ決まり。Registration::rules を使う）。断る文を返す（通せば null）
+    // 企業代表者の入力（ceo_same：1＝窓口に同じ／0＝記入、ceo_name：記入の氏名）を整える。
+    // 整えた ['ceo_same' => 0|1, 'ceo_name' => ?string] か、断る文（文字列）を返す。ceo_same が送られなければ「窓口に同じ」
+    public static function ceoInput(array $all)
+    {
+        $same = array_key_exists('ceo_same', $all) ? $all['ceo_same'] : '1';
+        if (is_int($same) || is_bool($same)) $same = (string) (int) $same;
+        if (!is_string($same) || !in_array($same, ['0', '1'], true)) return '企業代表者の選び方が正しくありません。';
+        if ($same === '1') return ['ceo_same' => 1, 'ceo_name' => null];
+        $name = clean_name(self::s($all['ceo_name'] ?? null));
+        if ($name === null) return '企業代表者の氏名を入れてください。';
+        if (mb_strlen($name) > 50) return '企業代表者の氏名は50文字以内で入れてください。';
+        return ['ceo_same' => 0, 'ceo_name' => $name];
+    }
+
+    // 検査を通った入力（companyInput の結果や、本登録の入力）から、保存する列を取り出す。「窓口に同じ」のときは氏名を持たない
+    public static function ceoColumns(array $in): array
+    {
+        $same = (string) ($in['ceo_same'] ?? '1') !== '0';
+        return ['ceo_same' => $same ? 1 : 0, 'ceo_name' => $same ? null : clean_name(self::s($in['ceo_name'] ?? null))];
+    }
+
+    // 足りない項目の画面で企業代表者（ceo_same）を扱うときは、氏名（ceo_name）の欄も一緒に扱う
+    private static function withCeo(?array $only): ?array
+    {
+        return $only !== null && in_array('ceo_same', $only, true) ? array_values(array_unique(array_merge($only, ['ceo_name']))) : $only;
+    }
+
+    // 企業情報の長さと形の検査（本登録の画面と同じ決まり。Registration::rules を使う）。断る文を返す（通せば null）
     public static function checkCompanyInput(array $in): ?string
     {
-        [$rules, $msg, $attr] = self::rules('ses', true, ['ses_name', 'name_sei', 'name_mei', 'phone']);
+        [$rules, $msg, $attr] = self::rules('ses', true, ['ses_name', 'name_sei', 'name_mei', 'phone', 'ceo_same', 'ceo_name']);
         $v = \Illuminate\Support\Facades\Validator::make($in, $rules, $msg, $attr);
         return $v->fails() ? $v->errors()->first() : null;
     }
@@ -78,7 +107,7 @@ class Registration
         return $u;
     }
 
-    // 会社の状態がリンクを通してよいか（K31）。SES は仮登録でも参加中でも、担当者・エンジニアは参加中だけ。管理者は常に
+    // 企業の状態がリンクを通してよいか（K31）。SES は仮登録でも参加中でも、担当者・エンジニアは参加中だけ。管理者は常に
     public static function companyAllows(object $u): bool
     {
         if ($u->role === 'admin' || empty($u->ses_id)) return true;
@@ -124,23 +153,25 @@ class Registration
     }
 
     // ---------- SES の仮登録（管理者 → SES。公開の申し込みの承認も同じ入口） ----------
-    // $d：name（企業正式名称）・sei・mei（SES）・email。$pending が来たら、申込中の会社をこの入力で仮登録に進める。
+    // $d：name（企業正式名称）・sei・mei（PARK窓口担当者）・email・ceo_same／ceo_name（企業代表者）。$pending が来たら、申込済みの企業をこの入力で仮登録に進める。
     // 戻り値：['ok' => true, 'ses_id', 'user_id'] か ['bad' => 文]
     public static function provisionalSes(array $d, $actor, ?object $pending = null): array
     {
         $name = clean_name(self::s($d['name'] ?? null)); $sei = clean_name(self::s($d['sei'] ?? null)); $mei = clean_name(self::s($d['mei'] ?? null));
         $email = strtolower(trim((string) self::s($d['email'] ?? null)));
         if ($name === null) return ['bad' => '企業正式名称を入れてください。'];
-        if ($sei === null) return ['bad' => 'SES代表担当者の姓を入れてください。'];
-        if ($mei === null) return ['bad' => 'SES代表担当者の名を入れてください。'];
+        if ($sei === null) return ['bad' => 'PARK窓口担当者の姓を入れてください。'];
+        if ($mei === null) return ['bad' => 'PARK窓口担当者の名を入れてください。'];
         if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) return ['bad' => 'メールアドレスを正しく入れてください。'];
         if (mb_strlen($name) > 100) return ['bad' => '企業正式名称は100文字までにしてください。'];
-        if (mb_strlen($sei) > 50 || mb_strlen($mei) > 50) return ['bad' => 'SES代表担当者の氏名は、姓・名とも50文字までです。'];
+        if (mb_strlen($sei) > 50 || mb_strlen($mei) > 50) return ['bad' => 'PARK窓口担当者の氏名は、姓・名とも50文字までです。'];
+        $ceo = self::ceoInput($d);
+        if (is_string($ceo)) return ['bad' => $ceo];
         if ($why = self::emailInUse($email)) return ['bad' => $why];
 
         $origEmail = $pending ? strtolower((string) $pending->email) : null;
-        $ids = DB::transaction(function () use ($name, $sei, $mei, $email, $actor, $pending) {
-            $company = ['name' => $name, 'rep_name' => join_name($sei, $mei), 'rep_sei' => $sei, 'rep_mei' => $mei, 'email' => $email, 'status' => 'provisional', 'updated_at' => now_str()];
+        $ids = DB::transaction(function () use ($name, $sei, $mei, $email, $actor, $pending, $ceo) {
+            $company = ['name' => $name, 'rep_name' => join_name($sei, $mei), 'rep_sei' => $sei, 'rep_mei' => $mei, 'email' => $email, 'status' => 'provisional', 'updated_at' => now_str()] + $ceo;
             if ($pending) {
                 // 申し込みのときの同意は、別の人のものかもしれないので、SES の本登録で取り直す（前の日時は記録に残す）
                 if ($pending->agreed_at) N::audit($actor->id ?? null, 'ses-approve-agreed', "{$pending->name} 前の同意 {$pending->agreed_at}");
@@ -212,14 +243,16 @@ class Registration
         if (!$rep || $rep->registered_at) return ['bad' => '仮登録の内容は、本登録が済む前だけ直せます。'];
         $name = clean_name(self::s($d['name'] ?? null)); $sei = clean_name(self::s($d['sei'] ?? null)); $mei = clean_name(self::s($d['mei'] ?? null));
         $email = strtolower(trim((string) self::s($d['email'] ?? null)));
-        if ($name === null || $sei === null || $mei === null) return ['bad' => '企業正式名称とSES代表担当者の姓・名を入れてください。'];
+        if ($name === null || $sei === null || $mei === null) return ['bad' => '企業正式名称とPARK窓口担当者の姓・名を入れてください。'];
         if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) return ['bad' => 'メールアドレスを正しく入れてください。'];
         if (mb_strlen($name) > 100 || mb_strlen($sei) > 50 || mb_strlen($mei) > 50) return ['bad' => '企業名は100文字、氏名は姓・名とも50文字までです。'];
+        $ceo = self::ceoInput($d);
+        if (is_string($ceo)) return ['bad' => $ceo];
         $changed = $email !== strtolower((string) $rep->email);
         if ($changed && ($why = self::emailInUse($email, (int) $rep->id))) return ['bad' => $why];
-        DB::transaction(function () use ($s, $rep, $name, $sei, $mei, $email) {
+        DB::transaction(function () use ($s, $rep, $name, $sei, $mei, $email, $ceo) {
             DB::table('users')->where('id', $rep->id)->update(W::nameCols(join_name($sei, $mei), $sei, $mei) + ['email' => $email, 'updated_at' => now_str()]);
-            DB::table('ses_companies')->where('id', $s->id)->update(['name' => $name, 'rep_name' => join_name($sei, $mei), 'rep_sei' => $sei, 'rep_mei' => $mei, 'email' => $email, 'updated_at' => now_str()]);
+            DB::table('ses_companies')->where('id', $s->id)->update(['name' => $name, 'rep_name' => join_name($sei, $mei), 'rep_sei' => $sei, 'rep_mei' => $mei, 'email' => $email, 'updated_at' => now_str()] + $ceo);
         });
         N::audit($actor->id ?? null, 'reg-edit', "ses #{$s->id}");
         if ($changed) {
@@ -229,7 +262,7 @@ class Registration
         return ['ok' => '保存しました。'];
     }
 
-    // SES の氏名（rep_* が空なら、SES の人の姓名）。[氏名, 姓, 名]
+    // PARK窓口担当者の氏名（rep_* が空なら、窓口の人の姓名）。[氏名, 姓, 名]
     public static function repName(object $s): array
     {
         if (($s->rep_sei ?? null) || ($s->rep_mei ?? null) || ($s->rep_name ?? null)) {
@@ -326,7 +359,7 @@ class Registration
                 if (DB::table('ses_companies')->where('id', '!=', $s->id)->where('name', $newName)->exists()) $warn = '同じ名前の SES がほかにもあります。見分けられるよう、正式名称をご確認ください。';
             }
             $co = ['name' => $newName, 'phone' => str_in($d['phone'] ?? ''), 'postal_code' => str_in($d['postal_code'] ?? ''), 'address' => str_in($d['address'] ?? ''),
-                'agreed_at' => $now, 'self_confirmed_at' => $now, 'rep_name' => $name, 'rep_sei' => $sei, 'rep_mei' => $mei, 'updated_at' => $now];
+                'agreed_at' => $now, 'self_confirmed_at' => $now, 'rep_name' => $name, 'rep_sei' => $sei, 'rep_mei' => $mei, 'updated_at' => $now] + self::ceoColumns($d);
             if (in_array($s->status, ['provisional', 'pending'], true)) $co['status'] = 'active';
             if (!$s->joined_at) $co['joined_at'] = today_str();
             // 交代の途中だった次の SESなら、ここで SES が入れ替わる
@@ -564,32 +597,32 @@ class Registration
         $res = null;
         DB::transaction(function () use ($sesId, $userId, $actor, $bad, &$res) {
             $s = DB::table('ses_companies')->where('id', $sesId)->where('kind', 'ses')->lockForUpdate()->first();
-            if (!$s || $s->status !== 'active') { $res = $bad('SES代表担当者を交代できるのは、参加中の SES だけです。'); return; }
+            if (!$s || $s->status !== 'active') { $res = $bad('PARK窓口担当者を交代できるのは、参加中の SES だけです。'); return; }
             $new = DB::table('users')->where('id', $userId)->where('role', 'ses')->where('ses_id', $sesId)->where('active', 1)->whereNull('left_at')->whereNotNull('registered_at')->first();
-            if (!$new) { $res = $bad('SES代表担当者にできるのは、この会社の、本登録が済んだ担当者だけです。'); return; }
-            if ((int) $s->rep_user_id === (int) $new->id) { $res = $bad('すでに SES代表担当者です。'); return; }
+            if (!$new) { $res = $bad('PARK窓口担当者にできるのは、この企業の、本登録が済んだ担当者だけです。'); return; }
+            if ((int) $s->rep_user_id === (int) $new->id) { $res = $bad('すでに PARK窓口担当者です。'); return; }
             $old = $s->rep_user_id ? DB::table('users')->find($s->rep_user_id) : null;
             [, $a, $b] = ($new->name_sei || $new->name_mei) ? [null, $new->name_sei, $new->name_mei] : [null, ...split_name($new->name)];
             DB::table('ses_companies')->where('id', $sesId)->update(['rep_user_id' => $new->id, 'next_rep_user_id' => null, 'rep_name' => $new->name, 'rep_sei' => $a, 'rep_mei' => $b, 'updated_at' => now_str()]);
             N::audit($actor->id ?? null, 'rep-change', "ses #{$sesId}");
-            $body = T::repChangedBody((string) $s->name, (string) $new->name, (string) ($old->name ?? '（なし）'));
+            $body = T::repChangedBody((string) $s->name, (string) $new->name, (string) ($old->name ?? '（なし）'), (bool) ($s->ceo_same ?? true));
             N::notify((int) $new->id, T::REP_CHANGED_TITLE, $body, '/ses/company', true, 'rep-change', 'ses');
             if ($old && (int) $old->id !== (int) $new->id) N::notify((int) $old->id, T::REP_CHANGED_TITLE, $body, '/ses/company', true, 'rep-change', 'ses');
-            $res = ['type' => 'ok', 'msg' => id_title($new->staff_code, $new->name).' さんを SES代表担当者にしました。'];
+            $res = ['type' => 'ok', 'msg' => id_title($new->staff_code, $new->name).' さんを PARK窓口担当者にしました。'];
         });
         return $res;
     }
 
-    // 担当者が（本登録済みで）1人もいない会社の交代：次の SES を仮登録する。本登録が済むと、SES が入れ替わる。それまでは今の SES のまま
+    // 担当者が（本登録済みで）1人もいない企業の交代：次の PARK窓口担当者を仮登録する。本登録が済むと、入れ替わる。それまでは今のまま
     public static function provisionalNextRep(int $sesId, array $d, $actor): array
     {
         $s = DB::table('ses_companies')->where('id', $sesId)->where('kind', 'ses')->first();
-        if (!$s || $s->status !== 'active') return ['type' => 'bad', 'msg' => 'SES代表担当者を交代できるのは、参加中の SES だけです。'];
+        if (!$s || $s->status !== 'active') return ['type' => 'bad', 'msg' => 'PARK窓口担当者を交代できるのは、参加中の SES だけです。'];
         $staff = DB::table('users')->where('ses_id', $sesId)->where('role', 'ses')->where('active', 1)->whereNull('left_at')->whereNotNull('registered_at')
             ->when($s->rep_user_id, fn ($q) => $q->where('id', '!=', $s->rep_user_id))->exists();
-        if ($staff) return ['type' => 'bad', 'msg' => '本登録が済んだ一般担当者がいます。その中から SES代表担当者を選んでください。'];
+        if ($staff) return ['type' => 'bad', 'msg' => '本登録が済んだ一般担当者がいます。その中から PARK窓口担当者を選んでください。'];
         if ($s->next_rep_user_id && DB::table('users')->where('id', $s->next_rep_user_id)->whereNull('registered_at')->exists()) {
-            return ['type' => 'bad', 'msg' => 'すでに次のSES代表担当者を仮登録しています。送り直しや取り消しは、その方の行から行ってください。'];
+            return ['type' => 'bad', 'msg' => 'すでに次のPARK窓口担当者を仮登録しています。送り直しや取り消しは、その方の行から行ってください。'];
         }
         $sei = clean_name(self::s($d['sei'] ?? null)); $mei = clean_name(self::s($d['mei'] ?? null));
         $email = strtolower(trim((string) self::s($d['email'] ?? null)));
@@ -605,7 +638,7 @@ class Registration
         });
         self::sendLink(DB::table('users')->find($uid), $actor); // 次の SESなので、SES の本登録の画面になる
         N::audit($actor->id ?? null, 'rep-next', "ses #{$sesId}");
-        return ['type' => 'ok', 'msg' => '次のSES代表担当者を仮登録し、仮登録のご案内を送りました。本登録が済むと、SES代表担当者が入れ替わります。'];
+        return ['type' => 'ok', 'msg' => '次のPARK窓口担当者を仮登録し、仮登録のご案内を送りました。本登録が済むと、PARK窓口担当者が入れ替わります。'];
     }
 
     // ---------- 送り直し・取り消し ----------
@@ -614,7 +647,7 @@ class Registration
     {
         if ($target->registered_at) return ['type' => 'bad', 'msg' => 'この方は、すでに本登録が済んでいます。'];
         if ($target->left_at || !$target->active) return ['type' => 'bad', 'msg' => '停止中か退会済みの方には送り直せません。'];
-        if (!self::companyAllows($target)) return ['type' => 'bad', 'msg' => '会社が参加中ではないため、送り直せません。'];
+        if (!self::companyAllows($target)) return ['type' => 'bad', 'msg' => '企業が参加中ではないため、送り直せません。'];
         if (!$target->email) return ['type' => 'bad', 'msg' => 'メールアドレスが登録されていません。'];
         self::sendLink($target, $actor);
         N::audit($actor->id ?? null, 'reg-resend', lbl('role', $target->role)." #{$target->id}");
@@ -639,9 +672,9 @@ class Registration
             if ($target->role === 'ses' && $target->ses_id) {
                 $s = DB::table('ses_companies')->where('id', $target->ses_id)->lockForUpdate()->first();
                 if ($s && (int) $s->rep_user_id === $id) {
-                    if ($s->status !== 'provisional') { $err = '参加中の会社の SES代表担当者は、取り消せません。'; return; }
+                    if ($s->status !== 'provisional') { $err = '参加中の企業の PARK窓口担当者は、取り消せません。'; return; }
                     $others = DB::table('users')->where('ses_id', $s->id)->where('id', '!=', $id)->count() + DB::table('engineers')->where('ses_id', $s->id)->count()
-                        + DB::table('case_threads')->where('partner_ses_id', $s->id)->count(); // 案件のやり取りの相手に残っている会社は消さない
+                        + DB::table('case_threads')->where('partner_ses_id', $s->id)->count(); // 案件のやり取りの相手に残っている企業は消さない
                     if ($others === 0) { DB::table('ses_companies')->where('id', $s->id)->delete(); $sesDeleted = true; }
                     else DB::table('ses_companies')->where('id', $s->id)->update(['rep_user_id' => null]);
                 } elseif ($s && (int) $s->next_rep_user_id === $id) {
@@ -688,12 +721,15 @@ class Registration
     public static function cleanInput(array $in, string $role, bool $isRep, ?array $only = null): array
     {
         $out = [];
+        $only = self::withCeo($only);
         foreach (Requirements::fields($role, $isRep) as $key => $def) {
             if ($def['mode'] === Requirements::VIEW || ($only !== null && !in_array($key, $only, true))) continue;
             $raw = $in[$key] ?? null;
             if ($key === 'postal_code') {
                 $n = is_string($raw) ? postal_norm($raw) : null;
                 $out[$key] = $n === false ? $raw : $n;
+            } elseif ($key === 'ceo_same') {
+                $out[$key] = array_key_exists($key, $in) ? clean_name($raw) : '1'; // 送られなければ「窓口に同じ」
             } else {
                 $out[$key] = clean_name($raw);
             }
@@ -708,9 +744,12 @@ class Registration
     public static function rules(string $role, bool $isRep, ?array $only = null): array
     {
         $rules = []; $attr = [];
+        $only = self::withCeo($only);
         foreach (Requirements::fields($role, $isRep) as $key => $def) {
             if ($def['mode'] === Requirements::VIEW || ($only !== null && !in_array($key, $only, true))) continue;
             $base = match ($key) {
+                'ceo_same' => ['in:0,1'],
+                'ceo_name' => ['exclude_unless:ceo_same,0', 'required_if:ceo_same,0', 'max:50'], // 「窓口に同じ」のときは氏名を調べない
                 'phone' => ['max:30', 'regex:/^[0-9+\-() ]*$/'],
                 'postal_code' => ['regex:/^\d{3}-\d{4}$/'],
                 'address' => ['max:200'],
@@ -723,7 +762,9 @@ class Registration
         if ($c = Requirements::consent($role, $isRep)) {
             if ($only === null || in_array($c['key'], $only, true)) { $rules[$c['key']] = 'accepted'; $attr[$c['key']] = $c['label']; }
         }
-        $msg = ['postal_code.regex' => '郵便番号は7桁の数字で入れてください（例：123-4567）。', 'phone.regex' => '電話番号は、数字・+・-・()・空白で入れてください。'];
+        $msg = ['postal_code.regex' => '郵便番号は7桁の数字で入れてください（例：123-4567）。', 'phone.regex' => '電話番号は、数字・+・-・()・空白で入れてください。',
+            'ceo_same.required' => '企業代表者の選び方が正しくありません。', 'ceo_same.in' => '企業代表者の選び方が正しくありません。',
+            'ceo_name.required_if' => '企業代表者の氏名を入れてください。', 'ceo_name.max' => '企業代表者の氏名は50文字以内で入れてください。'];
         return [$rules, $msg, $attr];
     }
 
@@ -734,6 +775,7 @@ class Registration
         $kind = Requirements::kind($role, $isRep);
         $now = now_str();
         $uu = []; $co = []; $en = [];
+        $only = self::withCeo($only);
         foreach (Requirements::fields($role, $isRep) as $key => $def) {
             if ($def['mode'] === Requirements::VIEW || !in_array($key, $only, true) || !array_key_exists($key, $d)) continue;
             $val = $d[$key];
@@ -745,6 +787,8 @@ class Registration
                 default => $uu[$key] = $val,
             };
         }
+        // 企業代表者：「窓口に同じ」のときは氏名を持たない（0/1 にそろえて保存する）
+        if (array_key_exists('ceo_same', $co)) $co = array_merge($co, self::ceoColumns($co));
         // 氏名・ふりがなは、つないだ列もそろえる。エンジニアは両方の表に入れる（片方だけ足りないときも、もう片方は今の値のまま）
         $eng = $kind === 'eg' && $u->engineer_id ? DB::table('engineers')->find($u->engineer_id) : null;
         foreach (['name' => ['name_sei', 'name_mei'], 'kana' => ['kana_sei', 'kana_mei']] as $full => [$a, $b]) {

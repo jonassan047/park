@@ -16,7 +16,7 @@
 @if($u->role === 'admin')
 <dt>企業名</dt><dd>{{ $dash($u->company_name) }}</dd>
 @elseif($u->role === 'ses')
-<dt>SES名</dt><dd>{{ $dash($sesName) }}</dd>
+<dt>企業正式名称</dt><dd>{{ $dash($sesName) }}</dd>
 @endif
 @unless($u->role === 'eg')
 <dt>所属・役職</dt><dd>{{ $dash($u->position) }}</dd>
@@ -33,7 +33,7 @@
 </dl>
 <p><a class="btn ghost" href="{{ url('/account#password') }}">パスワード変更</a> <a class="btn" href="{{ url('/account') }}">編集する</a>
 @if($u->role === 'ses')
-<a class="btn ghost" href="{{ url('/ses/company') }}">会社情報を見る</a>
+<a class="btn ghost" href="{{ url('/ses/company') }}">企業情報を見る</a>
 @elseif($u->role === 'eg' && $engineerId)
 <a class="btn ghost" href="{{ url('/engineers/'.$engineerId) }}">プロフィール・経験票を見る</a>
 @endif

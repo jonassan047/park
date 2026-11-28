@@ -42,7 +42,7 @@ class AccountProfileTest extends TestCase
         $r->assertDontSee('SES名');
 
         $r = $this->as('ses1@park.example')->get('/account/profile')->assertOk();
-        $r->assertSee('SES名')->assertSee('みどり情報システム')->assertSee('ses1@park.example')->assertDontSee('企業名')->assertSee('所属・役職');
+        $r->assertSee('企業正式名称')->assertSee('みどり情報システム')->assertSee('ses1@park.example')->assertDontSee('企業名')->assertSee('所属・役職');
         $this->assertNoFormFields($r->getContent());
 
         $r = $this->as('eg1@park.example')->get('/account/profile')->assertOk();
@@ -71,10 +71,10 @@ class AccountProfileTest extends TestCase
 
     public function test_n3_role_links(): void
     {
-        $this->as('ses1@park.example')->get('/account/profile')->assertSee('会社情報を見る')->assertSee('href="'.url('/ses/company').'"', false);
+        $this->as('ses1@park.example')->get('/account/profile')->assertSee('企業情報を見る')->assertSee('href="'.url('/ses/company').'"', false);
         $eid = User::where('email', 'eg1@park.example')->value('engineer_id');
         $this->as('eg1@park.example')->get('/account/profile')->assertSee('プロフィール・経験票を見る')->assertSee('href="'.url("/engineers/$eid").'"', false);
-        $this->as('admin@park.example')->get('/account/profile')->assertDontSee('会社情報を見る')->assertDontSee('プロフィール・経験票を見る');
+        $this->as('admin@park.example')->get('/account/profile')->assertDontSee('企業情報を見る')->assertDontSee('プロフィール・経験票を見る');
     }
 
     public function test_n4_links_to_edit_and_back(): void

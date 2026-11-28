@@ -199,7 +199,7 @@ class V0170HideProviderTest extends TestCase
     public function test_t26_provider_detail_lists_own_cases(): void
     {
         $x = $this->providerWorld();
-        $this->as(self::SES1)->get('/ses/providers/'.$x['p1'])->assertOk()->assertSee('この会社から受けた案件（自社）')->assertSee('ケースＡ一')->assertDontSee('ケースＢ一');
+        $this->as(self::SES1)->get('/ses/providers/'.$x['p1'])->assertOk()->assertSee('この企業から受けた案件（自社）')->assertSee('ケースＡ一')->assertDontSee('ケースＢ一');
     }
 
     public function test_t27_admin_sees_all_with_source_ses_column(): void

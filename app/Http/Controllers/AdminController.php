@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\DB;
 class AdminController extends Controller
 {
     // 担当者の一覧の状態の絞り込み
-    const PERSON_STATUSES = ['active' => '参加中', 'suspended' => '停止', 'provisional' => '仮登録', 'left' => '退会済み'];
+    const PERSON_STATUSES = ['active' => PARK_ST_ACTIVE, 'suspended' => PARK_ST_SUSPENDED, 'provisional' => PARK_ST_PROVISIONAL, 'left' => PARK_ST_LEFT];
 
     // 応募のファネル（応募 → 成約）。見送り・辞退の応募も、どの段階まで進んだかで数える
     public static function funnel(?int $sesId = null): array
@@ -52,7 +52,7 @@ class AdminController extends Controller
         foreach (DB::table('users')->whereIn('role', ['admin', 'ses'])->orderBy('role')->orderBy('id')->get() as $u) {
             if ($u->left_at) continue; // 退会済の人は出さない
             $state = user_state($u); $until = null;
-            if ($state === '仮登録') $until = date('n/j', strtotime($u->token_expires));
+            if ($state === PARK_ST_PROVISIONAL) $until = date('n/j', strtotime($u->token_expires));
             $isAdmin = $u->role === 'admin';
             $rows[] = ['role' => ($u->role === 'ses' ? staff_kind($u, $sesRows[$u->ses_id] ?? null) : lbl('role', $u->role)).($u->engineer_id && W::isDual($u) ? '（エンジニア兼任）' : '').($u->role === 'admin' && $u->ses_id ? '（担当者兼任）' : ''),'name' => $u->name, 'org' => $isAdmin ? $u->company_name : ($sesNames[$u->ses_id] ?? null),
                 'state' => $state, 'until' => $until, 'mail' => account_mail($u), 'last_login' => $u->last_login,
@@ -78,7 +78,7 @@ class AdminController extends Controller
         return view('admin.dashboard', [
             'start' => $sesCount === 0 && $engCount === 0 && $caseCount === 0 ? [
                 ['ほかの管理者を登録する（任意）', '/admin/admins/new', $adminCount >= 2, '管理者を登録する'],
-                ['SES を仮登録して、SES代表担当者にご案内を送る', '/admin/ses/new', $sesCount >= 1, 'SES を仮登録する'],
+                ['SES を仮登録して、PARK窓口担当者にご案内を送る', '/admin/ses/new', $sesCount >= 1, 'SES を仮登録する'],
                 ['エンジニアを登録する（SES を選んでから）', '/admin/ses?view=company', $engCount >= 1, 'SES を選ぶ'],
                 ['案件を登録する', '/cases/new', $caseCount >= 1, '案件を登録する'],
             ] : null,
@@ -137,8 +137,8 @@ class AdminController extends Controller
         if ($q !== '') $list = $list->filter(fn ($u) => str_contains(mb_strtolower(implode(' ', [$u->name, $u->kana, $u->staff_code, $u->email, $u->ses_name, $u->ses_code])), mb_strtolower($q)));
         if ($kind !== '') $list = $list->where('kind', $kind);
         if ($status !== '') $list = $list->filter(fn ($u) => match ($status) {
-            'active' => $u->state === '参加中',
-            'suspended' => $u->state === '停止',
+            'active' => $u->state === PARK_ST_ACTIVE,
+            'suspended' => $u->state === PARK_ST_SUSPENDED,
             'provisional' => is_provisional_state($u->state),
             'left' => is_left_row('person', $u),
         });
@@ -176,12 +176,13 @@ class AdminController extends Controller
 
     public function adminNew() { return view('admin.admin-new'); }
 
-    // 管理者が SES を仮登録する：企業正式名称・SES代表担当者の姓・名・メールの4つだけ。登録すると SES代表担当者に仮登録のご案内が届く
+    // 管理者が SES を仮登録する：企業正式名称・PARK窓口担当者の姓・名・メール・企業代表者。登録すると PARK窓口担当者に仮登録のご案内が届く
     public function sesStore(Request $r)
     {
-        $res = Registration::provisionalSes(['name' => $r->input('name'), 'sei' => $r->input('rep_sei'), 'mei' => $r->input('rep_mei'), 'email' => $r->input('email')], $r->user());
+        $res = Registration::provisionalSes(['name' => $r->input('name'), 'sei' => $r->input('rep_sei'), 'mei' => $r->input('rep_mei'), 'email' => $r->input('email'),
+            'ceo_same' => $r->input('ceo_same', '1'), 'ceo_name' => $r->input('ceo_name')], $r->user());
         if (isset($res['bad'])) return back()->withInput()->with('flash', ['msg' => $res['bad'], 'type' => 'bad']);
-        return $this->go("/admin/ses/{$res['ses_id']}", '仮登録し、SES代表担当者に仮登録のご案内を送りました。');
+        return $this->go("/admin/ses/{$res['ses_id']}", '仮登録し、PARK窓口担当者に仮登録のご案内を送りました。');
     }
 
     // SES の画面で扱ってよい会社（kind が ses で、参加中などの会社）だけ返す。それ以外の行は 404
@@ -270,7 +271,8 @@ class AdminController extends Controller
         $s = $this->sesOrFail($id);
         // 仮登録の間は、企業正式名称・SES の姓・名・メールの4つだけ直せる（電話・住所などは送られても入れない）
         if ($s->status === 'provisional') {
-            $res = Registration::editProvisionalSes($s, ['name' => $r->input('name'), 'sei' => $r->input('rep_sei'), 'mei' => $r->input('rep_mei'), 'email' => $r->input('email')], $r->user());
+            $res = Registration::editProvisionalSes($s, ['name' => $r->input('name'), 'sei' => $r->input('rep_sei'), 'mei' => $r->input('rep_mei'), 'email' => $r->input('email'),
+                'ceo_same' => $r->input('ceo_same', '1'), 'ceo_name' => $r->input('ceo_name')], $r->user());
             if (isset($res['bad'])) return back()->withInput()->with('flash', ['msg' => $res['bad'], 'type' => 'bad']);
             return $this->go("/admin/ses/$id", $res['ok']);
         }
@@ -278,7 +280,10 @@ class AdminController extends Controller
         if ($s->status !== 'pending') return $this->updateRegisteredSes($r, $s);
         $ad = W::addressCols($r->all() + ['postal_code' => null, 'address' => null], '所在地'); // 送られなかった欄は空として扱う（この画面は全欄を送る）
         if (isset($ad['bad'])) return back()->withInput()->with('flash', ['msg' => $ad['bad'], 'type' => 'bad']);
-        DB::table('ses_companies')->where('id', $id)->update([
+        $ceo = Registration::ceoInput($r->all());
+        if (is_string($ceo)) return back()->withInput()->with('flash', ['msg' => $ceo, 'type' => 'bad']);
+        if ((int) $s->ceo_same !== $ceo['ceo_same'] || ($s->ceo_name ?? null) !== $ceo['ceo_name']) N::audit($r->user()->id, 'ses-ceo', "ses #{$id} 企業代表者を変更"); // 氏名は書かない
+        DB::table('ses_companies')->where('id', $id)->update($ceo + [
             'name' => str_in($r->input('name')), ...W::sesPeopleCols($r->all()),
             'email' => strtolower((string) str_in($r->input('email'))) ?: null, 'phone' => str_in($r->input('phone')), ...$ad['ok'],
             'employees' => int_or_null($r->input('employees')), 'strengths' => str_in($r->input('strengths')), 'notes' => str_in($r->input('notes')), 'updated_at' => now_str(),
@@ -294,9 +299,11 @@ class AdminController extends Controller
         $ad = W::addressCols($r->all(), '所在地');
         if (isset($ad['bad'])) return back()->withInput()->with('flash', ['msg' => $ad['bad'], 'type' => 'bad']);
         $warn = null;
+        $ceoNow = Registration::ceoColumns($in);
+        if ((int) $s->ceo_same !== $ceoNow['ceo_same'] || ($s->ceo_name ?? null) !== $ceoNow['ceo_name']) N::audit($r->user()->id, 'ses-ceo', "ses #{$s->id} 企業代表者を変更"); // 氏名は書かない
         DB::transaction(function () use ($r, $s, $in, $ad, &$warn) {
             $warn = W::renameSes((int) $s->id, (string) $in['ses_name'], $r->user());
-            DB::table('ses_companies')->where('id', $s->id)->update(['phone' => $in['phone'], ...$ad['ok'],
+            DB::table('ses_companies')->where('id', $s->id)->update(Registration::ceoColumns($in) + ['phone' => $in['phone'], ...$ad['ok'],
                 'employees' => int_or_null($r->input('employees')), 'strengths' => str_in($r->input('strengths')), 'notes' => str_in($r->input('notes')), 'updated_at' => now_str()]);
             Registration::syncRepName((int) $s->id, $in['name_sei'], $in['name_mei']);
         });
@@ -307,19 +314,20 @@ class AdminController extends Controller
     public function sesApproveForm(int $id)
     {
         $s = $this->sesOrFail($id);
-        if ($s->status !== 'pending') return $this->go("/admin/ses/$id", '申込中の SES だけ、承認できます。', 'bad');
+        if ($s->status !== 'pending') return $this->go("/admin/ses/$id", '申込済みの SES だけ、承認できます。', 'bad');
         [$sei, $mei] = ($s->rep_sei || $s->rep_mei) ? [$s->rep_sei, $s->rep_mei] : (($s->contact_sei || $s->contact_mei) ? [$s->contact_sei, $s->contact_mei] : split_name($s->contact_name ?: $s->rep_name));
-        return view('admin.ses-new', ['approve' => $s, 'v' => (object) ['name' => $s->name, 'rep_sei' => $sei, 'rep_mei' => $mei, 'email' => $s->email]]);
+        return view('admin.ses-new', ['approve' => $s, 'v' => (object) ['name' => $s->name, 'rep_sei' => $sei, 'rep_mei' => $mei, 'email' => $s->email, 'ceo_same' => $s->ceo_same, 'ceo_name' => $s->ceo_name]]);
     }
 
     // 承認：同じ入力（企業正式名称・SES の姓名・メール）で仮登録に進める。申し込んだアドレスにも承認を知らせる
     public function sesApprove(Request $r, int $id)
     {
         $s = $this->sesOrFail($id);
-        if ($s->status !== 'pending') return $this->go("/admin/ses/$id", '申込中の SES だけ、承認できます。', 'bad');
-        $res = Registration::provisionalSes(['name' => $r->input('name'), 'sei' => $r->input('rep_sei'), 'mei' => $r->input('rep_mei'), 'email' => $r->input('email')], $r->user(), $s);
+        if ($s->status !== 'pending') return $this->go("/admin/ses/$id", '申込済みの SES だけ、承認できます。', 'bad');
+        $res = Registration::provisionalSes(['name' => $r->input('name'), 'sei' => $r->input('rep_sei'), 'mei' => $r->input('rep_mei'), 'email' => $r->input('email'),
+            'ceo_same' => $r->input('ceo_same', '1'), 'ceo_name' => $r->input('ceo_name')], $r->user(), $s);
         if (isset($res['bad'])) return back()->withInput()->with('flash', ['msg' => $res['bad'], 'type' => 'bad']);
-        return $this->go("/admin/ses/$id", '承認し、SES代表担当者に仮登録のご案内を送りました。');
+        return $this->go("/admin/ses/$id", '承認し、PARK窓口担当者に仮登録のご案内を送りました。');
     }
 
     // SES の停止・再開・退会のあとの戻り先。一覧から押したら一覧へ（絞り込みを保つ）、それ以外は SES の詳細
@@ -335,7 +343,7 @@ class AdminController extends Controller
         $back = $this->sesBack($r, $id);
         if ($s->status === 'left') return $this->go($back, '退会済みの SES は操作できません。', 'bad');
         if ($s->status === 'suspended') return $this->go($back, 'すでに停止中です。');
-        if ($s->status === 'pending') return $this->go($back, '申込中の SES は停止できません。承認するか、退会にしてください。', 'bad');
+        if ($s->status === 'pending') return $this->go($back, '申込済みの SES は停止できません。承認するか、退会にしてください。', 'bad');
         if ($s->status === 'provisional') return $this->go($back, '仮登録の SES は停止できません。仮登録を取り消すか、退会にしてください。', 'bad');
         DB::table('ses_companies')->where('id', $id)->update(['status' => 'suspended']);
         N::audit($r->user()->id, 'ses-suspend', (string) $id);

@@ -1,7 +1,7 @@
 @extends('layouts.app', ['title' => '管理者', 'wide' => true])
 @section('content')
 <p class="right"><a class="btn small" href="{{ url('/admin/admins/new') }}">管理者を登録</a></p>
-<x-table :head="['ID', '名前', '企業名', 'メール', '状態', '最終ログイン', '']" :count="$admins->count()">
+<x-table :head="['ID', '名前', '企業名', 'メール', '登録状況', '最終ログイン', '']" :count="$admins->count()">
 @foreach($admins as $u)@php
 $state = user_state($u);
 $base = '/admin/admins/'.$u->id;
@@ -13,10 +13,11 @@ $provisional = is_provisional_state($state);
 $canCancel = !$u->registered_at && !$u->password && empty($u->left_at) &&\App\Services\Registration::canManage(auth()->user(), $u);
 @endphp<tr><td><x-code :v="$u->admin_code" /></td><td>{{ $u->name }}@if($u->engineer_id) <a class="badge info" href="{{ url('/engineers/'.$u->engineer_id) }}">エンジニア兼任</a>@endif</td><td>{{ $u->company_name ?: '—' }}</td><td>{{ account_mail($u) }}</td><td>{{ $state }}</td><td>{{ fmt_dt($u->last_login) }}</td>
 <td>@if($provisional)<x-post :action="'/people/'.$u->id.'/resend'" label="送り直し" cls="ghost small" />@endif
-@if($canDo)@if($state === '停止')<x-post :action="$base.'/resume'" label="再開" cls="small" :fields="$back" :confirm="$u->name.' さんを再開します。'" />
+@if($canDo)@if($state === PARK_ST_SUSPENDED)<x-post :action="$base.'/resume'" label="再開" cls="small" :fields="$back" :confirm="$u->name.' さんを再開します。'" />
 @else<x-post :action="$base.'/suspend'" label="停止" cls="ghost small" :fields="$back" :confirm="$u->name.' さんを停止します。ログインできなくなります（再開できます）。'.($dual ? 'エンジニアとしても入れなくなります。' : '')" />@endif
 <x-post :action="$base.'/delete'" label="退会" cls="danger small" :fields="$back" :confirm="$dual ? $u->name.' さんを管理者から外します。エンジニアとしては引き続き入れます。よろしいですか？' : $u->name.' さんを退会済みにします。ログインできなくなり、元に戻せません（記録は残ります）。よろしいですか？'" />@endif
 @if($canCancel)<x-post :action="'/people/'.$u->id.'/cancel'" label="取り消し" cls="danger small" confirm="この仮登録を取り消します。仮登録の行が消え、元に戻せません。よろしいですか？" />@endif
 <a class="btn small" href="{{ url($base) }}">詳細</a></td></tr>@endforeach
 </x-table>
+<x-status-legend kind="account" />
 @endsection

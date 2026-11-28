@@ -39,7 +39,7 @@ $head = ['', 'エンジニア', '年齢', '価格', '最寄り駅', '点数', '�
 
 @unless($partnerSide)
 <h3>パートナー（他社のエンジニア）</h3>
-<p class="muted">他社のエンジニアには、直接メールを送りません。その会社の担当者に紹介をお願いします（名前の後ろの［　］が担当者です）。</p>
+<p class="muted">他社のエンジニアには、直接メールを送りません。その企業の担当者に紹介をお願いします（名前の後ろの［　］が担当者です）。</p>
 <x-table :head="$head" :count="count($partner) + count($staffRows)" empty="条件に合う他社のエンジニアがいません。">
 @foreach($partner as $row)@php $e = $row['e']; $j = $row['j']; @endphp<tr>
 <td>@if($row['sent'] !== null)<span class="muted">案内済み</span>@elseif($row['requested'])<span class="muted">依頼済み</span>@elseif(!$row['staff'])<span class="muted">担当者がいません</span>@else<input type="checkbox" name="pick[]" value="{{ $e->id }}" @checked($row['member']->checked)>@endif</td>

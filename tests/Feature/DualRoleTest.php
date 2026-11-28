@@ -301,7 +301,7 @@ class DualRoleTest extends TestCase
         $this->get('/account')->assertRedirect('/login/role');
         $this->get('/notifications')->assertRedirect('/login/role');
         $page = $this->get('/login/role')->assertOk();
-        $page->assertSee('どの立場で入りますか')->assertSee('SES代表担当者（みどり情報システム）')->assertSee('エンジニア')->assertSee('みどり情報システム');
+        $page->assertSee('どの立場で入りますか')->assertSee('PARK窓口担当者（みどり情報システム）')->assertSee('エンジニア')->assertSee('みどり情報システム');
         $page->assertDontSee(self::SES1);
         $page->assertDontSee('管理者</button>', false);
         $this->post('/login/role', ['to' => 'eg'])->assertRedirect('/eg');

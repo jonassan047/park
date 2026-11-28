@@ -2,7 +2,7 @@
 @section('content')
 <x-card><form method="post" action="{{ url($action) }}">@csrf
 @if(!empty($contract))<input type="hidden" name="contract" value="{{ $contract->id }}"><p class="note">PARK で決まった案件「{{ $contract->title }}」の経歴です。担当したこと・成果・使った技術を書いてください。</p>@endif<div class="grid2">
-<x-field label="案件名（内容がわかる名前）" name="title" :value="$p->title ?? null" required cls="span2" placeholder="例：保険会社向け 契約管理システムの刷新" />
+<x-field label="案件名（内容がわかる名前）" name="title" :value="$p->title ?? null" required cls="span2" placeholder="例：保険業向け 契約管理システムの刷新" />
 <x-field label="業種" name="industry" :value="$p->industry ?? null" placeholder="保険、物流、EC…" />
 <x-field label="役割" name="role" :value="$p->role ?? null" placeholder="PG、SE、リーダー…" />
 <x-field label="開始（年月）" name="period_from" type="month" :value="$p->period_from ?? null" />

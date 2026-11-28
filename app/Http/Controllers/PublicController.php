@@ -69,7 +69,7 @@ class PublicController extends Controller
             $row = DB::table('users')->find($u->id);
             if (!(W::isDual($row) && in_array('eg', W::usableRoles($row), true))) {
                 Auth::logout();
-                return back()->withInput(['email' => $email])->with('flash', ['msg' => '会社の参加がまだ承認されていないか、停止されています。', 'type' => 'bad']);
+                return back()->withInput(['email' => $email])->with('flash', ['msg' => '企業の参加がまだ承認されていないか、停止されています。', 'type' => 'bad']);
             }
         }
         $r->session()->forget('acting_role'); // 立場は、ログインのたびに選び直す
@@ -119,8 +119,10 @@ class PublicController extends Controller
 
     public function apply(Request $r)
     {
-        $r->validate(['name' => 'required', 'email' => 'required|email', 'agree' => 'accepted'], [], ['name' => '会社名', 'agree' => '守秘義務への同意']);
+        $r->validate(['name' => 'required', 'email' => 'required|email', 'agree' => 'accepted'], [], ['name' => '企業名', 'agree' => '守秘義務への同意']);
         if (name_parts($r->all(), 'contact', 'contact_name')[0] === null) return back()->withInput()->with('flash', ['msg' => 'ご担当者名（姓）を入れてください。', 'type' => 'bad']);
+        $ceo = Registration::ceoInput($r->all());
+        if (is_string($ceo)) return back()->withInput()->with('flash', ['msg' => $ceo, 'type' => 'bad']);
         $ad = W::addressCols($r->all(), '所在地');
         if (isset($ad['bad'])) return back()->withInput()->with('flash', ['msg' => $ad['bad'], 'type' => 'bad']);
         W::applySes($r->all());

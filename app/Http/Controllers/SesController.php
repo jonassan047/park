@@ -162,7 +162,7 @@ class SesController extends Controller
         ]);
     }
 
-    // 一般担当者の仮登録は SES代表担当者だけ（一般担当者は 403。K13）。入れるのは 姓・名・メール の3つだけ
+    // 一般担当者の仮登録は PARK窓口担当者だけ（一般担当者は 403。K13）。入れるのは 姓・名・メール の3つだけ
     public function userNew(Request $r)
     {
         abort_unless(Requirements::isRep($r->user()), 403);
@@ -181,7 +181,7 @@ class SesController extends Controller
         return $this->go('/ses/company', '一般担当者を仮登録し、仮登録のご案内を送りました。');
     }
 
-    // 会社情報の編集は SES代表担当者だけ（一般担当者は見るだけ。K34）
+    // 企業情報の編集は PARK窓口担当者だけ（一般担当者は見るだけ。K34）
     public function companyEdit(Request $r)
     {
         abort_unless(Requirements::isRep($r->user()), 403);
@@ -200,10 +200,13 @@ class SesController extends Controller
         if (isset($ad['bad'])) return back()->withInput()->with('flash', ['msg' => $ad['bad'], 'type' => 'bad']);
         $sesId = (int) $r->user()->ses_id;
         $warn = null;
+        $now = DB::table('ses_companies')->find($sesId);
+        $ceoNow = Registration::ceoColumns($in);
+        if ((int) $now->ceo_same !== $ceoNow['ceo_same'] || ($now->ceo_name ?? null) !== $ceoNow['ceo_name']) \App\Services\Notifier::audit($r->user()->id, 'ses-ceo', "ses #{$sesId} 企業代表者を変更"); // 氏名は書かない
         DB::transaction(function () use ($r, $in, $ad, $sesId, &$warn) {
             // 名前の変更は、アカウント・管理者の画面と同じ動きにするため Workflow に任せる
             $warn = W::renameSes($sesId, (string) $in['ses_name'], $r->user());
-            DB::table('ses_companies')->where('id', $sesId)->update([
+            DB::table('ses_companies')->where('id', $sesId)->update(Registration::ceoColumns($in) + [
                 'phone' => $in['phone'], ...$ad['ok'], 'employees' => int_or_null($r->input('employees')), 'strengths' => str_in($r->input('strengths')), 'updated_at' => now_str(),
             ]);
             Registration::syncRepName($sesId, $in['name_sei'], $in['name_mei']); // SES の姓名は、会社の欄と本人の氏名の両方に

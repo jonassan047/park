@@ -177,7 +177,7 @@ class UiUnifyTest extends TestCase
         DB::table('users')->where('email', 'admin@park.example')->update(['name_sei' => '管理', 'name_mei' => '太郎']);
 
         $co = $this->as('ses1@park.example')->get('/ses/company/edit')->assertOk()->getContent();
-        $this->assertPair($co, 'rep', '会社情報');
+        $this->assertPair($co, 'rep', '企業情報');
     }
 
     public function test_u4_pairs_on_public_screens(): void
@@ -281,7 +281,7 @@ class UiUnifyTest extends TestCase
     public function test_detail_buttons(): void
     {
         $this->admin();
-        $show = $this->get('/admin/ses/1')->assertOk()->assertSee('会社情報')->assertSee('一般担当者を登録')->assertSee('SES・担当者一覧に戻る')->getContent();
+        $show = $this->get('/admin/ses/1')->assertOk()->assertSee('企業情報')->assertSee('一般担当者を登録')->assertSee('SES・担当者一覧に戻る')->getContent();
         $this->assertStringContainsString(url('/admin/ses/1/edit'), $show);
         $this->get('/admin/ses/1/edit')->assertOk()->assertSee('戻る');
         $this->get('/admin/ses/1/users/new')->assertOk()->assertSee('戻る');

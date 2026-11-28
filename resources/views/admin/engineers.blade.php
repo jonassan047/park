@@ -1,14 +1,14 @@
 @extends('layouts.app', ['title' => 'エンジニア', 'wide' => true])
 @section('content')
 <form method="get" class="filters"><x-field name="q" :value="$q" placeholder="名前・スキル・SES・ID で探す" />
-<x-field name="status" type="select" :options="PARK_LABELS['engStatus']" blank="すべての状態" :value="$st" />
+<x-field name="status" type="select" :options="array_diff_key(PARK_LABELS['engStatus'], ['left' => 1])" blank="すべての稼働状況" :value="$st" />
 <x-field name="order" type="select" :options="PARK_ORDERS" :value="$order" />
 <x-field name="left" type="select" :options="['' => '退会済みを表示しない', '1' => '退会済みを表示する']" :value="show_left() ? '1' : ''" /><button class="btn ghost small">絞り込む</button>
 <a class="btn ghost small" href="{{ url('/admin/skills') }}">技術マスタ</a></form>
 @include('partials.mail-pick', ['part' => 'top'])
 @if($list->isNotEmpty() || !$left['hidden'])
-<x-table :head="['選ぶ', 'ID', '名前', 'SES', '担当者', '状態', 'アカウント', 'スキル', '経験票', '希望', '稼働できる日', '']" :count="$list->count()">
-@foreach($list as $e)@php $egBase = '/engineers/'.$e->id; $back = ['back' => 'list', 'back_query' => request()->getQueryString()]; @endphp<tr @class(['is-left' => is_left_row('eg', $e)])><td>@if(isset($mailable[$e->id]))<input type="checkbox" class="dmpick" name="eg[]" value="{{ $e->id }}" form="dm" aria-label="{{ $e->name }} にメールを送る">@endif</td><td><x-code :v="$e->code" /></td><td>{{ $e->name }}@if($e->is_operator) <span class="badge warn">管理者</span>@endif</td><td><x-code :v="$e->ses_code" /> {{ $e->ses_name }}</td><td>@if($e->staff_name)<x-code :v="$e->staff_code" /> {{ $e->staff_name }}@else — @endif</td><td>{{ badge('engStatus', $e->status) }}@if($e->suspended_at) <span class="badge mute">停止中</span>@endif</td><td>{{ $e->account }}<br><small class="muted">{{ $e->mail }}</small></td>
+<x-table :head="['選ぶ', 'ID', '名前', 'SES', '担当者', '稼働状況', '登録状況', 'スキル', '経験票', '希望', '稼働できる日', '']" :count="$list->count()">
+@foreach($list as $e)@php $egBase = '/engineers/'.$e->id; $back = ['back' => 'list', 'back_query' => request()->getQueryString()]; @endphp<tr @class(['is-left' => is_left_row('eg', $e)])><td>@if(isset($mailable[$e->id]))<input type="checkbox" class="dmpick" name="eg[]" value="{{ $e->id }}" form="dm" aria-label="{{ $e->name }} にメールを送る">@endif</td><td><x-code :v="$e->code" /></td><td>{{ $e->name }}@if($e->is_operator) <span class="badge warn">管理者</span>@endif</td><td><x-code :v="$e->ses_code" /> {{ $e->ses_name }}</td><td>@if($e->staff_name)<x-code :v="$e->staff_code" /> {{ $e->staff_name }}@else — @endif</td><td>{{ work_badge($e) }}</td><td>{{ $e->account }}<br><small class="muted">{{ $e->mail }}</small></td>
 <td><small>{{ mb_substr($e->skills, 0, 60) }}</small></td><td>{{ $e->projs }}件</td><td>{{ man($e->desired_price) }}</td><td>{{ fmt_date($e->available_from) }}</td><td>@if(is_provisional_state($e->account) && $e->status !== 'left')<x-post :action="$egBase.'/invite'" label="送り直し" cls="ghost small" />
 @if($e->login_id)<a class="btn ghost small" href="{{ url('/people/'.$e->login_id.'/edit') }}">仮登録の内容を直す</a>
 <x-post :action="'/people/'.$e->login_id.'/cancel'" label="取り消し" cls="danger small" confirm="この仮登録を取り消します。エンジニアの行も消え、元に戻せません。よろしいですか？" />@endif @endif
@@ -19,6 +19,7 @@
 </x-table>
 @endif
 @include('partials.pager', ['pager' => $pager])
+<x-status-legend kind="work" /><x-status-legend kind="account" :eg="true" />
 @include('partials.left-note', $left)
 @include('partials.mail-pick', ['part' => 'bottom'])
 <p class="muted">「管理者」の印：管理をしながらエンジニアとしても入る人。配信・選考は記録に残し、公平に扱います（誓約書は別に用意）。</p>

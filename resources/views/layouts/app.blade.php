@@ -77,7 +77,7 @@
     }
     $flash = session('flash');
     $print = $print ?? false;
-    // 区切りのページは、名前・ID・会社名などを出さない（メニューとログアウトだけ残す）
+    // 区切りのページは、名前・ID・企業名などを出さない（メニューとログアウトだけ残す）
     $noPersonal = $noPersonal ?? false;
 @endphp
 <!doctype html>
@@ -138,7 +138,17 @@
 @endif
 @if($flash)<div class="flash toast {{ $flash['type'] }}" role="status">{{ $flash['msg'] }}</div>@endif
 @if($errors->any())<div class="flash toast bad" role="alert">@foreach($errors->all() as $err){{ $err }}<br>@endforeach</div>@endif
-@unless($noTitle ?? false)<div class="ttl">@unless($print)<img class="sprig" src="{{ asset('img/sprig.jpg') }}" alt="">@endunless<h1>{{ $title }}</h1></div>@endunless
+@php
+    // 題の右端の［戻る］（$ttlBack：文字列＝戻り先の URL／false＝出さない／渡さない＝ひとつ前の画面）。ダッシュボードと、手続きの途中の画面には出さない
+    $homeUrl = ['admin' => '/admin', 'ses' => '/ses', 'eg' => '/eg'][$u->role ?? ''] ?? '/';
+    // 子の画面が $back という名前で別の値（フォームに渡す配列など）を持っていることがあるので、題の［戻る］の指定は $ttlBack
+    $backTo = $ttlBack ?? null;
+    if ($u && $passed && $backTo === null) $backTo = back_target($path);
+    $showBack = $u && $passed && !$print && !($noTitle ?? false) && !$noPersonal && $backTo !== false && !in_array($path, $homes, true);
+    $backIsHistory = !is_string($backTo);
+    $backHref = $backIsHistory ? $homeUrl : $backTo;
+@endphp
+@unless($noTitle ?? false)<div class="ttl">@unless($print)<img class="sprig" src="{{ asset('img/sprig.jpg') }}" alt="">@endunless<h1>{{ $title }}</h1>@if($showBack)<a class="btn ttl-back noprint" href="{{ url($backHref) }}"@if($backIsHistory) data-back="history" data-base="{{ rtrim((string) parse_url(url('/'), PHP_URL_PATH), '/') }}/"@endif>← 戻る</a>@endif</div>@endunless
 @yield('content')
 </main>
 @unless($print)<footer class="foot"><p><span class="mark">P</span><b>{{ setting('app_name') }}</b></p><p>SES 企業のみなさまと、エンジニアが同じ木の下で。成約したときだけ、成功報酬をいただく仕組みです。</p><p>困ったときの相談先：<a href="mailto:{{ contact_email() }}">{{ contact_email() }}</a></p><p class="muted">{{ config('park.version') }}</p></footer>@endunless

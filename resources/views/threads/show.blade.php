@@ -1,11 +1,11 @@
 @php
   $u = auth()->user();
   $own = $u->role !== 'ses' || (int) $e->ses_id === (int) $u->ses_id; // 自社のエンジニアか（違えば、イニシャルだけ出す）
-  $egName = \App\Services\CaseThread::egName($u, $e, $threads->first()); // 1本あれば、その1本を作ったときの所属で見る（前の所属の会社に、今の所属の会社名を出さないため）
-  // 前の所属の会社（自社の ses_id の1本があり、今は所属でも相手でもない）には、今の相手の会社名を出さない
+  $egName = \App\Services\CaseThread::egName($u, $e, $threads->first()); // 1本あれば、その1本を作ったときの所属で見る（前の所属の企業に、今の所属の企業名を出さないため）
+  // 前の所属の企業（自社の ses_id の1本があり、今は所属でも相手でもない）には、今の相手の企業名を出さない
   $formerSes = $u->role === 'ses' && (int) $e->ses_id !== (int) $u->ses_id && $partnerId !== (int) $u->ses_id
       && $threads->contains(fn ($t) => (int) $t->ses_id === (int) $u->ses_id);
-  // 1本はあるが、今は相手ではなくなった会社（前の所属ではない）
+  // 1本はあるが、今は相手ではなくなった企業（前の所属ではない）
   $notPartner = $u->role === 'ses' && !$formerSes && !$own && $partnerId !== (int) $u->ses_id;
 @endphp
 @extends('layouts.app', ['title' => '案件のやり取り：'.(($own || $formerSes) ? id_title($e->code, $egName) : $egName)])
@@ -14,9 +14,9 @@
 <dl class="dl">
 <dt>案件</dt><dd><a href="{{ url('/cases/'.$c->id) }}">{{ $c->title }}</a> <x-code :v="$c->code" /> {{ badge('caseStatus', $c->status) }}</dd>
 <dt>エンジニア</dt><dd>{{ $egName }} @if($own || $formerSes)<x-code :v="$e->code" />@endif</dd>
-<dt>相手の会社</dt><dd>@if($formerSes)（貴社の所属ではなくなりました）@elseif($notPartner)（今は相手ではありません）@else{{ \App\Services\CaseThread::partnerName($partnerId) }}@if((int) $e->ses_id !== $partnerId)（受注 SES）@endif @endif</dd>
+<dt>相手の企業</dt><dd>@if($formerSes)（貴社の所属ではなくなりました）@elseif($notPartner)（今は相手ではありません）@else{{ \App\Services\CaseThread::partnerName($partnerId) }}@if((int) $e->ses_id !== $partnerId)（受注 SES）@endif @endif</dd>
 </dl>
-@if($u->role === 'admin')<p class="muted">これは、会社の担当者とエンジニアのやり取りです。管理者は読むだけです。読んだだけでは、担当者の「未読」は消えません。</p>@endif
+@if($u->role === 'admin')<p class="muted">これは、企業の担当者とエンジニアのやり取りです。管理者は読むだけです。読んだだけでは、担当者の「未読」は消えません。</p>@endif
 </x-card>
 <x-card title="やり取り" id="thread">
 @include('partials.case-thread', ['threads' => $threads, 'e' => $e, 'why' => $why, 'partnerId' => $partnerId, 'action' => '/cases/'.$c->id.'/threads/'.$e->id])

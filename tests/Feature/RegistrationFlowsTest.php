@@ -20,7 +20,8 @@ class RegistrationFlowsTest extends TestCase
     protected $seed = true;
 
     // 状態の表示としての「仮登録」（バッジなど、タグで囲まれた「仮登録」「仮登録（…）」）
-    private const PROV = '/>\s*仮登録(（[^<]*）)?\s*</u';
+    // 欄外の説明（<b>仮登録中</b>）は数えない（行のバッジ・セルの文字だけ）
+    private const PROV = '/(?<!<b)>\s*仮登録中(（[^<]*）)?\s*</u';
 
     private function as(string $email): static
     {

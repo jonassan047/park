@@ -4,7 +4,8 @@
 <x-todo />
 <p class="muted">あなたの ID：<x-code :v="$e->code" /></p>
 <x-stats :items="[['スキルシートの完成度', $check['score'].'%', $check['score'] < 80 ? 'あと少し' : 'いい感じです'], ['届いている案件', $offers->count()],
-    ['選考中', $apps->where('status', '!=', 'won')->count()], ['今の状態', lbl('engStatus', $e->status)]]" />
+    ['選考中', $apps->where('status', '!=', 'won')->count()], ['稼働状況', lbl('engStatus', $e->status)]]" />
+<x-status-legend kind="work" />
 @if(!$e->self_confirmed_at)<div id="confirm"></div><x-card title="登録の内容の確認"><p>あなたの登録の内容（プロフィール・スキル・経験票）は、所属の SES や管理者が入れたものも含めて、<b>あなたご自身が責任を持つもの</b>です。中身を確かめ、違うところは直してから、「確認しました」を押してください。確認が済むまでは、案件に応募できません。</p>
 <p><a class="btn ghost small" href="{{ url('/engineers/'.$e->id) }}">内容を見る・直す</a></p>
 <x-post :action="'/engineers/'.$e->id.'/confirm'" label="内容を確認しました（責任を持って登録します）" cls="small" :confirm="'登録の内容が正しいことを確認しましたか？'" /></x-card>@endif
@@ -31,7 +32,7 @@
 <ul class="tips">@foreach(array_slice($check['tips'], 0, 5) as $t)<li>{{ $t }}</li>@endforeach</ul>
 <p><a class="btn small" href="{{ url('/engineers/'.$e->id) }}">経験票を編集</a> <a class="btn ghost small" href="{{ url('/engineers/'.$e->id.'/sheet') }}">スキルシートを見る</a> <a class="btn ghost small" href="{{ url('/engineers/'.$e->id.'/messages') }}">管理者に見てもらう</a></p>
 </x-card>
-<x-card title="担当者への連絡"><p>所属の会社の担当者に、メールで連絡できます。</p>
+<x-card title="担当者への連絡"><p>所属の企業の担当者に、メールで連絡できます。</p>
 <p><a class="btn small" href="{{ url('/mails/new') }}">担当者にメールを送る</a> <a class="btn ghost small" href="{{ url('/mails') }}">連絡メールの一覧</a></p></x-card>
 </div></div>
 @endsection

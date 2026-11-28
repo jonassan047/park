@@ -1,6 +1,6 @@
 @extends('layouts.app', ['title' => '一般担当者の仮登録：'.id_title($s->code, $s->name)])
 @section('content')
-<p class="muted">姓・名・メールアドレスの3つを入れて、仮登録します。担当の方に仮登録のご案内（7日間有効のリンク）が届き、電話などは担当の方が本登録で入れます。SES代表担当者にも知らせます。</p>
+<p class="muted">姓・名・メールアドレスの3つを入れて、仮登録します。担当の方に仮登録のご案内（7日間有効のリンク）が届き、電話などは担当の方が本登録で入れます。PARK窓口担当者にも知らせます。</p>
 <x-card><form method="post" action="{{ url('/admin/ses/'.$s->id.'/users') }}">@csrf
 <p>企業名：{{ $s->name }}</p>
 <div class="pair"><x-field label="氏名（姓）" name="name_sei" required /><x-field label="氏名（名）" name="name_mei" required /></div>

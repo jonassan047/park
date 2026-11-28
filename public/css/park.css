@@ -283,6 +283,11 @@ input:focus, select:focus, textarea:focus { outline-color: var(--blue2); }
 .sprig { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex: none; display: inline-block; }
 .ttl { display: flex; align-items: center; gap: 12px; margin: 18px 0 14px; }
 .ttl h1 { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.ttl-back { margin-left: auto; flex: none; padding: 9px 22px; font-size: 15px; font-weight: 800; box-shadow: 0 2px 6px rgba(0,0,0,.18); }
+.status-legend { font-size: .85em; margin: .4em 0 1em; }
+.status-legend p { margin: 0 0 .2em; }
+.status-legend ul { margin: 0 0 .5em; padding-left: 1.2em; }
+@media print { .noprint { display: none !important; } }
 .ttl .sprig { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--blue3); margin-left: 4px; }
 
 /* トップと区切りのページの大きな帯：濃い緑のグラデーションに、白い大きな見出し */
@@ -488,3 +493,10 @@ header.top .subtabs .wrap { display: flex; gap: 4px; flex-wrap: wrap; justify-co
   header nav.tabs { order: 3; flex: 1 0 100%; overflow: visible; margin: 2px 0 4px; gap: 4px; }
   header nav.tabs a.tab { font-size: 12px; padding: 5px 2px; letter-spacing: 0; white-space: normal; }
 }
+
+/* 企業代表者：〇窓口に同じ　〇記入［氏名］を1行に（v0.23.0） */
+.ceo-field .ceo-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; }
+.ceo-field .ceo-opt { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; cursor: pointer; }
+.ceo-field .ceo-opt input { width: auto; margin: 0; }
+.ceo-field .ceo-name { flex: 1 1 220px; min-width: 0; width: auto; }
+.ceo-field small { display: block; margin-top: 4px; }

@@ -411,10 +411,10 @@ class AdminAccountTest extends TestCase
 
     public function test_r1_form_labels(): void
     {
-        $html = $this->as('admin@park.example')->get('/admin/ses/new')->assertOk()->assertSee('企業正式名称')->assertSee('SES代表担当者の氏名（姓）')->assertSee('SES代表担当者の氏名（名）')
-            ->assertSee('SES代表担当者のメールアドレス')->assertSee('仮登録してメールを送る')->assertDontSee('ご担当者名')->getContent();
-        $this->assertLessThan(strpos($html, 'SES代表担当者の氏名（姓）'), strpos($html, '企業正式名称'));
-        $this->assertLessThan(strpos($html, 'SES代表担当者のメールアドレス'), strpos($html, 'SES代表担当者の氏名（名）'));
+        $html = $this->as('admin@park.example')->get('/admin/ses/new')->assertOk()->assertSee('企業正式名称')->assertSee('PARK窓口担当者の氏名（姓）')->assertSee('PARK窓口担当者の氏名（名）')
+            ->assertSee('PARK窓口担当者のメールアドレス')->assertSee('仮登録してメールを送る')->assertDontSee('ご担当者名')->getContent();
+        $this->assertLessThan(strpos($html, 'PARK窓口担当者の氏名（姓）'), strpos($html, '企業正式名称'));
+        $this->assertLessThan(strpos($html, 'PARK窓口担当者のメールアドレス'), strpos($html, 'PARK窓口担当者の氏名（名）'));
         // 公開の申し込み（/apply）の画面は変えない（K09）
         auth()->logout();
         $this->flushSession();
@@ -425,7 +425,7 @@ class AdminAccountTest extends TestCase
     {
         $m0 = $this->invites();
         $this->as('admin@park.example')->post('/admin/ses', $this->sesIn())
-            ->assertSessionHas('flash.type', 'ok')->assertSessionHas('flash.msg', '仮登録し、SES代表担当者に仮登録のご案内を送りました。');
+            ->assertSessionHas('flash.type', 'ok')->assertSessionHas('flash.msg', '仮登録し、PARK窓口担当者に仮登録のご案内を送りました。');
         $sid = (int) DB::table('ses_companies')->where('name', '登録商事')->value('id');
         $this->assertSame('provisional', DB::table('ses_companies')->where('id', $sid)->value('status'));
         $u = DB::table('users')->where('email', 'reg-r@park.example')->first();
@@ -456,10 +456,10 @@ class AdminAccountTest extends TestCase
     {
         $s0 = DB::table('ses_companies')->count(); $u0 = $this->users(); $m0 = DB::table('mail_outbox')->count();
         $cases = [
-            [['rep_sei' => ''], 'SES代表担当者の姓を入れてください。'],
-            [['rep_sei' => '　 '], 'SES代表担当者の姓を入れてください。'],
-            [['rep_mei' => ''], 'SES代表担当者の名を入れてください。'],
-            [['rep_mei' => '　 '], 'SES代表担当者の名を入れてください。'],
+            [['rep_sei' => ''], 'PARK窓口担当者の姓を入れてください。'],
+            [['rep_sei' => '　 '], 'PARK窓口担当者の姓を入れてください。'],
+            [['rep_mei' => ''], 'PARK窓口担当者の名を入れてください。'],
+            [['rep_mei' => '　 '], 'PARK窓口担当者の名を入れてください。'],
         ];
         foreach ($cases as [$over, $msg]) {
             $this->as('admin@park.example')->post('/admin/ses', $this->sesIn($over + ['name' => '宛名無し商事', 'email' => 'noname@park.example']))

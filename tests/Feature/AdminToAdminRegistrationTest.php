@@ -232,9 +232,9 @@ class AdminToAdminRegistrationTest extends TestCase
     {
         [$id, $old] = $this->register();
         DB::table('users')->where('id', $id)->update(['token_expires' => date('Y-m-d H:i:s', time() - 60)]);
-        $this->assertSame('仮登録（期限切れ）', user_state($this->row($id)));
+        $this->assertSame('仮登録中（期限切れ）', user_state($this->row($id)));
         $this->get('/invite/'.$old)->assertOk()->assertSee(T::LINK_UNUSABLE)->assertDontSee('登録企業');
-        $this->as('admin@park.example')->get('/admin/admins')->assertSee('仮登録（期限切れ）')->assertSee('送り直し');
+        $this->as('admin@park.example')->get('/admin/admins')->assertSee('仮登録中（期限切れ）')->assertSee('送り直し');
         $this->post("/people/$id/resend")->assertRedirect(url('/admin/admins'));
         $new = $this->row($id)->token;
         $this->assertNotSame($old, $new);
@@ -251,14 +251,14 @@ class AdminToAdminRegistrationTest extends TestCase
         $u = $this->row($id);
         $this->assertNotNull($u->reg_declined_at);
         $this->assertNull($u->token);
-        $this->assertSame('仮登録（心当たりなし）', user_state($u));
+        $this->assertSame('仮登録中（心当たりなし）', user_state($u));
         foreach ([$this->uid('admin@park.example'), $b] as $adminId) {
             $this->assertSame(1, DB::table('app_notifications')->where('user_id', $adminId)->where('title', 'like', '%心当たりがない%')->count(), "ベル #$adminId");
         }
         $this->get('/invite/'.$token)->assertSee(T::LINK_UNUSABLE);
         $this->as('admin@park.example')->post("/people/$id/resend")->assertRedirect();
         $this->assertNull($this->row($id)->reg_declined_at);
-        $this->assertSame('仮登録', user_state($this->row($id)));
+        $this->assertSame('仮登録中', user_state($this->row($id)));
     }
 
     // ---------- S3-06：はじめの設定。企業名・姓・名・電話・メール・パスワードを1画面で。確認コードなし ----------

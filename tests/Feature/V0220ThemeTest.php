@@ -164,7 +164,7 @@ class V0220ThemeTest extends TestCase
         $img = 'src="'.asset('img/sprig.jpg').'" alt=""';
         foreach ([[self::ADMIN, '/admin/ses/1'], [self::SES, '/ses/engineers'], [self::EG, '/engineers/1']] as [$email, $url]) {
             $html = $this->as($email)->get($url)->assertOk()->getContent();
-            $this->assertMatchesRegularExpression('#<div class="ttl"><img class="sprig" '.preg_quote($img, '#').'><h1>[^<]+</h1></div>#', $html, $url);
+            $this->assertMatchesRegularExpression('#<div class="ttl"><img class="sprig" '.preg_quote($img, '#').'><h1>[^<]+</h1>(<a class="btn ttl-back noprint"[^>]*>← 戻る</a>)?</div>#', $html, $url);
             $this->assertStringContainsString('<img class="mark sprig" '.$img.'>', $html, $url);
             $this->assertStringNotContainsString('🌳', $html, $url);
         }
@@ -240,11 +240,11 @@ class V0220ThemeTest extends TestCase
             // 1stアクセス画面の帯（2026-11-27）
             $this->assertStringContainsString('<h1><span>はじめて PARK システムへアクセスされた方へ</span><span class="l2">PARK システムの概要をご説明いたします。</span></h1>', $html);
             $this->assertStringNotContainsString('class="hero-bar"', $html);
-            foreach (['PARK のプレイヤー', '管理者', 'SES代表担当者', '一般担当者', 'エンジニア', 'プロバイダー'] as $t) $this->assertStringContainsString($t, $html);
+            foreach (['PARK のプレイヤー', '管理者', 'PARK窓口担当者', '一般担当者', 'エンジニア', 'プロバイダー'] as $t) $this->assertStringContainsString($t, $html);
             preg_match('#<main.*?</main>#s', $html, $m);
             $this->assertDoesNotMatchRegularExpression('/\bEG\b/', strip_tags($m[0]), $kind);
         }
-        $this->get('/start/ses')->assertSee('一般担当者の登録（SES代表担当者が行います）')->assertSee('契約と請求の確認');
+        $this->get('/start/ses')->assertSee('一般担当者の登録（PARK窓口担当者が行います）')->assertSee('契約と請求の確認');
         $this->get('/start/engineer')->assertSee('面談スクリプトで準備する')->assertSee('成約したら経験票を更新する');
     }
 
@@ -331,7 +331,7 @@ class V0220ThemeTest extends TestCase
             preg_match_all('#<li class="([^"]*)"><b>(.)#u', $nav[0], $m);
             $this->assertSame(['①', '②', '③', '④', '⑤'], $m[2]);
             $this->assertSame($on, array_values(array_filter($m[2], fn ($n, $i) => $m[1][$i] === 'on', ARRAY_FILTER_USE_BOTH)), $kind);
-            foreach (['一般担当者', 'SES代表担当者', 'SES の作業', 'エンジニアの作業', 'owner ses', 'owner eg', 'owner admin'] as $t) $this->assertStringContainsString($t, $nav[0]);
+            foreach (['一般担当者', 'PARK窓口担当者', 'SES の作業', 'エンジニアの作業', 'owner ses', 'owner eg', 'owner admin'] as $t) $this->assertStringContainsString($t, $nav[0]);
             $this->assertDoesNotMatchRegularExpression('/\bEG\b/', strip_tags($nav[0]));
         }
     }
@@ -456,7 +456,7 @@ class V0220ThemeTest extends TestCase
 
     public function test_ac14_version(): void
     {
-        $this->assertSame('v0.22.0', config('park.version'));
-        foreach (['/', '/login', '/start/ses', '/start/engineer'] as $url) $this->get($url)->assertOk()->assertSee('v0.22.0');
+        $this->assertSame('v0.23.0', config('park.version'));
+        foreach (['/', '/login', '/start/ses', '/start/engineer'] as $url) $this->get($url)->assertOk()->assertSee('v0.23.0');
     }
 }

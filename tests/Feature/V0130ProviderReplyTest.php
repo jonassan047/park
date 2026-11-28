@@ -380,8 +380,8 @@ class V0130ProviderReplyTest extends TestCase
             $this->assertStringNotContainsString($company, preg_replace('/^いつもお世話になっております。.*$/mu', '', $d->body));
             $this->assertStringContainsString('よろしくお願いします。', $d->body);
             $e = DB::table('engineers')->find($eid);
-            $this->assertContains('会社名', ProviderReply::leaks($e, "参画したいです。\n{$company}"));
-            $this->assertNotContains('会社名', ProviderReply::leaks($e, $d->body)); // 送る会社の名のり（決まり文句）は数えない
+            $this->assertContains('企業名', ProviderReply::leaks($e, "参画したいです。\n{$company}"));
+            $this->assertNotContains('企業名',ProviderReply::leaks($e, $d->body)); // 送る会社の名のり（決まり文句）は数えない
         }
         // 送る前の検査：会社名が残っていれば止める
         $d = DB::table('provider_mails')->orderByDesc('id')->first();

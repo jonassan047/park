@@ -13,7 +13,7 @@
 @if($u->role === 'admin')
 <x-field label="企業名" name="company_name" :value="$v->company_name" required hint="メールの差出人の名前にも使います。" />
 @elseif($u->role === 'ses')
-<x-field label="SES名" name="ses_name" :value="$v->ses_name" required hint="管理者が入れた名前です。正式名称に直してください。" />
+<x-field label="企業正式名称" name="ses_name" :value="$v->ses_name" required hint="管理者が入れた名前です。正式名称に直してください。" />
 @endif
 @unless($u->role === 'eg')
 <x-field label="所属・役職" name="position" :value="$v->position" hint="例：営業部 部長" />

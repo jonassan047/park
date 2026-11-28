@@ -63,7 +63,7 @@ $newLayout = $canMail;
   @else
   <p class="muted">{{ $c->ses_name ? 'この案件の受注 SES は、ほかの SES です。合う方がいれば「推薦する」で、受注 SES に知らせます（名前は伏せて伝えます）。' : 'この案件は、受注 SES がまだ決まっていません。合う方がいれば「推薦する」で、管理者に知らせます（名前は伏せて伝えます）。' }}</p>
   <x-table :head="['エンジニア', '点数', 'マッチした点', '']" :count="count($rows)" empty="登録しているエンジニアがいません。">
-  @foreach($rows as $row)<tr><td><a href="{{ url('/engineers/'.$row['e']->id) }}">{{ $row['e']->name }}</a> <x-code :v="$row['e']->code" /><div class="muted">{{ lbl('engStatus', $row['e']->status) }}</div></td>
+  @foreach($rows as $row)<tr><td><a href="{{ url('/engineers/'.$row['e']->id) }}">{{ $row['e']->name }}</a> <x-code :v="$row['e']->code" /><div class="muted">稼働状況：{{ work_badge($row['e']) }}</div></td>
     <td><x-score :n="$row['score']" /></td><td><small>@php $rs = $row['reasons'] ?? []; $rq = []; $pf = []; $ot = [];
       foreach ($rs as $r) { if (str_starts_with($r, '必須 ')) $rq[] = substr($r, strlen('必須 ')); elseif (str_starts_with($r, '尚可 ')) $pf[] = substr($r, strlen('尚可 ')); else $ot[] = $r; } @endphp
     @if($rq)<b>必須</b> {{ implode(' ', $rq) }}<br>@endif

@@ -31,12 +31,12 @@ class Status extends Command
         $expiredN = $expired($prov()->whereNull('reg_declined_at'))->count();
         return [
             'アカウント：参加中' => $live()->whereNotNull('registered_at')->count(),
-            'アカウント：仮登録' => $prov()->whereNull('reg_declined_at')->count() - $expiredN,
-            'アカウント：仮登録（期限切れ）' => $expiredN,
-            'アカウント：仮登録（心当たりなし）' => $declined,
-            'アカウント：停止' => $u()->whereNull('left_at')->where('active', 0)->count(),
+            'アカウント：仮登録中' => $prov()->whereNull('reg_declined_at')->count() - $expiredN,
+            'アカウント：仮登録中（期限切れ）' => $expiredN,
+            'アカウント：仮登録中（心当たりなし）' => $declined,
+            'アカウント：停止中' => $u()->whereNull('left_at')->where('active', 0)->count(),
             'アカウント：退会済み' =>$u()->whereNotNull('left_at')->count(),
-            'SES：SES代表担当者のいない会社（申込中を除く）' => DB::table('ses_companies')->where('kind', 'ses')->where('status', '!=', 'pending')->whereNull('rep_user_id')->count(),
+            'SES：PARK窓口担当者のいない企業（申込済みを除く）' => DB::table('ses_companies')->where('kind', 'ses')->where('status', '!=', 'pending')->whereNull('rep_user_id')->count(),
             'アカウント：パスワードがあるのに本登録の日時が無い（0 のはず）' => $u()->whereNotNull('password')->whereNull('registered_at')->count(),
         ];
     }

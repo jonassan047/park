@@ -20,7 +20,7 @@ $mailState = ['saved' => '保存のみ（送信の設定が無い）', 'queued' 
 @endif
 @if($pm->status === 'discarded' && $pm->note)<dt>取りやめた理由</dt><dd>{{ $pm->note }}</dd>@endif
 </dl>
-<p class="muted">プロバイダーには、エンジニアはイニシャル「{{ $initials }}」で伝わります。会社名・氏名・連絡先は伝わりません。</p>
+<p class="muted">プロバイダーには、エンジニアはイニシャル「{{ $initials }}」で伝わります。企業名・氏名・連絡先は伝わりません。</p>
 </x-card>
 
 @if($pm->status === 'draft' && $canEdit)
@@ -30,7 +30,7 @@ $mailState = ['saved' => '保存のみ（送信の設定が無い）', 'queued' 
 <x-field label="本人の意向" name="reply" type="select" :options="$intents" :value="$pm->reply" hint="意向を変えても、本文は変わりません。意向の文を変えたいときは［作り直す］を使ってください。" />
 <x-field label="件名" name="subject" :value="$pm->subject" required />
 <x-field label="本文" name="body" type="textarea" rows="18" :value="$pm->body" required />
-<p class="muted">送るときに、本文の最後へ会社名・あなたの氏名・お問い合わせ番号を、件名の最後へ番号を、自動で足します。</p>
+<p class="muted">送るときに、本文の最後へ企業名・あなたの氏名・お問い合わせ番号を、件名の最後へ番号を、自動で足します。</p>
 @if($leaks)<x-field label="残っていることを分かったうえで、このまま送る" name="force" type="checkbox" />@endif
 <button class="btn">保存</button>
 <button class="btn" formaction="{{ url('/provider-mails/'.$pm->id.'/send') }}" onclick="return confirm(@js(($pv ? $pv->name.' '.$pv->sei.' 様（'.$pv->email.'）' : 'プロバイダー').'へ送ります。よろしいですか？'))">送信</button>

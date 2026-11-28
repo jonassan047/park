@@ -154,7 +154,7 @@ class V0210StaffListTest extends TestCase
 
     public function test_helpers(): void
     {
-        $this->assertSame('SES代表担当者', staff_kind(DB::table('users')->find($this->user['aRep'])));
+        $this->assertSame('PARK窓口担当者', staff_kind(DB::table('users')->find($this->user['aRep'])));
         $this->assertSame('一般担当者', staff_kind(DB::table('users')->find($this->user['aNext'])));
         $this->assertSame('一般担当者', staff_kind(DB::table('users')->find($this->user['aDual'])));
 
@@ -181,7 +181,7 @@ class V0210StaffListTest extends TestCase
         $this->assertCount(7, $this->codes($html, 'ST'));
 
         $rep = $this->row($html, $this->st('aRep'));
-        $this->assertStringContainsString('<td>SES代表担当者', $rep);
+        $this->assertStringContainsString('<td>PARK窓口担当者', $rep);
         $this->assertStringContainsString($this->se('a'), $rep);
         $this->assertStringContainsString(self::A_NAME, $rep);
         $this->assertStringContainsString('href="'.url("/admin/ses/$a/users/{$this->user['aRep']}").'"', $rep);
@@ -189,22 +189,22 @@ class V0210StaffListTest extends TestCase
         $this->assertStringContainsString('<td>一般担当者', $this->row($html, $this->st('aGen1')));
         $next = $this->row($html, $this->st('aNext'));
         $this->assertStringContainsString('<td>一般担当者', $next);
-        $this->assertStringContainsString('次のSES代表担当者', $next);
+        $this->assertStringContainsString('次のPARK窓口担当者', $next);
         $dual = $this->row($html, $this->st('aDual'));
         $this->assertStringContainsString('管理者（兼任）', $dual);
         $this->assertStringContainsString('href="'.url("/admin/admins/{$this->user['aDual']}").'"', $dual);
 
         // 担当者がまだいない会社は数だけ（C の1社）。退会済みを表示しても同じ
-        $this->assertStringContainsString('担当者がまだいない会社が 1 社あります。', $html);
+        $this->assertStringContainsString('担当者がまだいない企業が 1 社あります。', $html);
         $this->assertStringNotContainsString('架空若葉商会', $html);
-        $this->assertStringContainsString('担当者がまだいない会社が 1 社あります。', $this->page(self::ADMIN, '/admin/ses?left=1'));
+        $this->assertStringContainsString('担当者がまだいない企業が 1 社あります。', $this->page(self::ADMIN, '/admin/ses?left=1'));
     }
 
     public function test_company_view(): void
     {
         $a = $this->ses['a'];
         $b = $this->ses['b'];
-        $this->as(self::ADMIN)->get('/admin/ses?view=company')->assertOk()->assertSee('SES を仮登録')->assertSee('SES代表担当者')
+        $this->as(self::ADMIN)->get('/admin/ses?view=company')->assertOk()->assertSee('SES を仮登録')->assertSee('PARK窓口担当者')
             ->assertSee(self::A_NAME)->assertSee(self::B_NAME)->assertSee('架空若葉商会')
             ->assertSee("/admin/ses/$a/suspend", false)->assertSee("/admin/ses/$b/delete", false);
         $this->assertStringContainsString($this->st('aRep'), $this->row($this->page(self::ADMIN, '/admin/ses?view=company'), self::A_NAME));
@@ -266,7 +266,7 @@ class V0210StaffListTest extends TestCase
             $this->assertSame($this->sts('aRep', 'aNext', 'aGen1', 'aGen2', 'aDual'), $this->codes($html, 'ST'), $url);
             $this->assertSame($this->egs('a1', 'a2'), $this->codes($html, 'EG'), $url);
             $this->assertStringNotContainsString('name="order"', $html, $url);
-            $this->assertMatchesRegularExpression('#<dt>SES代表担当者</dt><dd>\s*<span class="code">'.$this->st('aRep').'</span>#', $html, $url);
+            $this->assertMatchesRegularExpression('#<dt>PARK窓口担当者</dt><dd>\s*<span class="code">'.$this->st('aRep').'</span>#', $html, $url);
         }
     }
 
@@ -315,11 +315,11 @@ class V0210StaffListTest extends TestCase
 
     public function test_words(): void
     {
-        $this->assertSame('SES代表担当者', Requirements::roleName('ses', Requirements::isRep(DB::table('users')->find($this->user['aRep']))));
+        $this->assertSame('PARK窓口担当者', Requirements::roleName('ses', Requirements::isRep(DB::table('users')->find($this->user['aRep']))));
         $this->assertSame('一般担当者', Requirements::roleName('ses', Requirements::isRep(DB::table('users')->find($this->user['aGen1']))));
 
         $html = $this->page(self::ADMIN, "/admin/ses/{$this->ses['a']}");
-        $this->assertStringContainsString('SES代表担当者の交代', $html);
+        $this->assertStringContainsString('PARK窓口担当者の交代', $html);
         $this->assertStringNotContainsString('<span class="badge info">SES</span>', $html);
         $this->assertStringNotContainsString('次の SES', $html);
         $this->assertStringNotContainsString('SES の交代', $html);
@@ -331,7 +331,7 @@ class V0210StaffListTest extends TestCase
         DB::table('users')->where('id', $this->user['aGen2'])->update(['engineer_id' => $this->eg['a2']]);
         $this->as($this->mail('aGen2'))->get('/login/role')->assertOk()->assertSee('一般担当者（'.self::A_NAME.'）');
 
-        $this->artisan('park:status')->expectsOutputToContain('SES代表担当者のいない会社')->assertExitCode(0);
+        $this->artisan('park:status')->expectsOutputToContain('PARK窓口担当者のいない企業')->assertExitCode(0);
     }
 
     // ---------- A16・A17：権限と個人情報 ----------
@@ -433,9 +433,9 @@ class V0210StaffListTest extends TestCase
     public function test_company_without_staff_count_follows_left_switch(): void
     {
         $this->mkSes('架空移管商会', 'left');
-        $this->assertStringContainsString('担当者がまだいない会社が 1 社あります。', $this->page(self::ADMIN, '/admin/ses'));
+        $this->assertStringContainsString('担当者がまだいない企業が 1 社あります。', $this->page(self::ADMIN, '/admin/ses'));
         $html = $this->page(self::ADMIN, '/admin/ses?left=1');
-        $this->assertStringContainsString('担当者がまだいない会社が 2 社あります。', $html);
+        $this->assertStringContainsString('担当者がまだいない企業が 2 社あります。', $html);
         $this->assertStringContainsString('/admin/ses?view=company&amp;left=1', $html);
         $this->assertStringNotContainsString('架空移管商会', $html);
     }
@@ -592,9 +592,9 @@ class V0210StaffListTest extends TestCase
 
     public function test_role_words_in_header_and_login_choice(): void
     {
-        $this->assertStringContainsString('<span class="rolepill">SES代表担当者</span>', $this->page($this->mail('aRep'), '/ses'));
+        $this->assertStringContainsString('<span class="rolepill">PARK窓口担当者</span>', $this->page($this->mail('aRep'), '/ses'));
         $this->assertStringContainsString('<span class="rolepill">一般担当者</span>', $this->page($this->mail('aGen1'), '/ses'));
         DB::table('users')->where('id', $this->user['aRep'])->update(['engineer_id' => $this->eg['a1']]);
-        $this->as($this->mail('aRep'))->get('/login/role')->assertOk()->assertSee('SES代表担当者（'.self::A_NAME.'）');
+        $this->as($this->mail('aRep'))->get('/login/role')->assertOk()->assertSee('PARK窓口担当者（'.self::A_NAME.'）');
     }
 }

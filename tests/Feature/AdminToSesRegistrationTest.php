@@ -90,9 +90,9 @@ class AdminToSesRegistrationTest extends TestCase
         $this->assertCount(1, $mails);
         $m = $mails[0];
         $this->assertStringContainsString('仮登録のご案内', $m->subject);
-        foreach (['流れ商事株式会社', '流れ', '太郎', 'SES', url('/invite/'.$u->token), '7日以内', '心当たりがない'] as $part) $this->assertStringContainsString($part, $m->body);
+        foreach (['流れ商事株式会社', '流れ', '太郎', 'PARK窓口担当者', url('/invite/'.$u->token), '7日以内', '心当たりがない'] as $part) $this->assertStringContainsString($part, $m->body);
         $this->assertStringContainsString('見本運営', $m->body); // 登録した人の企業名（見本の管理者）
-        $this->assertStringContainsString('会社の電話番号', $m->body);
+        $this->assertStringContainsString('企業の電話番号', $m->body);
         $this->assertStringNotContainsString('ご招待', $m->body.$m->subject);
         $this->assertStringNotContainsString('パスワードを設定', $m->body.$m->subject);
     }
@@ -124,9 +124,9 @@ class AdminToSesRegistrationTest extends TestCase
     public function test_s1_08_list_shows_states_and_resend(): void
     {
         [$sid, $uid, $token] = $this->createSes();
-        $this->as('admin@park.example')->get('/admin/ses?view=company')->assertOk()->assertSee('流れ商事株式会社')->assertSee('仮登録')->assertSee('送り直し')->assertDontSee('仮登録（期限切れ）');
+        $this->as('admin@park.example')->get('/admin/ses?view=company')->assertOk()->assertSee('流れ商事株式会社')->assertSee('仮登録')->assertSee('送り直し')->assertDontSee('仮登録中（期限切れ）');
         DB::table('users')->where('id', $uid)->update(['token_expires' => date('Y-m-d H:i:s', time() - 60)]);
-        $this->get('/admin/ses?view=company')->assertSee('仮登録（期限切れ）')->assertSee('送り直し');
+        $this->get('/admin/ses?view=company')->assertSee('仮登録中（期限切れ）')->assertSee('送り直し');
         $this->get("/admin/ses/$sid")->assertOk()->assertSee('送り直し')->assertSee('取り消し')->assertDontSee("/admin/ses/$sid/suspend", false);
         // 本登録のあとは「参加中」で、送り直しはない
         DB::table('users')->where('id', $uid)->update(['registered_at' => now_str(), 'password' => Hash::make('x'), 'token' => null]);
@@ -275,10 +275,10 @@ class AdminToSesRegistrationTest extends TestCase
         $this->assertNull($u->token);
         $this->assertSame(1, DB::table('app_notifications')->where('user_id', User::where('email', 'admin@park.example')->value('id'))->where('title', 'like', '%心当たりがない%')->count());
         $this->get('/invite/'.$token)->assertSee(T::LINK_UNUSABLE);
-        $this->assertSame('仮登録（心当たりなし）', user_state($u));
+        $this->assertSame('仮登録中（心当たりなし）', user_state($u));
         $this->as('admin@park.example')->post("/people/$uid/resend")->assertRedirect();
         $this->assertNull($this->row($uid)->reg_declined_at);
-        $this->assertSame('仮登録', user_state($this->row($uid)));
+        $this->assertSame('仮登録中', user_state($this->row($uid)));
     }
 
     // ---------- S1-23・S1-24 ----------

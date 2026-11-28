@@ -18,7 +18,7 @@
 <dt>ID</dt><dd><x-code :v="$e->code" /></dd>
 <dt>氏名</dt><dd>{{ $e->name }} <span class="muted">{{ $e->kana }}（{{ $e->initials ?: '—' }}）</span></dd>
 <dt>所属 SES</dt><dd><x-code :v="$e->ses_code ?? null" />　{{ $e->ses_name }}</dd>
-<dt>担当者</dt><dd>@if($staffNow)@if($u->role !== 'eg')<x-code :v="$staffNow->staff_code" /> @endif{{ $staffNow->name.((int) $staffNow->id !== (int) $e->staff_user_id ? '（代わり）' : '') }}@else — @endif</dd><dt>状態</dt><dd>{{ badge('engStatus', $e->status) }}@if($e->suspended_at) <span class="badge mute">停止中</span>@endif</dd>
+<dt>担当者</dt><dd>@if($staffNow)@if($u->role !== 'eg')<x-code :v="$staffNow->staff_code" /> @endif{{ $staffNow->name.((int) $staffNow->id !== (int) $e->staff_user_id ? '（代わり）' : '') }}@else — @endif</dd><dt>稼働状況</dt><dd>{{ work_badge($e) }}</dd>
 <dt>年齢</dt><dd>{{ age_text($e->birth_year) ?: '—' }}</dd><dt>最寄り駅</dt><dd>{{ trim($e->nearest_line.' '.$e->nearest_station) ?: '—' }}{{ $e->walk_minutes ? '（徒歩'.$e->walk_minutes.'分）' : '' }}</dd>
 <dt>経験年数</dt><dd>{{ $e->years_exp ? num_disp($e->years_exp).'年' : '—' }}</dd>
 <dt>希望単価</dt><dd>{{ man($e->desired_price) }}</dd><dt>下限</dt><dd>{{ man($e->min_price) }}</dd>
@@ -26,10 +26,14 @@
 <dt>働き方</dt><dd>{{ lbl('workStyle', $e->work_style) }}・週{{ $e->days_per_week ?: 5 }}日</dd>
 <dt>強み</dt><dd>{{ $e->strengths ?: '—' }}</dd><dt>自己PR</dt><dd>{!! nl2br(e($e->summary)) ?: '—' !!}</dd>
 <dt>本人の確認</dt><dd>@if($e->self_confirmed_at)済み（{{ fmt_dt($e->self_confirmed_at) }}）@else<b>まだ</b><span class="muted">（ご本人が確かめるまで、応募できません。管理者・担当者が書き換えると、もう一度確認が必要になります）</span> @endif</dd>
-<dt>アカウント</dt><dd>{{ $e->status === 'left' ? '退会済み' : ($eu ? (user_state($eu) === '参加中' ? '参加中（最終ログイン '.fmt_dt($eu->last_login).'）' : user_state($eu)) : 'なし') }}@if($eu && $u->role === 'admin' && in_array($eu->role, ['ses', 'admin'], true)) <span class="badge info">{{ $eu->role === 'ses' ? '担当者と兼任' : '管理者と兼任' }}</span>@endif @if($eu)<br><span class="muted">{{ ($eu->role === 'admin' && $u->role !== 'admin') ? '—' : account_mail($eu) }}</span>@endif</dd>
+@php
+$egState = engineer_state($e, $eu);
+@endphp
+<dt>登録状況</dt><dd>{{ $egState }}@if($egState === PARK_ST_ACTIVE && $eu)（最終ログイン {{ fmt_dt($eu->last_login) }}）@endif @if($eu && $u->role === 'admin' && in_array($eu->role, ['ses', 'admin'], true)) <span class="badge info">{{ $eu->role === 'ses' ? '担当者と兼任' : '管理者と兼任' }}</span>@endif @if($eu)<br><span class="muted">{{ ($eu->role === 'admin' && $u->role !== 'admin') ? '—' : account_mail($eu) }}</span>@endif</dd>
 
 <dt>個人情報の同意</dt><dd>@if($e->consent_at){{ fmt_date($e->consent_at) }}@else<span class="bad-text">未</span>@endif</dd>
 </dl>
+<x-status-legend kind="work" /><x-status-legend kind="account" :eg="true" />
 @if($mine)<p><a class="btn ghost" href="{{ url('/eg') }}">ホームに戻る</a></p>@else<p><a class="btn ghost" href="{{ list_url('engineers') }}">エンジニアの一覧に戻る</a></p>@endif</x-card>
 
 <x-card title="詳しいプロフィール（履歴書・業務経歴書の項目）"><x-slot:actions><a class="btn small" href="{{ url('/engineers/'.$e->id.'/profile') }}">編集</a></x-slot:actions>

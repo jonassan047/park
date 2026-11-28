@@ -149,7 +149,7 @@ class NameSplitTest extends TestCase
     public function test_m5_account_shows_sei_mei_labels(): void
     {
         $this->as('ses1@park.example')->get('/account')->assertOk()
-            ->assertSeeInOrder(['氏名（姓）', '氏名（名）', 'ふりがな（姓）', 'ふりがな（名）', 'SES名', '所属・役職', '電話'])->assertDontSee('お名前');
+            ->assertSeeInOrder(['氏名（姓）', '氏名（名）', 'ふりがな（姓）', 'ふりがな（名）', '企業正式名称', '所属・役職', '電話'])->assertDontSee('お名前');
     }
 
     // 本登録（メールのリンク → 確認コード）を、この人として通す。ふりがななどの入力を渡す

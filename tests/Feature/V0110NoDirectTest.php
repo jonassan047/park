@@ -258,7 +258,7 @@ class V0110NoDirectTest extends TestCase
         $mails = DB::table('mail_outbox')->count();
         DirectMerge::run();
         foreach (['d1@example.test', 'd2@example.test'] as $email) {
-            $this->assertSame(1, DB::table('app_notifications')->where('user_id', $this->row($email)->id)->where('title', 'like', '所属の会社が「合同会社MRSY」になりました%')->count(), $email);
+            $this->assertSame(1, DB::table('app_notifications')->where('user_id', $this->row($email)->id)->where('title', 'like', '所属の企業が「合同会社MRSY」になりました%')->count(), $email);
         }
         foreach ([self::SES3, 'staff-m2@example.test'] as $email) {
             $this->assertSame(1, DB::table('app_notifications')->where('user_id', $this->row($email)->id)->where('title', '管理者の直属だった 2 名のエンジニアが、貴社の所属になりました')->count(), $email);
@@ -513,6 +513,6 @@ class V0110NoDirectTest extends TestCase
         $this->post("/admin/ses/$d/staff-dual")->assertNotFound();
         $e = $this->mkEgIn($this->sesId(self::SES1), '自社 太郎', 'x-eg@example.test');
         $this->assertSame(1, DB::table('ses_companies')->where('kind', 'direct')->count());
-        $this->post("/engineers/$e/affiliation", ['ses_id' => $d])->assertSessionHas('flash.msg', '選べない会社です。');
+        $this->post("/engineers/$e/affiliation", ['ses_id' => $d])->assertSessionHas('flash.msg', '選べない企業です。');
     }
 }

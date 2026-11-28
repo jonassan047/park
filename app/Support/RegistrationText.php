@@ -43,7 +43,7 @@ class RegistrationText
     public static function consent(string $role, bool $isRep = false): ?array
     {
         return match (Requirements::kind($role, $isRep)) {
-            'rep' => ['text' => '会社を代表して、PARK で知り得た情報の守秘義務に同意します。', 'mail' => '守秘義務への同意（会社として）'],
+            'rep' => ['text' => '企業を代表して、PARK で知り得た情報の守秘義務に同意します。', 'mail' => '守秘義務への同意（企業として）'],
             'staff' => ['text' => 'PARK で知り得た情報の守秘義務に同意します。', 'mail' => '守秘義務への同意'],
             'eg' => ['text' => '個人情報の取り扱いに同意し、登録の内容が事実であることを確認しました。', 'mail' => '個人情報の取り扱いへの同意（登録の内容の確認を兼ねます）'],
             default => null,
@@ -57,7 +57,7 @@ class RegistrationText
     public static function approvalBody(string $company): string
     {
         return "{$company} のご担当者さま\n\nこのたびの PARK への参加のお申し込みを、承認しました。\n"
-            ."SES代表担当者としてお知らせいただいた方に、仮登録のご案内を送っています。本登録が済むと、PARK をご利用いただけます。";
+            ."PARK窓口担当者としてお知らせいただいた方に、仮登録のご案内を送っています。本登録が済むと、PARK をご利用いただけます。";
     }
 
     // ---------- 画面の文 ----------
@@ -72,7 +72,7 @@ class RegistrationText
     const HELP_SUBJECT = '本登録のご案内について';
     const HELP_BODY = "PARK の本登録が、まだ済んでいません。\n本登録のリンクは、登録した方に送り直しをご依頼ください。\nこのメールに心当たりがない場合は、破棄してください。";
 
-    // ---------- 管理者が担当者・エンジニアを仮登録したとき、所属の SES代表担当者に送る知らせ ----------
+    // ---------- 管理者が担当者・エンジニアを仮登録したとき、所属の PARK窓口担当者に送る知らせ ----------
     public static function adminRegisteredTitle(string $who, string $roleName): string
     {
         return "管理者が{$roleName}を仮登録しました：{$who}";
@@ -83,12 +83,14 @@ class RegistrationText
         return "管理者の{$by}が、{$who} さんを PARK の{$roleName}として仮登録しました。\n本登録が済むと、お知らせします。\n心当たりがない場合は、管理者にご連絡ください。";
     }
 
-    // ---------- SES代表担当者の交代の知らせ ----------
-    const REP_CHANGED_TITLE = 'SES代表担当者が変わりました';
+    // ---------- PARK窓口担当者の交代の知らせ ----------
+    const REP_CHANGED_TITLE = 'PARK窓口担当者が変わりました';
 
-    public static function repChangedBody(string $company, string $newRep, string $oldRep): string
+    // $ceoSame：企業代表者が「窓口に同じ」のとき true（表示が新しい窓口の氏名になることを添える）
+    public static function repChangedBody(string $company, string $newRep, string $oldRep, bool $ceoSame = false): string
     {
-        return "{$company} の SES代表担当者が、{$oldRep} さんから {$newRep} さんに変わりました。\n前のSES代表担当者は一般担当者になります。";
+        return "{$company} の PARK窓口担当者が、{$oldRep} さんから {$newRep} さんに変わりました。\n前のPARK窓口担当者は一般担当者になります。"
+            .($ceoSame ? "\n企業代表者は「窓口に同じ」のため、企業代表者の表示も新しいPARK窓口担当者の氏名になります。" : '');
     }
 
     // ---------- 上位への知らせ ----------

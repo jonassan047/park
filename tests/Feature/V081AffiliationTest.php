@@ -107,7 +107,7 @@ class V081AffiliationTest extends TestCase
         $this->move(self::ADMIN, $eg1, $b)->assertRedirect("/engineers/$eg1")->assertSessionHas('flash.msg', '所属を「'.self::B.'」に変えました。');
         $this->assertSame([$b, $b], [$this->engSes($eg1), $this->egUserSes($eg1)]);
 
-        $this->move(self::ADMIN, $eg1, $this->directRow())->assertSessionHas('flash.msg', '選べない会社です。');
+        $this->move(self::ADMIN, $eg1, $this->directRow())->assertSessionHas('flash.msg', '選べない企業です。');
         $this->assertSame([$b, $b], [$this->engSes($eg1), $this->egUserSes($eg1)]);
 
         $this->move(self::ADMIN, $eg1, $a)->assertRedirect("/engineers/$eg1");
@@ -133,7 +133,7 @@ class V081AffiliationTest extends TestCase
         DB::table('ses_companies')->where('name', self::C)->update(['status' => 'suspended']);
         $c = (int) DB::table('ses_companies')->where('name', self::C)->value('id');
 
-        foreach ([$this->directRow() => '選べない会社です。', $c => '選べない会社です。', 999999 => '選べない会社です。', 'abc' => '選べない会社です。',
+        foreach ([$this->directRow() => '選べない企業です。', $c => '選べない企業です。', 999999 => '選べない企業です。', 'abc' => '選べない企業です。',
                   '' => '変更先を選んでください。'] as $to => $msg) {
             $this->move(self::SES1, $eg1, (string) $to)->assertSessionHas('flash.msg', $msg);
             $this->assertSame([$a, $a], [$this->engSes($eg1), $this->egUserSes($eg1)]);
@@ -268,7 +268,7 @@ class V081AffiliationTest extends TestCase
         $this->assertSame('ses', $n(self::SES1)[0]->for_role);
         $this->assertCount(1, $n(self::SES2));
         $this->assertCount(0, $n(self::ADMIN)); // 管理者が変えたときは、管理者には出さない
-        $this->assertSame(1, DB::table('app_notifications')->where('user_id', $this->user(self::EG1)->id)->where('title', '所属の会社が変わりました')->count());
+        $this->assertSame(1, DB::table('app_notifications')->where('user_id', $this->user(self::EG1)->id)->where('title', '所属の企業が変わりました')->count());
         $mails = DB::table('mail_outbox')->where('kind', 'engineer-move')->get();
         $this->assertCount(1, $mails);
         $this->assertSame(self::EG1, $mails[0]->to_email);
@@ -337,7 +337,7 @@ class V081AffiliationTest extends TestCase
         $page->assertDontSee(self::C);
 
         $this->as(self::SES1)->get("/engineers/$eg1/edit")->assertOk()->assertSee('/engineers/'.$eg1.'/affiliation', false)
-            ->assertSee(self::B)->assertDontSee(self::C)->assertDontSee(self::DIRECT)->assertSee('移す先の会社にも、あらかじめお伝えください。');
+            ->assertSee(self::B)->assertDontSee(self::C)->assertDontSee(self::DIRECT)->assertSee('移す先の企業にも、あらかじめお伝えください。');
     }
 
     // T16：変えられないときは選択を出さず、理由だけ
@@ -360,13 +360,13 @@ class V081AffiliationTest extends TestCase
     {
         $eg1 = $this->engId(self::EG1);
         $this->as(self::EG1)->get("/engineers/$eg1/edit")->assertOk()->assertSee('所属：'.self::A)
-            ->assertSee('所属の会社か管理者にご相談ください')->assertDontSee('/affiliation', false);
+            ->assertSee('所属の企業か管理者にご相談ください')->assertDontSee('/affiliation', false);
     }
 
     // T19：版
     public function test_t19_version(): void
     {
-        $this->assertSame('v0.22.0', config('park.version'));
-        $this->get('/login')->assertOk()->assertSee('v0.22.0');
+        $this->assertSame('v0.23.0', config('park.version'));
+        $this->get('/login')->assertOk()->assertSee('v0.23.0');
     }
 }

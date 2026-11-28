@@ -60,17 +60,17 @@ class Step1AcceptanceTest extends TestCase
         // 期限の1分前：まだ使える。一覧は「仮登録」
         DB::table('users')->where('id', $uid)->update(['token_expires' => date('Y-m-d H:i:s', time() + 60)]);
         $this->get('/invite/'.$token)->assertOk()->assertSee('受入商事株式会社');
-        $this->assertSame('仮登録', user_state($this->row($uid)));
+        $this->assertSame('仮登録中', user_state($this->row($uid)));
         // 期限を1分過ぎた（8日目）：使えず、誰のものかも出さない
         DB::table('users')->where('id', $uid)->update(['token_expires' => date('Y-m-d H:i:s', time() - 60)]);
         $this->get('/invite/'.$token)->assertOk()->assertSee(T::LINK_UNUSABLE)->assertDontSee('受入商事株式会社')->assertDontSee(self::EMAIL);
-        $this->assertSame('仮登録（期限切れ）', user_state($this->row($uid)));
+        $this->assertSame('仮登録中（期限切れ）', user_state($this->row($uid)));
         $this->post('/invite/'.$token, $this->payload())->assertOk()->assertSee(T::LINK_UNUSABLE);
         $this->assertNull($this->row($uid)->password);
         $this->assertNull($this->row($uid)->registered_at);
         // 期限の秒ちょうどは「期限切れ」（一覧の判定とリンクの判定がそろう）
         DB::table('users')->where('id', $uid)->update(['token_expires' => date('Y-m-d H:i:s')]);
-        $this->assertSame('仮登録（期限切れ）', user_state($this->row($uid)));
+        $this->assertSame('仮登録中（期限切れ）', user_state($this->row($uid)));
         $this->get('/invite/'.$token)->assertSee(T::LINK_UNUSABLE);
     }
 

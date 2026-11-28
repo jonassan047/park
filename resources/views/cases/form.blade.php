@@ -17,7 +17,7 @@
 <x-field label="金額のメモ" name="price_note" :value="$c->price_note ?? null" placeholder="例：スキル見合い、精算 140-180h" />
 <x-field label="必須スキル" name="required_skills" type="textarea" rows="2" :value="$c->required_skills ?? null" placeholder="Java、Spring Boot、SQL（「、」区切り）" hint="技術マスタの名前が入ります。文を書いて保存すると、マスタの語を拾い、拾えない文は「エンジニアに確認」に移します。" />
 <x-field label="尚可スキル" name="preferred_skills" type="textarea" rows="2" :value="$c->preferred_skills ?? null" placeholder="AWS、Docker" hint="必須と同じです。" />
-<x-field label="エンジニアに確認（1行に1つ）" name="confirm_items" type="textarea" rows="3" :value="$c->confirm_items ?? null" cls="span2" hint="マスタに無い条件です。点数には使いません。エンジニアの案件の画面と案内メールに、この文のまま出ます。会社名などは消してください。" />
+<x-field label="エンジニアに確認（1行に1つ）" name="confirm_items" type="textarea" rows="3" :value="$c->confirm_items ?? null" cls="span2" hint="マスタに無い条件です。点数には使いません。エンジニアの案件の画面と案内メールに、この文のまま出ます。企業名などは消してください。" />
 @if(!empty($c->required_lines) || !empty($c->preferred_lines))
 {{-- 取り込み・保存のときに読んだ、元の必須・尚可の文（読むだけ。送らない） --}}
 <details class="span2"><summary>元の必須・尚可の文</summary>

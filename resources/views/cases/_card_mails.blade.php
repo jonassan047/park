@@ -36,7 +36,7 @@
 {{-- 担当者への依頼（他社の担当者に紹介をお願いしたもの。v0.16.0）：受注 SES の担当者と管理者。管理者は読むだけ。返信の本文は、その会社の中の話なので出さない --}}
 @if(isset($staffReq) && $staffReq->count())
 <h3 id="staffreq">担当者への依頼</h3>
-<x-table :head="['企業名［担当者名］', '送った日', '状態', 'その会社から案内した人数', '提案の依頼', '成約']" :count="$staffReq->count()">
+<x-table :head="['企業名［担当者名］', '送った日', '状態', 'その企業から案内した人数', '提案の依頼', '成約']" :count="$staffReq->count()">
 @foreach($staffReq as $t)<tr>
 <td>{{ $t->partner_name }}［{{ $t->staff_name }}］</td>
 <td>{{ fmt_dt($t->sent_at) }}</td>
@@ -46,7 +46,7 @@
 <td>{{ $t->wonN }} 名</td>
 </tr>@endforeach
 </x-table>
-<p class="muted">パートナーの担当者が自社のエンジニアに案内した返事は、その会社の中で扱います。応募したい人がいれば、パートナーから「提案の依頼」が届きます。</p>
+<p class="muted">パートナーの担当者が自社のエンジニアに案内した返事は、その企業の中で扱います。応募したい人がいれば、パートナーから「提案の依頼」が届きます。</p>
 @endif
 {{-- 提案の依頼（パートナーが［受注 SES に提案を頼む］を押した人。v0.17.0）：受注 SES の担当者だけ。イニシャルだけ。返信の本文・氏名は出さない --}}
 @if($canMail && isset($handoffs) && $handoffs->count())

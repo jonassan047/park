@@ -196,7 +196,7 @@ class AccountController extends Controller
 
     private function profileNames(): array
     {
-        return ['postal_code' => '郵便番号', 'address' => '住所', 'name_sei' => '氏名（姓）', 'name_mei' => '氏名（名）', 'kana_sei' => 'ふりがな（姓）', 'kana_mei' => 'ふりがな（名）', 'phone' => '電話', 'position' => '所属・役職', 'company_name' => '企業名', 'ses_name' => 'SES名'];
+        return ['postal_code' => '郵便番号', 'address' => '住所', 'name_sei' => '氏名（姓）', 'name_mei' => '氏名（名）', 'kana_sei' => 'ふりがな（姓）', 'kana_mei' => 'ふりがな（名）', 'phone' => '電話', 'position' => '所属・役職', 'company_name' => '企業名', 'ses_name' => '企業正式名称'];
     }
 
     // 古い入口（/welcome・/eg/consent）：足りない項目の画面へ転送する（足りなければ /register/complete、なければホーム）

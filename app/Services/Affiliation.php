@@ -60,7 +60,7 @@ class Affiliation
         if (!is_string($to) && !is_int($to)) return ['bad' => '変更先を選んでください。'];
         $to = trim((string) $to);
         if ($to === '') return ['bad' => '変更先を選んでください。'];
-        if (!ctype_digit($to)) return ['bad' => '選べない会社です。'];
+        if (!ctype_digit($to)) return ['bad' => '選べない企業です。'];
         $toId = (int) $to;
 
         $res = DB::transaction(function () use ($u, $id, $toId) {
@@ -72,7 +72,7 @@ class Affiliation
             $from = (int) $e->ses_id;
             if ($toId === $from) return ['bad' => 'すでに「'.($names[$from] ?? '').'」の所属です。'];
             if ($msg = self::blocker($u, $e)) return ['bad' => $msg];
-            if (!isset(self::targets($u, $e)[$toId])) return ['bad' => '選べない会社です。'];
+            if (!isset(self::targets($u, $e)[$toId])) return ['bad' => '選べない企業です。'];
 
             $now = now_str();
             DB::table('engineers')->where('id', $id)->update(['ses_id' => $toId, 'updated_at' => $now]);
@@ -93,7 +93,7 @@ class Affiliation
         N::toSes($from, $title, $body, '/ses/engineers', false, self::KIND);
         N::toSes($toId, $title, $body, "/engineers/{$id}", false, self::KIND);
         if ($u->role === 'ses') N::toAdmins($title, $body, "/engineers/{$id}", false, self::KIND);
-        N::toEg($id, '所属の会社が変わりました', "あなたの所属の会社が「{$fromName}」から「{$toName}」に変わりました。分からないことは、{$toName} のご担当者にお問い合わせください。", '/eg', true, self::KIND);
+        N::toEg($id, '所属の企業が変わりました', "あなたの所属の企業が「{$fromName}」から「{$toName}」に変わりました。分からないことは、{$toName} のご担当者にお問い合わせください。", '/eg', true, self::KIND);
 
         return $u->role === 'admin'
             ? ['ok' => "所属を「{$toName}」に変えました。", 'to' => "/engineers/{$id}"]

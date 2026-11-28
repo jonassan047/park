@@ -1,3 +1,17 @@
+// 題の右の［戻る］：戻り先が決まっていない画面は、同じサイトから来ていれば一つ前の画面へ（そうでなければ、ダッシュボードのまま）
+document.addEventListener('click', function (e) {
+  const a = e.target.closest && e.target.closest('a[data-back=history]');
+  if (!a) return;
+  let same = false;
+  // 同じサイトで、かつ PARK の基底パス（/park/ など。data-base）の下から来たときだけ
+  const base = a.dataset.base || '/';
+  try {
+    const ref = new URL(document.referrer);
+    same = ref.origin === location.origin && (ref.pathname + '/').indexOf(base) === 0;
+  } catch (err) { same = false; }
+  if (same && history.length > 1) { e.preventDefault(); history.back(); }
+});
+
 // 表に行を足す（スキルの編集など）
 function addRow(tableId, templateId) {
   const tpl = document.getElementById(templateId);

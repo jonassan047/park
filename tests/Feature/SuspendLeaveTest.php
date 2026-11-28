@@ -303,7 +303,9 @@ class SuspendLeaveTest extends TestCase
         $html = $this->admin()->get("/engineers/$eid")->assertOk()->getContent();
         $this->assertStringContainsString('>再開</button>', $html);
         $this->assertStringNotContainsString('>停止</button>', $html);
-        $this->assertStringContainsString('停止中</span>', $html);
+        // 停止中は登録状況にだけ出す（稼働状況の欄の「停止中」の札はやめた）
+        $this->assertStringContainsString('<dt>登録状況</dt><dd>停止中', $html);
+        $this->assertStringNotContainsString('停止中</span>', $html);
         $this->assertStringNotContainsString('送り直し', $html);
         $this->admin()->get('/admin/engineers')->assertSee('停止中');
 

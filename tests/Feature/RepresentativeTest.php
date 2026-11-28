@@ -145,7 +145,7 @@ class RepresentativeTest extends TestCase
 
         // 次の SES の本登録の画面は、SES のもの（企業正式名称・会社の住所・会社として守秘義務）
         $this->guest();
-        $this->get('/invite/'.$n->token)->assertOk()->assertSee('企業正式名称')->assertSee('会社の住所');
+        $this->get('/invite/'.$n->token)->assertOk()->assertSee('企業正式名称')->assertSee('企業の住所');
         $payload = ['ses_name' => $s->name, 'name_sei' => '次', 'name_mei' => '代表', 'phone' => '03-9999-0000', 'postal_code' => '100-0002', 'address' => '東京都千代田区2-2',
             'agree' => '1', 'password' => 'password12', 'password_confirmation' => 'password12'];
         $this->post('/invite/'.$n->token, $payload)->assertRedirect(url('/two-factor/challenge'));

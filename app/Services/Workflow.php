@@ -45,14 +45,14 @@ class Workflow
         if (!$u->active) return null;
         $usable = DB::table('users')->where('ses_id', $sesId)->where('role', 'ses')->where('active', 1)->whereNull('left_at')->count();
         if ($usable > 1) return null;
-        return ['type' => 'bad', 'msg' => 'この会社で使える担当者が、この人だけです。停止・退会にはできません。会社ごと止めるときは、SES の「停止」か「退会」を使ってください。'];
+        return ['type' => 'bad', 'msg' => 'この企業で使える担当者が、この人だけです。停止・退会にはできません。企業ごと止めるときは、SES の「停止」か「退会」を使ってください。'];
     }
 
     // SES（または次の SES）は、交代のあとでなければ停止・退会にできない（会社に SES がいない状態を作らない。K21）
     private static function repGuard(object $u): ?array
     {
         if (!Requirements::isRep($u)) return null;
-        return ['type' => 'bad', 'msg' => 'SES代表担当者（次のSES代表担当者を含む）は、停止・退会にできません。先に、管理者に SES代表担当者の交代をご依頼ください。会社ごと止めるときは、SES の「停止」か「退会」を使ってください。'];
+        return ['type' => 'bad', 'msg' => 'PARK窓口担当者（次のPARK窓口担当者を含む）は、停止・退会にできません。先に、管理者に PARK窓口担当者の交代をご依頼ください。企業ごと止めるときは、SES の「停止」か「退会」を使ってください。'];
     }
 
     public static function suspendSesUser(int $sesId, int $uid, $actor): ?array
@@ -403,7 +403,7 @@ class Workflow
         $res = DB::transaction(function () use ($s, $actor) {
             $me = DB::table('users')->where('id', $actor->id ?? 0)->where('role', 'admin')->lockForUpdate()->first();
             if (!$me) return ['type' => 'bad', 'msg' => '管理者だけが、担当者を兼ねられます。'];
-            if ((int) $me->ses_id === (int) $s->id) return ['type' => 'ok', 'msg' => 'すでに、この会社の担当者を兼ねています。'];
+            if ((int) $me->ses_id === (int) $s->id) return ['type' => 'ok', 'msg' => 'すでに、この企業の担当者を兼ねています。'];
             if ($me->ses_id) return ['type' => 'bad', 'msg' => '兼ねられるのは1社だけです。先に「'.self::sesCompanyName((int) $me->ses_id).'」の兼任をやめてください。'];
             if ($s->status !== 'active') return ['type' => 'bad', 'msg' => '担当者を兼ねられるのは、参加中の SES だけです。'];
             DB::table('users')->where('id', $me->id)->update(['ses_id' => $s->id, 'updated_at' => now_str()]);
@@ -426,7 +426,7 @@ class Workflow
         $res = DB::transaction(function () use ($s, $actor) {
             $me = DB::table('users')->where('id', $actor->id ?? 0)->where('role', 'admin')->lockForUpdate()->first();
             if (!$me) return ['type' => 'bad', 'msg' => '管理者だけが操作できます。'];
-            if ((int) $me->ses_id !== (int) $s->id) return ['type' => 'ok', 'msg' => 'この会社の担当者は、兼ねていません。'];
+            if ((int) $me->ses_id !== (int) $s->id) return ['type' => 'ok', 'msg' => 'この企業の担当者は、兼ねていません。'];
             DB::table('users')->where('id', $me->id)->update(['ses_id' => null, 'updated_at' => now_str()]);
             EgStaff::release((int) $me->id, $actor, 'leave'); // 兼任していた間に担当だった EG は、会社の SES に移る
             return ['type' => 'ok', 'msg' => '「'.$s->name.'」の担当者の兼任をやめました。', 'name' => $me->name];
@@ -620,7 +620,10 @@ class Workflow
     // 管理者（$actor が admin）が登録するときは、申し込みの通知と受付メールを出さない
     public static function applySes(array $d, $actor = null): int
     {
-        $id = DB::table('ses_companies')->insertGetId([
+        // 企業代表者（窓口に同じ／記入）。画面で検査済み。直接呼ばれて不正な値のときは、黙って直さず例外にする
+        $ceo = Registration::ceoInput($d);
+        if (is_string($ceo)) throw new \InvalidArgumentException($ceo);
+        $id = DB::table('ses_companies')->insertGetId($ceo + [
             'name' => str_in($d['name'] ?? ''), ...self::sesPeopleCols($d),
             'email' => strtolower((string) str_in($d['email'] ?? '')), 'phone' => str_in($d['phone'] ?? ''),
             'postal_code' => postal_norm(is_string($d['postal_code'] ?? null) ? $d['postal_code'] : null) ?: null, 'address' => str_in($d['address'] ?? ''),
@@ -630,7 +633,7 @@ class Workflow
         if (($actor->role ?? '') === 'admin') return $id;
         $name = str_in($d['name'] ?? ''); $contact = self::sesPeopleCols($d)['contact_name'];
         N::toAdmins('SES から参加の申し込みがありました', "{$name}（{$contact} 様）から参加の申し込みがありました。内容を確認し、承認してください。", "/admin/ses/$id", true, 'ses-apply');
-        N::queueMail(str_in($d['email'] ?? ''), $contact, '参加のお申し込みを受け付けました', "{$contact} 様\n\nPARK への参加のお申し込みを受け付けました。管理者が内容を確認のうえ、ご連絡します。\n\n会社名：{$name}", 'ses-apply');
+        N::queueMail(str_in($d['email'] ?? ''), $contact, '参加のお申し込みを受け付けました', "{$contact} 様\n\nPARK への参加のお申し込みを受け付けました。管理者が内容を確認のうえ、ご連絡します。\n\n企業名：{$name}", 'ses-apply');
         return $id;
     }
 

@@ -21,8 +21,8 @@ class DummySeed
 
     // 担当者・エンジニアの状態と割合（v0.2.0 の仮登録 → 本登録の状態）
     const STATE_RATIO = ['A' => 50, 'B' => 10, 'C' => 15, 'D' => 15, 'E' => 10];
-    const STATE_LABEL = ['A' => '本登録済み', 'B' => '参加中（必須項目が足りない）', 'C' => '仮登録', 'D' => '仮登録（期限切れ）', 'E' => '停止中'];
-    const SES_LABEL = ['pending' => '申込中', 'provisional' => '仮登録', 'active' => '参加中', 'suspended' => '停止'];
+    const STATE_LABEL = ['A' => '本登録済み', 'B' => '参加中（必須項目が足りない）', 'C' => '仮登録中', 'D' => '仮登録中（期限切れ）', 'E' => '停止中'];
+    const SES_LABEL = ['pending' => '申込済み', 'provisional' => '仮登録中', 'active' => '参加中', 'suspended' => '停止中'];
     const DUMMY_PHONE = '03-0000-0000';
     const DUMMY_POSTAL = '100-0001';
     const DUMMY_ADDRESS = '東京都千代田区（ダミー）';

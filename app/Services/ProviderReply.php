@@ -125,7 +125,7 @@ class ProviderReply
         // 会社名：決まり文句の「いつもお世話になっております。○○です。」（送る会社の名のり）は数えない
         $plain = preg_replace('/^いつもお世話になっております。.*です。\s*$/mu', '', $text);
         foreach (self::companyWords($e) as $w) {
-            if (stripos($plain, $w) !== false) { $kinds[] = '会社名'; break; }
+            if (stripos($plain, $w) !== false) { $kinds[] = '企業名'; break; }
         }
         return $kinds;
     }

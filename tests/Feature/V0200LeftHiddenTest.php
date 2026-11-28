@@ -284,10 +284,10 @@ class V0200LeftHiddenTest extends TestCase
         // ログインの無い退会済み EG も、ログインのある退会済み EG も「退会済み」（「なし」にしない）
         foreach ([self::ADMIN, self::SES1] as $who) {
             foreach ([$this->egNoLogin, $this->egLeft] as $id) {
-                $this->assertStringContainsString('<dt>アカウント</dt><dd>退会済み', $this->page($who, "/engineers/$id"));
+                $this->assertStringContainsString('<dt>登録状況</dt><dd>退会済み', $this->page($who, "/engineers/$id"));
             }
         }
-        $this->assertStringNotContainsString('<dt>アカウント</dt><dd>退会済み', $this->page(self::ADMIN, "/engineers/{$this->egOk}"));
+        $this->assertStringNotContainsString('<dt>登録状況</dt><dd>退会済み', $this->page(self::ADMIN, "/engineers/{$this->egOk}"));
     }
 
     public function test_empty_ses_list_shows_one_message(): void
@@ -336,7 +336,7 @@ class V0200LeftHiddenTest extends TestCase
         DB::table('users')->where('id', $next)->update(['registered_at' => null]);
         DB::table('ses_companies')->where('id', $e)->update(['next_rep_user_id' => $next]);
         $code = preg_quote((string) DB::table('users')->where('id', $next)->value('staff_code'), '#');
-        $this->assertMatchesRegularExpression('#次のSES代表担当者：\s*<span class="code">'.$code.'</span>\s*架空 次期担当#u', $this->page(self::ADMIN, "/admin/ses/$e"));
+        $this->assertMatchesRegularExpression('#次のPARK窓口担当者：\s*<span class="code">'.$code.'</span>\s*架空 次期担当#u', $this->page(self::ADMIN, "/admin/ses/$e"));
 
         // 本登録が済んだ担当者は、交代の候補に出る
         $html = $this->page(self::ADMIN, "/admin/ses/{$this->a}");

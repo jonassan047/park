@@ -49,7 +49,7 @@ class RegistrationFoundationTest extends TestCase
     public function test_s1_01_version_is_in_the_footer(): void
     {
         $v = config('park.version');
-        $this->assertSame('v0.22.0', $v);
+        $this->assertSame('v0.23.0', $v);
         $this->get('/login')->assertOk()->assertSee($v);
         $this->as('admin@park.example')->get('/admin')->assertOk()->assertSee($v);
     }
@@ -148,7 +148,7 @@ class RegistrationFoundationTest extends TestCase
         $sid = $this->user('ses1@park.example')->ses_id;
         DB::table('ses_companies')->where('id', $sid)->update(['address' => null, 'agreed_at' => null]);
         $this->as('ses1@park.example')->get('/ses')->assertRedirect('/register/complete');
-        $this->get('/register/complete')->assertSee('会社の住所')->assertSee('守秘義務');
+        $this->get('/register/complete')->assertSee('企業の住所')->assertSee('守秘義務');
         $this->post('/register/complete', ['address' => '東京都新宿区1-1'])->assertSessionHasErrors('agree');
         $this->post('/register/complete', ['address' => '東京都新宿区1-1', 'agree' => '1'])->assertRedirect();
         $s = DB::table('ses_companies')->find($sid);
@@ -323,7 +323,7 @@ class RegistrationFoundationTest extends TestCase
         $this->assertStringContainsString(T::PROVISIONAL_SUBJECT, $m->subject);
         $this->assertStringContainsString('お心当たりがない場合は、リンク先の「心当たりがない」を押すか、このメールを破棄してください。', $m->body);
         $this->assertStringContainsString(T::requiredLines('ses', true), $m->body);
-        $this->assertSame('会社を代表して、PARK で知り得た情報の守秘義務に同意します。', T::consent('ses', true)['text']);
+        $this->assertSame('企業を代表して、PARK で知り得た情報の守秘義務に同意します。', T::consent('ses', true)['text']);
         $this->assertSame('PARK で知り得た情報の守秘義務に同意します。', T::consent('ses', false)['text']);
         $this->assertSame('個人情報の取り扱いに同意し、登録の内容が事実であることを確認しました。', T::consent('eg')['text']);
     }
@@ -370,11 +370,11 @@ class RegistrationFoundationTest extends TestCase
     public function test_s1_34_status_shows_registration_counts_without_personal_data(): void
     {
         DB::table('users')->insert(['email' => 'status-prov@example.com', 'name' => '仮 人', 'role' => 'ses', 'active' => 1, 'created_at' => now_str(), 'updated_at' => now_str()]);
-        $this->artisan('park:status')->expectsOutputToContain('アカウント：参加中')->expectsOutputToContain('アカウント：仮登録')->expectsOutputToContain('SES代表担当者のいない会社')
+        $this->artisan('park:status')->expectsOutputToContain('アカウント：参加中')->expectsOutputToContain('アカウント：仮登録')->expectsOutputToContain('PARK窓口担当者のいない企業')
             ->expectsOutputToContain('本登録の日時が無い')->doesntExpectOutputToContain('status-prov@example.com')->assertExitCode(0);
         $json = json_decode($this->runStatusJson(), true);
         $this->assertSame(0, $json['アカウント：パスワードがあるのに本登録の日時が無い（0 のはず）']);
-        $this->assertGreaterThanOrEqual(1, $json['アカウント：仮登録（期限切れ）']);
+        $this->assertGreaterThanOrEqual(1, $json['アカウント：仮登録中（期限切れ）']);
     }
 
     private function runStatusJson(): string

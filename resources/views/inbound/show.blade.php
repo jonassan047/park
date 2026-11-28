@@ -10,12 +10,12 @@
 @if($m->case_mail_id)<dt>案内メール</dt><dd>@if($cm)<a href="{{ url('/cases/'.$m->case_id.'#mails') }}">案内メールの記録</a>（{{ fmt_dt($cm->sent_at) }}）@else案内メールの記録はありません。@endif</dd>@endif
 @if($isAdmin)
 <dt>状態</dt><dd>{{ \App\Services\Inbound::STATUSES[$m->status] ?? $m->status }}@if($m->match_by)（{{ \App\Services\Inbound::MATCH_BY[$m->match_by] ?? $m->match_by }}）@endif</dd>
-<dt>会社</dt><dd>{{ $m->ses_name ?: '—' }}</dd>
+<dt>企業</dt><dd>{{ $m->ses_name ?: '—' }}</dd>
 <dt>宛先</dt><dd>{{ $m->to_addrs ?: '—' }}</dd>
 @if($m->note)<dt>メモ</dt><dd>{{ $m->note }}</dd>@endif
 @endif
 </dl>
-@if($m->masked)<p class="muted">ほかの会社のエンジニアの返信なので、氏名・ふりがな・メールアドレス・電話番号は伏せています。</p>@endif
+@if($m->masked)<p class="muted">ほかの企業のエンジニアの返信なので、氏名・ふりがな・メールアドレス・電話番号は伏せています。</p>@endif
 <h3>本文</h3>
 <p>{!! nl2br(e($m->body_text)) !!}</p>
 @if($m->files)
@@ -45,7 +45,7 @@
 @if($isAdmin)
 @if($m->status === 'linked')
 <x-card title="紐付け">
-<p>この返信は、{{ $sourceName ?: '（会社なし）' }} の担当者に見えています（受注 SES）。</p>
+<p>この返信は、{{ $sourceName ?: '（企業なし）' }} の担当者に見えています（受注 SES）。</p>
 @if($notifyName)<p>お知らせは、案内メールを送った {{ $notifyName }} の担当者に届きました。</p>@endif
 <x-post :action="'/inbound/'.$m->id.'/unlink'" label="紐付けを外す" cls="ghost small" confirm="紐付けを外します。担当者からは見えなくなります。よろしいですか？" />
 </x-card>
@@ -60,14 +60,14 @@
   @if(!$search['case'])<p class="empty">その案件 ID の案件は見つかりません。</p>
   @else
   <p><a href="{{ url('/cases/'.$search['case']->id) }}">{{ $search['case']->title }}</a> <x-code :v="$search['case']->code" /> の案内メール</p>
-  <x-table :head="['エンジニア', '所属の会社', '送った日', '']" :count="$search['mails']->count()" empty="この案件の案内メールはまだありません。">
+  <x-table :head="['エンジニア', '所属の企業', '送った日', '']" :count="$search['mails']->count()" empty="この案件の案内メールはまだありません。">
   @foreach($search['mails'] as $row)<tr><td>{{ $row->eg_name }} <x-code :v="$row->eg_code" /></td><td>{{ $row->eg_ses_name ?: '—' }}</td><td>{{ fmt_dt($row->sent_at) }}</td>
   <td><a class="btn small" href="{{ url('/inbound/'.$m->id.'?code='.urlencode($search['code']).'&pick='.$row->id) }}">これを選ぶ</a></td></tr>@endforeach
   </x-table>
   @if($search['pick'])
   <div class="flash warn">
-  <p>この返信は、{{ $search['sourceName'] ? $search['sourceName'].' の担当者に見えるようになります（受注 SES）。' : '受注 SES がないので、だれにも見えません。' }}選び間違えると、ほかの会社に見えてしまいます。よく確かめてください。</p>
-  @if($search['notifyName'])<p>お知らせは、案内メールを送った {{ $search['notifyName'] }} の担当者に届きます（見える会社と違います）。</p>@endif
+  <p>この返信は、{{ $search['sourceName'] ? $search['sourceName'].' の担当者に見えるようになります（受注 SES）。' : '受注 SES がないので、だれにも見えません。' }}選び間違えると、ほかの企業に見えてしまいます。よく確かめてください。</p>
+  @if($search['notifyName'])<p>お知らせは、案内メールを送った {{ $search['notifyName'] }} の担当者に届きます（見える企業と違います）。</p>@endif
   <p>選んだ案内メール：{{ $search['pick']->eg_name }}（{{ fmt_dt($search['pick']->sent_at) }} に送信）</p>
   <x-post :action="'/inbound/'.$m->id.'/link'" label="紐付ける" :fields="['case_mail_id' => $search['pick']->id, 'case_id' => $search['case']->id]" />
   </div>

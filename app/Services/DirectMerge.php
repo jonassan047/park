@@ -183,7 +183,7 @@ class DirectMerge
         // 3. お知らせ（画面だけ。メールは送らない。D15）
         $engIds = $plan['engineers.ses_id'] ?? [];
         foreach ($engIds as $eid) {
-            N::toEg($eid, '所属の会社が「'.self::MRSY_NAME.'」になりました', '所属の会社が「'.self::MRSY_NAME.'」になりました。連絡は '.self::MRSY_NAME.' のご担当者へ。', '/eg', false, self::KIND);
+            N::toEg($eid, '所属の企業が「'.self::MRSY_NAME.'」になりました', '所属の企業が「'.self::MRSY_NAME.'」になりました。連絡は '.self::MRSY_NAME.' のご担当者へ。', '/eg', false, self::KIND);
         }
         if ($engIds) {
             N::toSes($m, '管理者の直属だった '.count($engIds).' 名のエンジニアが、貴社の所属になりました', '管理者の直属だった '.count($engIds).' 名のエンジニアが、貴社の所属になりました。エンジニアの一覧からご確認ください。', '/ses/engineers', false, self::KIND);

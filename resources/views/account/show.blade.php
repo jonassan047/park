@@ -7,11 +7,11 @@
 @endphp
 <div class="grid2">
 <x-card title="基本"><p><a href="{{ url('/account/profile') }}">登録情報を見る</a></p>
-{{-- 自分の ID。管理者は AD-、担当者は ST-（と会社の SE-）、エンジニア（兼任の人も）は EG- --}}
-<p>ID：@if($u->role === 'admin')<x-code :v="$u->admin_code" />@elseif($u->role === 'ses')<x-code :v="$u->staff_code" />　会社：<x-code :v="DB::table('ses_companies')->where('id', $u->ses_id)->value('code')" />@endif
+{{-- 自分の ID。管理者は AD-、担当者は ST-（と企業の SE-）、エンジニア（兼任の人も）は EG- --}}
+<p>ID：@if($u->role === 'admin')<x-code :v="$u->admin_code" />@elseif($u->role === 'ses')<x-code :v="$u->staff_code" />　企業：<x-code :v="DB::table('ses_companies')->where('id', $u->ses_id)->value('code')" />@endif
 @if($u->engineer_id || $u->role === 'eg')@if($u->role !== 'eg')　@endif<x-code :v="DB::table('engineers')->where('id', $u->engineer_id)->value('code')" />@endif</p>
 @if(is_dual())@php
-    // 兼任の立場の名前（管理者・SES代表担当者か一般担当者（会社名）・エンジニア の順）
+    // 兼任の立場の名前（管理者・PARK窓口担当者か一般担当者（企業名）・エンジニア の順）
     $dualRow = DB::table('users')->find($u->id);
     $dualNames = collect(\App\Services\Workflow::rolesOf($dualRow))->map(fn ($r) => $r === 'ses' ? staff_kind($dualRow).'（'.DB::table('ses_companies')->where('id', $dualRow->ses_id)->value('name').'）' : lbl('role', $r))->implode('・');
 @endphp<p class="muted">このアカウントの立場：{{ $dualNames }}</p>@endif
@@ -27,7 +27,7 @@
 @if($u->role === 'admin')
 <x-field label="企業名" name="company_name" :value="$u->company_name" hint="メールの差出人の名前にも使います。" />
 @elseif($u->role === 'ses')
-<p class="muted">SES名：{{ $sesName }}（企業名は、SES代表担当者が「SES」の画面の会社情報で直します）</p>
+<p class="muted">企業正式名称：{{ $sesName }}（企業名は、PARK窓口担当者が「SES」の画面の企業情報で直します）</p>
 @endif
 @unless($u->role === 'eg')
 <x-field label="所属・役職" name="position" :value="$u->position" />

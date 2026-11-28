@@ -1,4 +1,4 @@
-@extends('layouts.app', ['title' => 'エンジニアの仮登録'])
+@extends('layouts.app', ['title' => 'エンジニアの仮登録', 'ttlBack' => ($sesFixed ?? null) ? '/admin/ses/'.$sesFixed['id'] : list_url('engineers')])
 @section('content')
 <p class="muted">姓・名・メールアドレスの3つを入れて、仮登録します。ご本人に仮登録のご案内（7日間有効のリンク）が届き、住所・電話などはご本人が本登録で入れます。</p>
 <x-card><form method="post" action="{{ url('/engineers') }}">@csrf

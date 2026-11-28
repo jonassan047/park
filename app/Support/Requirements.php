@@ -20,12 +20,12 @@ class Requirements
     const OPT = 'opt';
 
     // 立場の名前（画面・メールで使う）
-    const ROLE_NAMES = ['admin' => '管理者', 'rep' => 'SES代表担当者', 'staff' => '一般担当者', 'eg' => 'エンジニア'];
+    const ROLE_NAMES = ['admin' => '管理者', 'rep' => 'PARK窓口担当者', 'staff' => '一般担当者', 'eg' => 'エンジニア'];
 
     // 同意の入力欄の名前（管理者は同意なし）
     const CONSENT_KEYS = ['rep' => 'agree', 'staff' => 'agree', 'eg' => 'consent'];
 
-    // 立場の種類：admin・rep（SES代表担当者）・staff（一般担当者）・eg
+    // 立場の種類：admin・rep（PARK窓口担当者）・staff（一般担当者）・eg
     public static function kind(string $role, bool $isRep): string
     {
         return $role === 'ses' ? ($isRep ? 'rep' : 'staff') : $role;
@@ -42,8 +42,10 @@ class Requirements
                 return ['company_name' => $f('企業名', self::CONFIRM, 'users')] + $name + ['email' => $f('メールアドレス', self::VIEW, 'users')] + $kana(self::OPT)
                     + ['phone' => $f('電話番号', self::SELF, 'users'), 'postal_code' => $f('郵便番号', self::OPT, 'users'), 'address' => $f('住所', self::OPT, 'users'), 'position' => $f('所属・役職', self::OPT, 'users')];
             case 'rep':
-                return ['ses_name' => $f('企業正式名称', self::CONFIRM, 'company')] + $name + ['email' => $f('メールアドレス', self::VIEW, 'users')] + $kana(self::OPT)
-                    + ['phone' => $f('会社の電話番号', self::SELF, 'company'), 'postal_code' => $f('会社の郵便番号', self::SELF, 'company'), 'address' => $f('会社の住所', self::SELF, 'company'),
+                // 企業代表者：ceo_same（1＝窓口に同じ／0＝記入）と、記入のときの氏名 ceo_name（入力欄は partials/ceo-field）
+                return ['ses_name' => $f('企業正式名称', self::CONFIRM, 'company'), 'ceo_same' => $f('企業代表者', self::CONFIRM, 'company'), 'ceo_name' => $f('企業代表者の氏名', self::OPT, 'company')]
+                    + $name + ['email' => $f('メールアドレス', self::VIEW, 'users')] + $kana(self::OPT)
+                    + ['phone' => $f('企業の電話番号', self::SELF, 'company'), 'postal_code' => $f('企業の郵便番号', self::SELF, 'company'), 'address' => $f('企業の住所', self::SELF, 'company'),
                         'position' => $f('所属・役職', self::OPT, 'users')];
             case 'staff':
                 return ['company_name' => $f('企業名', self::VIEW, 'company')] + $name + ['email' => $f('メールアドレス', self::VIEW, 'users')] + $kana(self::OPT)
@@ -77,7 +79,7 @@ class Requirements
         return self::ROLE_NAMES[self::kind($role, $isRep)];
     }
 
-    // その人が、会社の SES代表担当者（または次の人）か。権限の判定に使う
+    // その人が、企業の PARK窓口担当者（または次の人）か。権限の判定に使う
     public static function isRep(?object $u): bool
     {
         if (!$u || ($u->role ?? '') !== 'ses' || empty($u->ses_id)) return false;
@@ -90,12 +92,14 @@ class Requirements
         $isRep ??= self::isRep((object) array_merge((array) $u, ['role' => $role]));
         $kind = self::kind($role, $isRep);
         $out = [];
-        // 会社は、SES・担当者の立場のときだけ読む（担当者を兼ねる管理者が、管理者の立場のときは見ない）
+        // 企業は、SES・担当者の立場のときだけ読む（担当者を兼ねる管理者が、管理者の立場のときは見ない）
         $company = $u->ses_id && $role === 'ses' ? DB::table('ses_companies')->find($u->ses_id) : null;
         $eng = $kind === 'eg' && $u->engineer_id ? DB::table('engineers')->find($u->engineer_id) : null;
         foreach (self::fields($role, $isRep) as $key => $def) {
             $out[$key] = match (true) {
                 $key === 'ses_name' => $company->name ?? null,
+                // 企業代表者：窓口に同じなら '1'、記入で氏名があれば '0'、記入で氏名が空なら null（足りない）
+                $key === 'ceo_same' => !$company || ($company->ceo_same ?? 1) ? '1' : (trim((string) ($company->ceo_name ?? '')) !== '' ? '0' : null),
                 $def['store'] === 'company' => $company->$key ?? null,
                 $def['store'] === 'engineer' => $eng->$key ?? null,
                 $kind === 'eg' && in_array($key, ['name_sei', 'name_mei', 'kana_sei', 'kana_mei'], true) => ($eng->$key ?? null) ?: ($u->$key ?? null),
@@ -129,7 +133,7 @@ class Requirements
     {
         foreach (self::required($role, $isRep) as $key => $def) {
             if ($stores !== null && !in_array($def['store'], $stores, true)) continue;
-            if (!array_key_exists($key, $input)) continue;
+            if ($key === 'ceo_same' || !array_key_exists($key, $input)) continue; // 企業代表者は Registration::ceoInput で調べる
             $v = $input[$key];
             if ($v === null || (is_string($v) && trim($v) === '')) return $def['label'].'は空にできません。';
         }

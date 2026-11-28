@@ -9,10 +9,13 @@
         'postal_code' => '例：123-4567', 'position' => '例：営業部 部長'];
 @endphp
 @foreach($fields as $key => $def)
-    @continue(in_array($key, ['name_mei', 'kana_mei'], true))
+    @continue(in_array($key, ['name_mei', 'kana_mei', 'ceo_name'], true))
     @if($def['mode'] === 'view')
         {{-- 企業名が空のときは出さない --}}
         @if($only === null && !($key === 'company_name' && ($v[$key] ?? '') === ''))<p class="muted">{{ $def['label'] }}：{{ $v[$key] ?? '' }}@if($key === 'email')（変えるときは、登録した方にご連絡ください）@else（変えるときは、上位にご連絡ください）@endif</p>@endif
+    @elseif($key === 'ceo_same')
+        {{-- 企業代表者（PARK窓口担当者の本登録・足りない項目のとき）。窓口に同じ／記入 --}}
+        @if($show('ceo_same'))@include('partials.ceo-field', ['same' => $v['ceo_same'] ?? '0', 'name' => $v['ceo_name'] ?? null])@endif
     @elseif($key === 'name_sei')
         @if($show('name_sei') || $show('name_mei'))<div class="pair">
             <x-field label="氏名（姓）" name="name_sei" :value="$v['name_sei'] ?? null" required />

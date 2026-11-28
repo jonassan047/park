@@ -5,9 +5,9 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\HtmlString;
 
 const PARK_LABELS = [
-    'role' => ['admin' => '管理者', 'ses' => '担当者', 'eg' => 'エンジニア'], // 担当者＝SES代表担当者と一般担当者
-    'sesStatus' => ['pending' => '申込中', 'provisional' => '仮登録', 'active' => '参加中', 'suspended' => '停止', 'left' => '退会済み'],
-    'engStatus' => ['available' => '待機中', 'proposing' => '提案中', 'working' => '稼働中', 'unavailable' => '休止', 'left' => '退会済み'],
+    'role' => ['admin' => '管理者', 'ses' => '担当者', 'eg' => 'エンジニア'], // 担当者＝PARK窓口担当者と一般担当者
+    'sesStatus' => ['pending' => '申込済み', 'provisional' => '仮登録中', 'active' => '参加中', 'suspended' => '停止中', 'left' => '退会済み'],
+    'engStatus' => ['available' => '待機中', 'proposing' => '提案中', 'working' => '稼働中', 'unavailable' => '休止中', 'left' => '退会済み'],
     'caseStatus' => ['draft' => '下書き', 'open' => '募集中', 'filled' => '充足', 'closed' => '終了'],
     'offerStatus' => ['sent' => '配信済み', 'viewed' => '既読', 'declined' => '見送り', 'applied' => '応募'],
     'appStatus' => ['applied' => '応募', 'submitted' => '書類提出', 'doc_passed' => '書類通過', 'interview' => '面談調整', 'interviewed' => '面談済み', 'won' => '成約', 'rejected' => '見送り', 'withdrawn' => '辞退', 'note' => 'メモ'],
@@ -87,7 +87,7 @@ function is_left_row(string $kind, object $row): bool
     };
 }
 
-// 担当者の区分「SES代表担当者」「一般担当者」。代表は会社の rep_user_id の人だけ（交代の途中の次の人は、まだ一般担当者）。
+// 担当者の区分「PARK窓口担当者」「一般担当者」。窓口は企業の rep_user_id の人だけ（交代の途中の次の人は、まだ一般担当者）。
 // $s は rep_user_id を持つ会社の行（無ければ、その人の ses_id で読む）
 function staff_kind(object $u, ?object $s = null): string
 {
@@ -95,7 +95,7 @@ function staff_kind(object $u, ?object $s = null): string
     return \App\Support\Requirements::ROLE_NAMES[$s && (int) $s->rep_user_id === (int) $u->id ? 'rep' : 'staff'];
 }
 
-// 会社の中の担当者の並びの順位：0 SES代表担当者／1 次のSES代表担当者／2 一般担当者／3 兼任の管理者
+// 会社の中の担当者の並びの順位：0 PARK窓口担当者／1 次のPARK窓口担当者／2 一般担当者／3 兼任の管理者
 function staff_rank(object $u, object $s): int
 {
     if (($u->role ?? '') === 'admin') return 3;
@@ -145,17 +145,23 @@ function filter_left(\Illuminate\Support\Collection $list, string $kind, ?bool $
 
 // 人のアカウントの状態（1か所で決める。上から順に判定）：退会済み・停止・仮登録（心当たりなし／期限切れ）・仮登録・参加中。
 // 「期限切れ」は別の状態ではなく、仮登録の中の表示
+const PARK_ST_PROVISIONAL = '仮登録中';
+const PARK_ST_SUSPENDED = '停止中';
+const PARK_ST_ACTIVE = '参加中';
+const PARK_ST_LEFT = '退会済み';
+const PARK_ST_EXPIRED = '仮登録中（期限切れ）';
+
 function user_state(?object $u): string
 {
     if (!$u) return 'なし';
-    if (!empty($u->left_at)) return '退会済み';
-    if (!$u->active) return '停止';
+    if (!empty($u->left_at)) return PARK_ST_LEFT;
+    if (!$u->active) return PARK_ST_SUSPENDED;
     if (empty($u->registered_at)) {
-        if (!empty($u->reg_declined_at)) return '仮登録（心当たりなし）';
-        if (empty($u->token) || empty($u->token_expires) || $u->token_expires <= now_str()) return '仮登録（期限切れ）';
-        return '仮登録';
+        if (!empty($u->reg_declined_at)) return '仮登録中（心当たりなし）';
+        if (empty($u->token) || empty($u->token_expires) || $u->token_expires <= now_str()) return PARK_ST_EXPIRED;
+        return PARK_ST_PROVISIONAL;
     }
-    return '参加中';
+    return PARK_ST_ACTIVE;
 }
 
 // 仮登録の状態か（「仮登録」で始まる言葉）
@@ -173,7 +179,7 @@ function account_mail(?object $u): string
     $state = user_state($u);
     if (!is_provisional_state($state)) return $mail;
     if (!empty($u->reg_declined_at)) return $mail.'／有効期限：—（心当たりなしのため、リンクは無効）';
-    $expired = $state === '仮登録（期限切れ）';
+    $expired = $state === PARK_ST_EXPIRED;
     if (empty($u->token_expires)) return $mail.'／'.($expired ? '有効期限切れ（期限の記録なし）' : '有効期限：—');
     $at = fmt_dt($u->token_expires);
     return $mail.'／'.($expired ? "有効期限切れ（{$at} まで）" : "有効期限：{$at} まで");
@@ -183,12 +189,48 @@ function account_mail(?object $u): string
 // 退会済みのエンジニアは、ログインが無くても「退会済み」。ほかはアカウントの状態が基本。ログインの無い仮登録のエンジニアは「仮登録（未送信）」、兼任の人でエンジニアの立場の登録がまだなら付け足す
 function engineer_state(object $e, ?object $u): string
 {
-    if (($e->status ?? '') === 'left') return '退会済み';
-    if (!$u) return empty($e->registered_at) ? '仮登録（未送信）' : 'なし';
+    if (($e->status ?? '') === 'left') return PARK_ST_LEFT;
+    // 停止したエンジニアは、アカウントの有無にかかわらず「停止中」（稼働状況の欄には出さない）
+    if (!empty($e->suspended_at)) return PARK_ST_SUSPENDED;
+    if (!$u) return empty($e->registered_at) ? '仮登録中（未送信）' : 'なし';
     $s = user_state($u);
-    if ($s === '参加中' && empty($e->registered_at)) return '参加中（エンジニアの項目が未入力）';
+    if ($s === PARK_ST_ACTIVE && empty($e->registered_at)) return '参加中（エンジニアの項目が未入力）';
     return $s;
 }
+
+// エンジニアの稼働状況の札。退会済みは「—」（退会は登録状況で出す）
+function work_badge(object $e)
+{
+    if (($e->status ?? '') === 'left') return new HtmlString('—');
+    return badge('engStatus', $e->status ?? null);
+}
+
+// 状況の言葉の説明（欄外。resources/views/components/status-legend.blade.php が出す）。[見出し, [[値, 説明], …]]
+const PARK_STATUS_LEGEND = [
+    'ses' => ['参加状況', [
+        ['申込済み', '参加のお申し込みを受け付け、管理者の確認を待っています。'],
+        ['仮登録中', '管理者が確認し、PARK窓口担当者の本登録（ご案内から7日以内）を待っています。'],
+        ['参加中', 'PARK を使える状態です。'],
+        ['停止中', '管理者が一時的に止めています。この企業の担当者はログインできません（再開できます）。'],
+        ['退会済み', 'PARK をやめた企業です。記録だけ残ります。'],
+    ]],
+    'account' => ['登録状況', [
+        ['仮登録中', 'ご案内のメールを送り、本人の本登録を待っています。期限が切れたもの・心当たりなしと返されたものは、後ろに（ ）で書きます。'],
+        ['参加中', '本登録が済み、ログインできます。'],
+        ['停止中', '一時的にログインできなくしています（再開できます）。'],
+        ['退会済み', 'ログインできません。記録だけ残ります。'],
+    ]],
+    'account_eg' => ['登録状況', [
+        ['未送信', 'ログインのご案内をまだ送っていないエンジニアです。'],
+        ['エンジニアの項目が未入力', 'ログインはできますが、エンジニアとしての登録がまだです。'],
+    ]],
+    'work' => ['稼働状況', [
+        ['待機中', '案件を探しています。案件のご案内の候補に出ます。'],
+        ['提案中', '案件に応募して、選考が進んでいます（応募すると自動でこうなります）。'],
+        ['稼働中', '契約した案件で働いています（契約を登録すると自動でこうなります）。'],
+        ['休止中', '今は案件を受けません。ご案内の候補に出ません（本人か担当者が選びます）。'],
+    ]],
+];
 
 // エンジニアを停止するときの確認の文（エンジニアの詳細と SES の詳細で同じ文を使う）
 function engineer_stop_confirm(bool $working, int $inSelection): string
@@ -462,6 +504,81 @@ function list_url(string $kind): string
         'contracts' => ['admin' => '/admin/contracts', 'ses' => '/ses/contracts', 'eg' => '/eg'],
     ];
     return url($map[$kind][$role] ?? '/');
+}
+
+// 企業代表者の表示。「窓口に同じ」なら、いまの PARK窓口担当者の氏名（窓口が替われば表示も替わる）に「（窓口に同じ）」を添える。
+// 「記入」なら記入した氏名。ST- は、呼ぶ側が「窓口に同じ」のときだけ前に置く
+function ceo_label(object $s): string
+{
+    if (!isset($s->ceo_same) || $s->ceo_same) return (\App\Services\Registration::repName($s)[0] ?: '—').'（窓口に同じ）';
+    return trim((string) ($s->ceo_name ?? '')) !== '' ? (string) $s->ceo_name : '—';
+}
+
+// 題の右の［戻る］の戻り先。URL の文字（パスだけ）／null＝ひとつ前の画面（history）／false＝［戻る］を出さない（手続きの途中）
+// 画面ごとの @extends に 'back' を渡せば、そちらを使う（layouts/app.blade.php）。渡さない画面は、ここで決める
+function back_target(string $path)
+{
+    $role = auth()->user()->role ?? '';
+    if (preg_match('#^/(welcome|register/complete|eg/consent|login/role|two-factor(/.*)?)$#', $path)) return false;
+    // ログイン前の画面（ログイン中に開いても出さない）
+    if (preg_match('#^/(r|apply|invite|reset|forgot|setup)(/|$)#', $path)) return false;
+    // 仮登録の内容を直す画面：その人の親の画面へ
+    if (preg_match('#^/people/(\d+)/edit$#', $path, $m)) {
+        $t = DB::table('users')->where('id', $m[1])->first(['role', 'ses_id', 'engineer_id']);
+        if (!$t) return null;
+        if ($t->role === 'admin') return '/admin/admins/'.$m[1];
+        if ($t->role === 'eg' && $t->engineer_id) return '/engineers/'.$t->engineer_id;
+        if ($role === 'admin') return $t->ses_id ? '/admin/ses/'.$t->ses_id : '/admin/ses';
+        return '/ses/company';
+    }
+    if (preg_match('#^/admin/(reports|ai|admins|settings|audit|ses|engineers|providers|cases|applications|contracts|invoices|messages|mail|inbound)$#', $path)) return '/admin';
+    if ($path === '/admin/skills') return '/admin/engineers';
+    if ($path === '/admin/admins/new') return '/admin/admins';
+    if (preg_match('#^/admin/admins/(\d+)$#', $path)) return '/admin/admins';
+    if (preg_match('#^/admin/admins/(\d+)/edit$#', $path, $m)) return '/admin/admins/'.$m[1];
+    if ($path === '/admin/ses/new') return '/admin/ses';
+    if (preg_match('#^/admin/ses/(\d+)$#', $path)) return '/admin/ses?view=company';
+    if (preg_match('#^/admin/ses/(\d+)/(edit|approve|users/new|users/\d+)$#', $path, $m)) return '/admin/ses/'.$m[1];
+    if (preg_match('#^/admin/mail/\d+$#', $path)) return '/admin/mail';
+    // プロバイダー（管理者・SES 共通）
+    if (preg_match('#^/(admin|ses)/providers$#', $path, $m)) return '/'.$m[1];
+    if (preg_match('#^/(admin|ses)/providers/(cases|new|\d+)$#', $path, $m)) return '/'.$m[1].'/providers';
+    if (preg_match('#^/admin/providers/(\d+)/edit$#', $path, $m)) return '/admin/providers/'.$m[1];
+    // SES
+    if (preg_match('#^/ses/(engineers|cases|applications|contracts|invoices|company)$#', $path)) return '/ses';
+    if (preg_match('#^/ses/company/(edit|users/new)$#', $path)) return '/ses/company';
+    // エンジニア
+    if (preg_match('#^/eg/(offers|applications)$#', $path)) return '/eg';
+    // 案件
+    if ($path === '/cases/new' || preg_match('#^/cases/\d+$#', $path)) return list_url('cases');
+    if (preg_match('#^/cases/(\d+)/threads/\d+$#', $path, $m)) return $role === 'eg' ? '/cases/'.$m[1] : '/threads';
+    if (preg_match('#^/cases/(\d+)/#', $path, $m)) return '/cases/'.$m[1];
+    if (preg_match('#^/searches/(\d+)$#', $path, $m)) {
+        $cid = DB::table('case_searches')->where('id', $m[1])->value('case_id');
+        return $cid ? '/cases/'.$cid : null;
+    }
+    if (preg_match('#^/searches/(\d+)/#', $path, $m)) return '/searches/'.$m[1];
+    // エンジニア
+    if (preg_match('#^/engineers/\d+$#', $path)) return $role === 'eg' ? '/eg' : list_url('engineers');
+    if (preg_match('#^/engineers/(\d+)/messages$#', $path, $m)) return $role === 'eg' ? '/eg' : '/engineers/'.$m[1];
+    if (preg_match('#^/engineers/(\d+)/(edit|skills|projects/.+|profile|intro)$#', $path, $m)) return '/engineers/'.$m[1];
+    // 選考・契約
+    if (preg_match('#^/applications/\d+$#', $path)) return list_url('applications');
+    if (preg_match('#^/interviews/(\d+)$#', $path, $m)) {
+        $aid = DB::table('interviews')->where('id', $m[1])->value('application_id');
+        return $aid ? '/applications/'.$aid : null;
+    }
+    if (preg_match('#^/contracts/\d+$#', $path)) return list_url('contracts');
+    // 受信メール・連絡メール・プロバイダーへの返信・アカウント・使い方
+    if (preg_match('#^/inbound/\d+$#', $path)) return $role === 'admin' ? '/admin/inbound' : '/inbound';
+    if (preg_match('#^/mails/\d+$#', $path)) return '/mails';
+    if (preg_match('#^/provider-mails/(\d+)$#', $path, $m)) {
+        $cid = DB::table('provider_mails')->where('id', $m[1])->value('case_id');
+        return $cid ? '/cases/'.$cid : null;
+    }
+    if ($path === '/account/profile') return '/account';
+    if (preg_match('#^/manual/.+$#', $path)) return '/manual';
+    return null;
 }
 
 // あいうえお順（ふりがな。無い人は名前）に並べる。カタカナはひらがなにそろえ、ふりがなも名前も無いものは最後

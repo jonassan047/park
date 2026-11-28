@@ -13,11 +13,11 @@
 @php $next = ['applied' => 'スキルシートを提出', 'doc_passed' => '面談を設定', 'interviewed' => '成約 or 次の面談']; @endphp
 <x-stats :items="[['SES（参加中）', $counts['ses'], '申込 '.$counts['sesPending'].'・仮登録 '.$counts['sesInvited'], '/admin/ses?view=company'], ['エンジニア', $counts['eng'], '待機 '.$counts['engAvail'], '/admin/engineers'],
     ['案件（募集中）', $counts['cases'], '全体 '.$counts['casesAll']], ['選考中', $counts['apps']], ['稼働中の契約', $counts['contracts']], ['今月の成功報酬（税別）', yen($revenue), this_month()],
-    ['請求（未入金）', $counts['invUnpaid'].'件', '発行済み・入金待ち'], ['仮登録', $counts['invited'].'人', '管理者・担当者・エンジニア']]" />
+    ['請求（未入金）', $counts['invUnpaid'].'件', '発行済み・入金待ち'], ['仮登録中', $counts['invited'].'人', '管理者・担当者・エンジニア']]" />
 @if($unreviewedSkills)<div class="flash warn">案件などから自動で追加された、確認待ちの技術が {{ $unreviewedSkills }} 件あります。<a href="{{ url('/admin/skills') }}">技術マスタで分類を確かめる</a></div>@endif
 <div class="cols"><div>
 @if($pendingSes->count())
-<x-card title="参加の申し込み（承認待ち）"><x-table :head="['会社', '担当', '申込日', '']">
+<x-card title="参加の申し込み（承認待ち）"><x-table :head="['企業', '担当', '申込日', '']">
 @foreach($pendingSes as $s)<tr><td><x-code :v="$s->code" />　{{ $s->name }}</td><td>{{ $s->contact_name }}</td><td>{{ fmt_date($s->created_at) }}</td><td><a href="{{ url('/admin/ses/'.$s->id) }}">確認する</a></td></tr>@endforeach
 </x-table></x-card>
 @endif
@@ -31,12 +31,12 @@
 </div><div>
 <x-card title="登録の状況">
 @if($onlyMe)<p class="muted">まだ誰も登録していません。上の手順から始めます。</p>@endif
-<x-table :head="['立場', '名前', '所属', '状態', '最後のログイン', '']" :count="count($invites)">
+<x-table :head="['立場', '名前', '所属', '登録状況', '最後のログイン', '']" :count="count($invites)">
 @foreach($invites as $v)<tr><td>{{ $v['role'] }}</td><td>{{ $v['name'] }}@if(!empty($v['mail']))<br><small class="muted">{{ $v['mail'] }}</small>@endif</td><td>{{ $v['org'] ?: '—' }}</td>
 <td>{{ $v['state'] }}@if($v['until'])<span class="muted">（{{ $v['until'] }} まで）</span>@endif</td><td>{{ fmt_dt($v['last_login']) }}</td>
 <td>@if($v['resend'])<x-post :action="'/people/'.$v['resend'].'/resend'" label="送り直し" cls="ghost small" />@endif
 @if($v['open'])<a class="btn small" href="{{ url('/admin/ses/'.$v['open']) }}">開く</a>@endif</td></tr>@endforeach
-</x-table></x-card>
+</x-table><x-status-legend kind="account" /></x-card>
 <x-card title="応募 → 成約（全体）">@if(($funnel[0][1] ?? 0) === 0)<p class="empty">まだ応募はありません。</p>@else<x-funnel :rows="$funnel" />@endif</x-card>
 <x-card title="面談の予定"><x-table :head="['日時', '案件', 'エンジニア', '']" :count="$upcoming->count()" empty="ありません。">
 @foreach($upcoming as $iv)<tr><td>{{ fmt_dt($iv->scheduled_at) }}</td><td><x-code :v="$iv->case_code" />　{{ $iv->title }}</td><td><x-code :v="$iv->eg_code" />　{{ $iv->eg_name }}</td><td><a href="{{ url('/interviews/'.$iv->id) }}">Q&A</a></td></tr>@endforeach

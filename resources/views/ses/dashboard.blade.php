@@ -5,7 +5,7 @@
 @if(!$engs->count())<x-card title="エンジニアを登録しましょう"><p>貴社のエンジニアを登録すると、合う案件が届くようになります。</p><a class="btn small" href="{{ url('/engineers/new') }}">エンジニアを登録する</a></x-card>@endif
 <x-card><x-table :head="['', '所属エンジニア', '稼働中', '提案可', '選考中', '直近実績（今月）', '年度累計（4月から）']">
 @foreach($rows as $label => $n)<tr><th>{{ $label }}</th>@foreach($n as $i => $v)<td>{{ $v }}{{ $i < 3 ? '名' : '件' }}</td>@endforeach</tr>@endforeach
-</x-table><p class="muted">グループ内は、PARK に参加している SES 企業全体の合計です。実績は成約した件数です。</p></x-card>
+</x-table><p class="muted">グループ内は、PARK に参加している SES 企業全体の合計です。実績は成約した件数です。稼働中・提案可（待機中と提案中）は、エンジニアの稼働状況で数えます。</p></x-card>
 @php
     $isNew = fn ($at) => $at && strtotime($at) >= strtotime('-3 days'); // 3日以内に動きがあったもの
     $secs = [
