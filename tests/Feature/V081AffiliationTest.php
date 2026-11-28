@@ -366,7 +366,7 @@ class V081AffiliationTest extends TestCase
     // T19：版
     public function test_t19_version(): void
     {
-        $this->assertSame('v0.23.0', config('park.version'));
-        $this->get('/login')->assertOk()->assertSee('v0.23.0');
+        $this->assertSame('v0.23.1', config('park.version'));
+        $this->get('/login')->assertOk()->assertSee('v0.23.1');
     }
 }

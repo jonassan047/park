@@ -485,7 +485,8 @@ class V0200LeftHiddenTest extends TestCase
     {
         foreach ([[self::SES1, '/ses/engineers?left=1'], [self::STAFF, '/ses/company?left=1'], [self::ADMIN, "/admin/ses/{$this->a}?left=1"]] as [$who, $url]) {
             $tr = $this->row($this->page($who, $url), '架空 退会未送信');
-            $this->assertStringContainsString('<td>退会済み<br>', $tr, $url);
+            // 企業情報の画面は、状況を名前の下の段に出す（2026-11-28）
+            $this->assertStringContainsString($url === '/ses/company?left=1' ? '<span>退会済み</span>' : '<td>退会済み<br>', $tr, $url);
             $this->assertStringNotContainsString('仮登録', $tr, $url);
             foreach (['invite', 'delete', 'suspend'] as $op) $this->assertStringNotContainsString("/engineers/{$this->egNoLogin}/$op", $tr, $url);
         }

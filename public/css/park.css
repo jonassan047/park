@@ -500,3 +500,13 @@ header.top .subtabs .wrap { display: flex; gap: 4px; flex-wrap: wrap; justify-co
 .ceo-field .ceo-opt input { width: auto; margin: 0; }
 .ceo-field .ceo-name { flex: 1 1 220px; min-width: 0; width: auto; }
 .ceo-field small { display: block; margin-top: 4px; }
+/* SES の企業情報の画面：エンジニアは1段目に ID と名前、2段目に状況。右にボタン（2026-11-28） */
+.eg-who { width: 100%; }
+.eg-name { font-weight: 700; }
+.eg-state { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 4px; font-size: .9em; }
+.eg-state small { overflow-wrap: anywhere; }
+.eg-ops > div { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; min-width: 190px; }
+.cols > * { min-width: 0; }
+@media (max-width: 560px) { .eg-ops > div { flex-direction: column; align-items: stretch; min-width: 0; text-align: center; } }
+.legend-fold { margin: 4px 0 16px; font-size: .95em; }
+.legend-fold summary { cursor: pointer; color: var(--sub); }

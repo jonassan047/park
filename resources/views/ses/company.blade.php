@@ -1,7 +1,9 @@
 @extends('layouts.app', ['title' => id_title($s->code, $s->name, $s->status === 'left'), 'wide' => true])
 @section('content')
+{{-- 2026-11-28 TEZZO：ダッシュボードと同じく企業名の下に帯。帯が「企業情報」なので、下のカードの題は出さない --}}
+<div class="role-hero slim" style="background-image:url('{{ asset('img/hero.jpg') }}')"><p>企業情報</p></div>
 <div class="cols"><div>
-<x-card title="企業情報"><x-slot:actions><a class="btn ghost small" href="{{ url('/account#password') }}">パスワード変更</a>
+<x-card><x-slot:actions><a class="btn ghost small" href="{{ url('/account#password') }}">パスワード変更</a>
 @if($isRep)<a class="btn small" href="{{ url('/ses/company/edit') }}">編集</a>@endif
 </x-slot:actions><dl class="dl">
 <dt>ID</dt><dd><x-code :v="$s->code" /></dd>
@@ -11,7 +13,6 @@
 <dt>人数</dt><dd>{{ $s->employees ?? '—' }}</dd><dt>得意な分野</dt><dd>{{ $s->strengths ?: '—' }}</dd><dt>ひとこと</dt><dd>{!! nl2br(e($s->message)) ?: '—' !!}</dd>
 <dt>守秘義務への同意</dt><dd>{{ fmt_dt($s->agreed_at) }}</dd><dt>参加日</dt><dd>{{ fmt_date($s->joined_at) }}</dd>
 </dl>
-<x-status-legend kind="ses" />
 </x-card>
 </div><div>
 @include('partials.left-toggle')
@@ -35,27 +36,30 @@ $isAdminRow = $u->role === 'admin'; // 担当者を兼ねている管理者。�
 <x-post :action="$base.'/delete'" label="退会" cls="danger small" :confirm="$u->name.' さんを退会済みにします。ログインできなくなり、元に戻せません（記録は残ります）。よろしいですか？'" />@endif</td></tr>@endforeach
 </x-table>
 @endif
-<x-status-legend kind="account" />
 @include('partials.left-note', $staffLeft)
 </x-card>
 <x-card title="エンジニア">@if($s->status === 'active')<x-slot:actions><a class="btn small" href="{{ url('/engineers/new') }}">エンジニアを登録</a></x-slot:actions> @endif
 @if($engs->count() || !$egLeft['hidden'])
-<x-table :head="['ID', '名前', '稼働状況', '登録状況', '希望', '']" :count="$engs->count()">
-@foreach($engs as $e)@php $egBase = '/engineers/'.$e->id; $back = ['back' => 'ses']; @endphp<tr @class(['is-left' => is_left_row('eg', $e)])><td><x-code :v="$e->code" /></td><td>{{ $e->name }}</td><td>{{ work_badge($e) }}</td><td>{{ $e->account }}<br><small class="muted">{{ $e->mail }}</small></td><td>{{ man($e->desired_price) }}</td>
-<td>@if(is_provisional_state($e->account) && $e->status !== 'left')<x-post :action="$egBase.'/invite'" label="送り直し" cls="ghost small" />
+<x-table :head="['', '']" :count="$engs->count()">
+@foreach($engs as $e)@php $egBase = '/engineers/'.$e->id; $back = ['back' => 'ses']; @endphp<tr @class(['is-left' => is_left_row('eg', $e)])><td class="eg-who"><x-code :v="$e->code" />　<span class="eg-name">{{ $e->name }}</span><div class="eg-state">@if($e->status !== 'left'){{ work_badge($e) }}@endif @if($e->account !== PARK_ST_ACTIVE)<span>{{ $e->account === 'なし' ? 'ログインなし' : $e->account }}</span>@endif @if($e->mail !== '—')<small class="muted">{{ $e->mail }}</small>@endif</div></td>
+<td class="eg-ops"><div>@if(is_provisional_state($e->account) && $e->status !== 'left')<x-post :action="$egBase.'/invite'" label="送り直し" cls="ghost small" />
 @if($e->login_id)<a class="btn ghost small" href="{{ url('/people/'.$e->login_id.'/edit') }}">仮登録の内容を直す</a>
 <x-post :action="'/people/'.$e->login_id.'/cancel'" label="取り消し" cls="danger small" confirm="この仮登録を取り消します。エンジニアの行も消え、元に戻せません。よろしいですか？" />@endif @endif
 @if($e->status !== 'left')@if($e->suspended_at)<x-post :action="$egBase.'/resume'" label="再開" cls="small" :fields="$back" confirm="このエンジニアを再開します。ログインでき、案件の配信の候補にも出るようになります。" />
 @else<x-post :action="$egBase.'/suspend'" label="停止" cls="ghost small" :fields="$back" :confirm="engineer_stop_confirm(isset($working[$e->id]), (int) ($inSel[$e->id] ?? 0))" />@endif
 <x-post :action="$egBase.'/delete'" label="退会" cls="danger small" :fields="$back" confirm="このエンジニアを退会済みにします。ログインできなくなり、元に戻せません（記録は残ります）。よろしいですか？" />@endif
-<a class="btn small" href="{{ url($egBase) }}">詳細</a></td></tr>@endforeach
+<a class="btn small" href="{{ url($egBase) }}">詳細</a></div></td></tr>@endforeach
 </x-table>
 @endif
-<x-status-legend kind="work" /><x-status-legend kind="account" :eg="true" />
 @include('partials.left-note', $egLeft)
 </x-card>
 <x-card title="請求"><x-table :head="['請求書番号', '月', '合計', '状態', '']" :count="$invs->count()">
 @foreach($invs as $i)<tr><td><x-code :v="$i->code" /></td><td>{{ $i->period }}</td><td>{{ yen($i->total) }}</td><td>{{ badge('invoiceStatus', $i->status) }}</td><td><a class="btn small" href="{{ url('/invoices/'.$i->id) }}">詳細</a></td></tr>@endforeach
 </x-table></x-card>
 </div></div>
+{{-- 状況の言葉の説明は、画面の下に1か所だけ（開くと出る） --}}
+<details class="legend-fold noprint"><summary>状況の言葉の説明（参加状況・登録状況・稼働状況）</summary>
+<p class="muted">エンジニアの欄では、登録状況が「参加中」の人は表示を省いています。</p>
+<x-status-legend kind="ses" /><x-status-legend kind="account" :eg="true" /><x-status-legend kind="work" />
+</details>
 @endsection
