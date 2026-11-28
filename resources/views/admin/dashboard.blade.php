@@ -9,7 +9,6 @@
 @endforeach
 </tbody></table></x-card>
 @endif
-<x-todo />
 @php $next = ['applied' => 'スキルシートを提出', 'doc_passed' => '面談を設定', 'interviewed' => '成約 or 次の面談']; @endphp
 <x-stats :items="[['SES（参加中）', $counts['ses'], '申込 '.$counts['sesPending'].'・仮登録 '.$counts['sesInvited'], '/admin/ses?view=company'], ['エンジニア', $counts['eng'], '待機 '.$counts['engAvail'], '/admin/engineers'],
     ['案件（募集中）', $counts['cases'], '全体 '.$counts['casesAll']], ['選考中', $counts['apps']], ['稼働中の契約', $counts['contracts']], ['今月の成功報酬（税別）', yen($revenue), this_month()],

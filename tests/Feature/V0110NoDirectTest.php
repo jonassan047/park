@@ -307,7 +307,7 @@ class V0110NoDirectTest extends TestCase
             $this->assertSame(1, DB::table('app_notifications')->where('user_id', $uid)->where('title', 'like', '管理者が貴社の案件として登録しました：N1 A の案件%')->count(), $email);
             $this->assertSame(1, DB::table('mail_outbox')->where('to_email', $email)->where('subject', 'like', '%管理者が貴社の案件として登録しました：N1 A の案件%')->count(), $email);
         }
-        $this->as(self::SES1, 'ses')->get('/ses/cases')->assertOk()->assertSee('新しい案件「N1 A の案件」');
+        $this->assertStringContainsString('新しい案件「N1 A の案件」', $this->todoText(self::SES1));
         // 受注 SES の担当者が0人のときは、管理者にも知らせる
         DB::table('users')->where('ses_id', $this->sesId(self::SES3))->where('role', 'ses')->update(['active' => 0]);
         $this->as(self::ADMIN, 'admin')->post('/cases', ['title' => 'N2 担当者なし', 'source_ses_id' => $this->sesId(self::SES3), 'status' => 'open'])->assertSessionHas('flash.type', 'ok');

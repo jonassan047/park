@@ -58,7 +58,9 @@ class SesController extends Controller
     public function engineers(Request $r)
     {
         $list = DB::table('engineers as e')->where('e.ses_id', $r->user()->ses_id)->select('e.*')
-            ->selectSub(DB::table('engineer_projects')->whereColumn('engineer_id', 'e.id')->selectRaw('count(*)'), 'projs')->get();
+            ->selectSub(DB::table('engineer_projects')->whereColumn('engineer_id', 'e.id')->selectRaw('count(*)'), 'projs')
+            ->selectSub(DB::table('contracts')->whereColumn('engineer_id', 'e.id')->selectRaw('count(*)'), 'wins') // 実績＝成約の件数
+            ->selectSub(DB::table('applications')->whereColumn('engineer_id', 'e.id')->selectRaw('count(*)'), 'apps')->get(); // 応募の件数
         [$list, $left] = filter_left($list, 'eg'); // 自社の行の中から、退会済みは選んだときだけ出す
         $order = list_order(['reg', 'kana']); // 自社だけなので「企業ごと」は無い
         [$list, $pager] = page_slice($order === 'kana' ? sort_kana($list) : sort_reg($list, 'code')); // 1ページ 20 件
@@ -77,6 +79,7 @@ class SesController extends Controller
         }
         $egIds = $list->pluck('id');
         return view('ses.engineers', [
+            's' => DB::table('ses_companies')->find($r->user()->ses_id),
             'list' => $list, 'pager' => $pager, 'left' => $left,
             // 連絡メールを送れる人（行にチェックを出す）。判定は DirectMail の1か所
             'mailable' => \App\Services\DirectMail::engineerTargets($r->user(), $egIds->all())['ok'],

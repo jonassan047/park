@@ -371,7 +371,9 @@ class PostalAddressTest extends TestCase
         // 一覧・名前を伏せたスキルシートには出ない
         $this->admin()->get('/admin/engineers')->assertOk()->assertDontSee('山田の住所ビル');
         $this->get('/engineers/1/sheet?anon=1')->assertOk()->assertDontSee('山田の住所ビル');
-        $this->as('ses1@park.example')->get('/ses/engineers')->assertOk()->assertDontSee('山田の住所ビル');
+        // 自社の一覧には住所の列がある（2026-11-28 TEZZO の指定の並び）。他社の一覧には出ない
+        $this->as('ses1@park.example')->get('/ses/engineers')->assertOk()->assertSee('山田の住所ビル');
+        $this->as('ses2@park.example')->get('/ses/engineers')->assertOk()->assertDontSee('山田の住所ビル');
     }
 
     public function test_v5_4_no_address_in_audit_notifications_or_mail(): void

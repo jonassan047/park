@@ -329,7 +329,7 @@ class V0190IntroTest extends TestCase
 
     public function test_t36_version(): void
     {
-        $this->assertSame('v0.23.1', config('park.version'));
-        $this->get('/login')->assertOk()->assertSee('v0.23.1');
+        $this->assertSame('v0.24.0', config('park.version'));
+        $this->get('/login')->assertOk()->assertSee('v0.24.0');
     }
 }

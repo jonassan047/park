@@ -60,4 +60,11 @@ abstract class TestCase extends BaseTestCase
         preg_match('/(\d{6})/', $subject, $m);
         return $m[1] ?? '';
     }
+
+    // やること（Todo）の中身を1つの文にする。画面の上の箱は 2026-11-28 に外した
+    protected function todoText(string $email): string
+    {
+        $u = \App\Models\User::where('email', $email)->firstOrFail();
+        return implode("\n", array_map(fn ($t) => $t['text'].' '.$t['do'], \App\Services\Todo::for($u)));
+    }
 }

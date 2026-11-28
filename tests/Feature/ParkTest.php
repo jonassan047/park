@@ -297,10 +297,11 @@ class ParkTest extends TestCase
         // 返事をした本人（エンジニア）にも「受け付けました」のメールが届く
         $this->assertDatabaseHas('mail_outbox', ['to_email' => 'eg1@park.example', 'kind' => 'reply-ack']);
         $this->get('/r/'.str_repeat('0', 32).'/question')->assertNotFound();
-        // 「今やること」に出る
-        $this->as('ses1@park.example')->get('/ses/cases')->assertSee('やること（')->assertSee('山田 太郎 さんから質問');
-        $this->as('eg1@park.example')->get('/eg')->assertSee('今やること');
-        $this->as('admin@park.example')->get('/admin')->assertSee('今やること');
+        // やることの中身には入る。画面の上の箱は出さない（2026-11-28 TEZZO）
+        $this->assertStringContainsString('山田 太郎 さんから質問', $this->todoText('ses1@park.example'));
+        foreach (['ses1@park.example' => '/ses/cases', 'eg1@park.example' => '/eg', 'admin@park.example' => '/admin'] as $who => $url) {
+            $this->as($who)->get($url)->assertOk()->assertDontSee('class="todo"', false);
+        }
 
         // 書類を返した（応募した）→ 面談依頼が来た → 面談スクリプト → 結果 → 成約（SES だけで進められる）
         DB::table('engineers')->where('id', 1)->update(['self_confirmed_at' => null]); // 本人が登録の内容を確認していなくても、「応募したい」の返事があれば応募を記録できる
@@ -347,7 +348,8 @@ class ParkTest extends TestCase
         $out = "```json\n".json_encode(['items' => $items], JSON_UNESCAPED_UNICODE)."\n```";
         $this->postJson("/ai/worker/{$job['id']}/result", ['output' => $out, 'engine' => 'test'], $h)->assertOk();
         $this->get("/interviews/$ivId")->assertSee('この下書きを採用する');
-        $this->get('/admin')->assertSee('AI の下書きができています');
+        $this->assertStringContainsString('AI の下書きができています', $this->todoText('admin@park.example'));
+        $this->as('admin@park.example');
         $this->post("/ai-jobs/{$job['id']}/apply")->assertRedirect();
         $this->assertSame('自己紹介をお願いします。', json_decode(DB::table('interviews')->where('id', $ivId)->value('qa_json'), true)[0]['q']);
 

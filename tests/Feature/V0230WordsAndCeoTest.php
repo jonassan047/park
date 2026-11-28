@@ -381,8 +381,8 @@ class V0230WordsAndCeoTest extends TestCase
 
     public function test_e1_version_and_zero_cases_pages_open(): void
     {
-        $this->assertSame('v0.23.1', config('park.version'));
-        $this->assertStringContainsString('v0.23.1', $this->get('/login')->getContent());
+        $this->assertSame('v0.24.0', config('park.version'));
+        $this->assertStringContainsString('v0.24.0', $this->get('/login')->getContent());
         // 0 件でも開く（新しい凡例・企業代表者の行で壊れない）
         $this->as('admin@park.example')->get('/admin/engineers')->assertOk();
         $this->as('ses1@park.example')->get('/ses/engineers')->assertOk();

@@ -383,7 +383,7 @@ class V0101CaseThreadPartnerTest extends TestCase
             DB::table('case_thread_posts')->where('from_side', 'eg')->update(['read_by_side' => 0]); // 担当者ごとに、未読の状態から見る
             $pages = [
                 '/threads' => $this->get('/threads')->assertOk()->assertSee(self::MASKED)->getContent(),
-                '/ses/cases' => $this->get('/ses/cases')->assertOk()->assertSee(self::MASKED.' さんから案件の質問：架空の案件X')->getContent(), // 開いて既読にする前に見る
+                'todo' => $this->todoText($who), // 開いて既読にする前に見る
                 '/cases/x' => $this->get("/cases/{$this->x}")->assertOk()->assertSee(self::MASKED)->getContent(),
                 '/cases/x/threads/f' => $this->get("/cases/{$this->x}/threads/{$this->f}")->assertOk()->assertSee(self::MASKED)->assertSee('本名を出さない確認 SECRETQ')->assertSee('二通目です')->getContent(),
                 '/notifications' => $this->get('/notifications')->assertOk()->getContent(),
@@ -435,15 +435,16 @@ class V0101CaseThreadPartnerTest extends TestCase
     {
         $this->fPostsX();
         // N11：B の今やることには出ない
-        foreach ([self::SB, self::B2] as $who) $this->as($who)->get('/ses/cases')->assertOk()->assertDontSee('さんから案件の質問');
+        foreach ([self::SB, self::B2] as $who) $this->assertStringNotContainsString('さんから案件の質問', $this->todoText($who));
         // N12：A には出る。開いて既読にすると消える
-        $this->as(self::SA)->get('/ses/cases')->assertOk()->assertSee(self::MASKED.' さんから案件の質問：架空の案件X');
-        $this->as(self::A2)->get('/ses/cases')->assertOk()->assertSee('さんから案件の質問');
+        $this->assertStringContainsString(self::MASKED.' さんから案件の質問：架空の案件X', $this->todoText(self::SA));
+        $this->assertStringContainsString('さんから案件の質問', $this->todoText(self::A2));
+        $this->as(self::A2);
         $this->get('/threads')->assertOk()->assertSee('未読');
         $this->get("/cases/{$this->x}/threads/{$this->f}")->assertOk();
-        $this->get('/ses')->assertDontSee('さんから案件の質問');
+        $this->assertStringNotContainsString('さんから案件の質問', $this->todoText(self::A2));
         // 管理者の今やることには、会社の1本は出ない
-        $this->as(self::ADMIN)->get('/admin')->assertOk()->assertDontSee('さんから案件の質問');
+        $this->assertStringNotContainsString('さんから案件の質問', $this->todoText(self::ADMIN));
     }
 
     // ---------- N13：管理者は読むだけ ----------
@@ -654,6 +655,6 @@ class V0101CaseThreadPartnerTest extends TestCase
     // ---------- 版 ----------
     public function test_version(): void
     {
-        $this->assertSame('v0.23.1', config('park.version'));
+        $this->assertSame('v0.24.0', config('park.version'));
     }
 }

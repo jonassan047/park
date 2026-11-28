@@ -103,7 +103,8 @@ class V0200LeftHiddenTest extends TestCase
     // 表の行（<tr>〜</tr>）のうち、$needle を含むもの。無ければ null
     private function row(string $html, string $needle): ?string
     {
-        preg_match_all('#<tr[ >].*?</tr>#s', $html, $m);
+        // SES のエンジニア一覧は1人が2段（tbody が1人分）
+        preg_match_all(str_contains($html, 'class="eg-list"') ? '#<tbody>.*?</tbody>#s' : '#<tr[ >].*?</tr>#s', $html, $m);
         foreach ($m[0] as $tr) if (str_contains($tr, $needle)) return $tr;
         return null;
     }
@@ -486,7 +487,7 @@ class V0200LeftHiddenTest extends TestCase
         foreach ([[self::SES1, '/ses/engineers?left=1'], [self::STAFF, '/ses/company?left=1'], [self::ADMIN, "/admin/ses/{$this->a}?left=1"]] as [$who, $url]) {
             $tr = $this->row($this->page($who, $url), '架空 退会未送信');
             // 企業情報の画面は、状況を名前の下の段に出す（2026-11-28）
-            $this->assertStringContainsString($url === '/ses/company?left=1' ? '<span>退会済み</span>' : '<td>退会済み<br>', $tr, $url);
+            $this->assertStringContainsString(['/ses/company?left=1' => '<span>退会済み</span>', '/ses/engineers?left=1' => '<td>退会済み</td>'][$url] ?? '<td>退会済み<br>', $tr, $url);
             $this->assertStringNotContainsString('仮登録', $tr, $url);
             foreach (['invite', 'delete', 'suspend'] as $op) $this->assertStringNotContainsString("/engineers/{$this->egNoLogin}/$op", $tr, $url);
         }

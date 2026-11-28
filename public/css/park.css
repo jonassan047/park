@@ -510,3 +510,13 @@ header.top .subtabs .wrap { display: flex; gap: 4px; flex-wrap: wrap; justify-co
 @media (max-width: 560px) { .eg-ops > div { flex-direction: column; align-items: stretch; min-width: 0; text-align: center; } }
 .legend-fold { margin: 4px 0 16px; font-size: .95em; }
 .legend-fold summary { cursor: pointer; color: var(--sub); }
+
+/* SES のエンジニア一覧：1人を2段（2026-11-28） */
+table.eg-list { min-width: 1100px; font-size: 13px; }
+.eg-list th, .eg-list td { border: 1px solid var(--line); vertical-align: middle; padding: 5px 8px; }
+.eg-list tbody { border-bottom: 2px solid var(--blue3); }
+.eg-list td.mail { word-break: break-all; font-size: 12px; }
+.eg-list td.skills { width: 18%; }
+.eg-list td.addr { font-size: 12px; min-width: 120px; }
+.eg-list td.ops { width: 170px; text-align: center; white-space: normal; }
+.eg-list td.ops > div { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; align-items: center; }
